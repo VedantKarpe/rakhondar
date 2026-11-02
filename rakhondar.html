@@ -77,6 +77,10 @@ button:focus-visible { outline: 2px solid var(--lamp); outline-offset: 3px; }
   align-self: flex-start; font: 700 16px var(--body); color: var(--night); background: var(--lamp);
   border: 0; border-radius: 999px; padding: 12px 26px; cursor: pointer;
 }
+.sound {
+  pointer-events: auto; font: 600 12px var(--body); color: var(--muted); background: rgba(9, 12, 26, 0.5);
+  border: 1px solid rgba(236, 228, 207, 0.25); border-radius: 999px; padding: 4px 11px; cursor: pointer; margin-top: 4px;
+}
 .oil { width: 96px; height: 6px; border-radius: 3px; background: #2a2d3a; overflow: hidden; }
 .oil span { display: block; height: 100%; width: 100%; background: var(--lamp); transition: width 0.15s; }
 .talk {
@@ -110,7 +114,7 @@ button:focus-visible { outline: 2px solid var(--lamp); outline-offset: 3px; }
   <canvas id="game"></canvas>
   <div class="hud">
     <div class="stat"><span class="lbl">Courage</span><div class="pips" id="hearts"></div><span class="lbl">Lamp oil</span><div class="oil"><span id="oilFill"></span></div></div>
-    <div class="stat right"><span class="lbl">Rakhondar calls</span><div class="pips" id="charges"></div></div>
+    <div class="stat right"><span class="lbl">Rakhondar calls</span><div class="pips" id="charges"></div><button class="sound" id="soundBtn" type="button">Sound on <kbd>M</kbd></button></div>
   </div>
   <div id="objective"></div>
   <div id="whisper" aria-live="polite"></div>
@@ -1199,6 +1203,7 @@ function openTalk() {
     ? 'Rakhondar: look closely before you trust anyone tonight. Real people cast a shadow in your lamplight. A demon’s feet point backwards, and I flicker when one is close.'
     : 'Rakhondar: shadow, feet, and what they ask of you. Decide carefully.';
   S.firstTalk = false;
+  SFX.play('talk');
   document.getElementById('talk').hidden = false;
   document.getElementById('btnTrust').focus();
 }
@@ -1216,6 +1221,7 @@ function accuse() {
   if (n.fake) return reveal(true);
   n.state = 'leave';
   S.log.push({ name: n.role.name, result: 'wronged' });
+  SFX.play('sad');
   whisper(`${n.role.name} stares at you. “How could you?” They walk off alone into the dark.`);
   S.nextT = 3;
 }
@@ -1224,6 +1230,7 @@ function reveal(unmasked) {
   const d = { x: n.x, y: n.y, r: 0.36, dir: [1, 0], wt: 0, stun: unmasked ? 1.2 : 0, chasing: true, ph: 0, hp: 2.6, maxHp: 2.6, lit: 0, big: true };
   demons.push(d);
   S.puffs.push({ x: n.x, y: n.y, born: S.t, big: true });
+  SFX.play('shriek', n.x, n.y);
   S.npc = null;
   if (S.dest) { S.dest.wait = 0; }
   if (unmasked) {
@@ -1244,6 +1251,8 @@ function deliver() {
   n.state = 'home';
   S.log.push({ name: n.role.name, result: 'saved' });
   S.dest.wait = 0;
+  SFX.play('saved');
+  if (S.dest.kind === 'bus') SFX.play('horn', S.dest.x, S.dest.y);
   const thanks = { home: 'Her mother pulls her inside and lights a lamp at the door.', temple: 'The pujari takes the flowers and sits her by the deepastambha.',
     bus: 'The pilot revs up and Uncle Peter waves all the way down the road.', chapel: 'The candles are still burning. She will be safe until morning.',
     ferry: 'The ferryman helps him aboard and the ferry pushes off.', devli: 'He touches the stone and sits down by the lamp, no longer afraid.' }[S.dest.kind];
@@ -1255,6 +1264,7 @@ function captured() {
   S.log.push({ name: n.role.name, result: 'captured' });
   S.puffs.push({ x: n.x, y: n.y, born: S.t, big: true });
   S.npc = null; S.dest.wait = 0; S.flash = 0.8;
+  SFX.play('captured', n.x, n.y);
   whisper(`The shadows took ${n.role.name}. I could not reach them in time.`);
   S.nextT = 3.5;
 }
@@ -1275,12 +1285,14 @@ function startBoss() {
   lastPT = -1;   // the effigy's tile just opened up, so the paths need rebuilding
   S.boss = { x: bx, y: by, r: 0.3, slamT: 4, slam: null, spawnT: 5, lit: 0, step: 0 };
   S.shake = 0.8;
+  SFX.play('roar', bx, by, 60);
   for (let i = 0; i < 2; i++) spawnDemon(S.boss);
   whisper('Four in the morning. The effigy is walking! A child’s lamp cannot kill Narkasur. Lead him to the pyre on the chapel square.');
 }
 function hurt(fx, fy) {
   if (S.inv > 0) return;
   S.hearts--; S.inv = 1.6; S.flash = 0.6;
+  SFX.play('hurt');
   const d = hyp(player.x - fx, player.y - fy) || 1, kx = (player.x - fx) / d, ky = (player.y - fy) / d;
   for (let i = 0; i < 8; i++) moveEnt(player, kx * 0.1, ky * 0.1);
   renderHud();
@@ -1291,6 +1303,7 @@ function banish(d) {
   demons.splice(demons.indexOf(d), 1);
   S.banished++;
   S.puffs.push({ x: d.x, y: d.y, born: S.t, big: d.big });
+  SFX.play('banish', d.x, d.y);
   if (d.big) whisper('The disguised demon burns away into smoke.');
 }
 
@@ -1304,11 +1317,12 @@ addEventListener('keydown', e => {
   if (k === ' ' && !e.repeat) callSpirit();
   if (k === 'e' && S && S.mode === 'talk') { e.preventDefault(); trust(); return; }
   if (k === 'q' && S && S.mode === 'talk') { e.preventDefault(); accuse(); return; }
+  if (k === 'm' && !e.repeat) SFX.toggle(); else SFX.init();
   keys.add(k);
 });
 addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
-cv.addEventListener('pointerdown', e => { joy.id = e.pointerId; joy.ox = e.clientX; joy.oy = e.clientY; joy.dx = joy.dy = 0; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener('pointerdown', e => { SFX.init(); joy.id = e.pointerId; joy.ox = e.clientX; joy.oy = e.clientY; joy.dx = joy.dy = 0; cv.setPointerCapture(e.pointerId); });
 cv.addEventListener('pointermove', e => { if (e.pointerId === joy.id) { joy.dx = e.clientX - joy.ox; joy.dy = e.clientY - joy.oy; } });
 const endJoy = e => { if (e.pointerId === joy.id) { joy.id = null; joy.dx = joy.dy = 0; } };
 cv.addEventListener('pointerup', endJoy); cv.addEventListener('pointercancel', endJoy);
@@ -1349,6 +1363,7 @@ function callSpirit() {
   });
   spirit.path = shown; spirit.pi = 0;
   S.charges--;
+  SFX.play('call');
   for (const d of demons) if (hyp(d.x - player.x, d.y - player.y) < 5.5) { d.stun = 2.6; d.chasing = false; }
   whisper(shown.length < 23 ? `${goal.what} is close. Follow my footsteps.` : `Follow my footsteps toward ${goal.what}.`);
   renderHud();
@@ -1358,6 +1373,7 @@ let whisperTimer = 0;
 function whisper(text) {
   const el = document.getElementById('whisper');
   el.textContent = text; el.classList.add('show');
+  SFX.play('whisper');
   clearTimeout(whisperTimer);
   whisperTimer = setTimeout(() => el.classList.remove('show'), 4200);
 }
@@ -1400,6 +1416,7 @@ function update(dt) {
   for (const l of lights) if (l.kind === 'diya') {
     if (!l.lit && !l.spent && hyp(l.x - player.x, l.y - player.y) < 0.95) {
       l.lit = true; l.life = 35;
+      SFX.play('chime', l.x, l.y);
       const gained = S.charges < 3; S.charges = Math.min(3, S.charges + 1);
       whisper(gained ? 'The diya holds them back and gives me strength. Fill your lamp while it burns.' : 'The diya holds them back. Fill your lamp while it burns.');
       renderHud();
@@ -1545,7 +1562,7 @@ function updateNpc(n, dt) {
   const d = S.dest, nd = hyp(n.x - d.x, n.y - d.y);
   if (d.need) {
     if (nd < d.r + 0.6 && hyp(player.x - d.x, player.y - d.y) < d.r + 1) {
-      if (!d.told) { d.told = true; whisper(d.kind === 'bus' ? 'Wait here with him for the pilot. Keep the shadows off.' : 'The ferry is crossing. Hold the jetty until it lands.'); }
+      if (!d.told) { d.told = true; if (d.kind === 'ferry') SFX.play('ferryHorn', ferryX(d), d.y, 30); whisper(d.kind === 'bus' ? 'Wait here with him for the pilot. Keep the shadows off.' : 'The ferry is crossing. Hold the jetty until it lands.'); }
       d.wait += dt;
       if (d.wait >= d.need) deliver();
     }
@@ -1572,6 +1589,7 @@ function updateBoss(b, dt) {
     b.slam.t -= dt;
     if (b.slam.t <= 0) {
       S.shake = 0.5;
+      SFX.play('slam', b.slam.x, b.slam.y, 24);
       if (hyp(player.x - b.slam.x, player.y - b.slam.y) < 1.6) hurt(b.slam.x, b.slam.y);
       b.slam = null; b.slamT = 5;
       if (S.mode !== 'play') return;
@@ -1582,6 +1600,7 @@ function updateBoss(b, dt) {
   if (b.spawnT <= 0) { spawnDemon(b); b.spawnT = 7; }
   if (hyp(b.x - PYRE.x, b.y - PYRE.y) < 1.5) {
     S.burnT = 0; S.shake = 0.6;
+    SFX.play('ignite');
     whisper('The whole vaddo rushes in with torches. The pyre catches, and Narkasur burns!');
   }
 }
@@ -1600,6 +1619,7 @@ function updateFx(dt) {
     if (effs.length) {
       const p = effs[Math.floor(rand() * effs.length)];
       S.bursts.push({ x: p.x + 0.5 + (rand() - 0.5) * 3, y: p.y + 0.5 + (rand() - 0.5) * 3, z: 60 + rand() * 60, born: S.t, hue: ['255,200,80', '255,90,70', '120,220,255', '200,255,120'][Math.floor(rand() * 4)] });
+      const nb = S.bursts[S.bursts.length - 1]; SFX.play('cracker', nb.x, nb.y, 26);
     }
   }
   if (S.burnT >= 0) for (let i = 0; i < 3; i++) S.fire.push({ x: PYRE.x + (rand() - 0.5) * 1.6, y: PYRE.y + (rand() - 0.5) * 1.6, born: S.t, life: 0.8 + rand() * 0.8, vz: 40 + rand() * 50 });
@@ -2041,6 +2061,194 @@ function render() {
   }
 }
 
+/* ---------- sound: synthesised in the browser, no audio files ---------- */
+const SFX = (() => {
+  let ac = null, master = null, noiseBuf = null, muted = false, layers = {};
+  let drumT = 0, stepI = 0, stepAcc = 0, bellT = 12, wetT = 0, nearWet = false, lastBossStep = 0;
+  try { muted = localStorage.getItem('rk-muted') === '1'; } catch (e) {}
+  const btn = () => document.getElementById('soundBtn');
+  const label = () => { const b = btn(); if (b) b.innerHTML = `Sound ${muted ? 'off' : 'on'} <kbd>M</kbd>`; };
+  label();
+
+  function init() {
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return;
+    try { ac = new C(); } catch (e) { return; }
+    master = ac.createGain(); master.gain.value = muted ? 0 : 0.85;
+    const comp = ac.createDynamicsCompressor();
+    master.connect(comp); comp.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    // continuous beds: night wind, the river, demon growl, the lamp's hum, the pyre
+    layers.wind = bed('lowpass', 380, 0.7, 'noise');
+    layers.river = bed('bandpass', 700, 0.6, 'noise');
+    layers.fire = bed('lowpass', 900, 0.5, 'noise');
+    layers.beam = bed('bandpass', 2600, 4, 'noise');
+    layers.hum = bed('lowpass', 900, 1, 'sine', 330);
+    layers.growl = bed('lowpass', 260, 2, 'sawtooth', 52);
+  }
+  function bed(type, f, q, src, freq) {
+    let s;
+    if (src === 'noise') { s = ac.createBufferSource(); s.buffer = noiseBuf; s.loop = true; }
+    else { s = ac.createOscillator(); s.type = src; s.frequency.value = freq; }
+    const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+    const g = ac.createGain(); g.gain.value = 0;
+    s.connect(fl); fl.connect(g); g.connect(master); s.start();
+    return g;
+  }
+  const set = (g, v) => g.gain.setTargetAtTime(v, ac.currentTime, 0.15);
+  function out(pan) {
+    if (!pan || !ac.createStereoPanner) return master;
+    const p = ac.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); p.connect(master); return p;
+  }
+  function env(g, t, a, peak, d) {
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + a);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
+  }
+  function tone(f, d, o = {}) {
+    const t = o.at || ac.currentTime, a = o.a || 0.005;
+    const osc = ac.createOscillator(); osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(f, t);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + a + d);
+    const g = ac.createGain(); env(g, t, a, (o.g || 0.2) * (o.v === undefined ? 1 : o.v), d);
+    let n = osc;
+    if (o.lp) { const fl = ac.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = o.lp; osc.connect(fl); n = fl; }
+    n.connect(g); g.connect(out(o.pan));
+    osc.start(t); osc.stop(t + a + d + 0.05);
+  }
+  function noise(d, o = {}) {
+    const t = o.at || ac.currentTime, a = o.a || 0.003;
+    const src = ac.createBufferSource(); src.buffer = noiseBuf;
+    const fl = ac.createBiquadFilter(); fl.type = o.type || 'bandpass'; fl.Q.value = o.q || 1;
+    fl.frequency.setValueAtTime(o.f || 1000, t);
+    if (o.to) fl.frequency.exponentialRampToValueAtTime(o.to, t + a + d);
+    const g = ac.createGain(); env(g, t, a, (o.g || 0.2) * (o.v === undefined ? 1 : o.v), d);
+    src.connect(fl); fl.connect(g); g.connect(out(o.pan));
+    src.start(t, Math.random() * 1.5); src.stop(t + a + d + 0.05);
+  }
+  // loudness and stereo position for something at map (x, y), heard from the child
+  function where(x, y, range = 18) {
+    if (x === undefined || !player) return { v: 1, pan: 0 };
+    const d = hyp(x - player.x, y - player.y);
+    return { v: Math.pow(Math.max(0, 1 - d / range), 1.5), pan: ((x - y) - (player.x - player.y)) / 12 };
+  }
+
+  const sounds = {
+    whisper: () => { noise(1.1, { f: 900, to: 1700, q: 0.8, a: 0.35, g: 0.05 }); tone(660, 1.2, { a: 0.3, g: 0.015, type: 'triangle' }); },
+    chime: s => { for (const [f, k] of [[1047, 1], [1568, 0.5], [2093, 0.25]]) tone(f, 1.4, { g: 0.08 * k, v: s.v, pan: s.pan }); },
+    call: () => {
+      noise(0.7, { f: 300, to: 2400, q: 1.2, a: 0.1, g: 0.08 });
+      [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.6, { type: 'triangle', g: 0.07, at: ac.currentTime + i * 0.07 }));
+    },
+    talk: () => { tone(440, 0.35, { type: 'triangle', g: 0.05 }); tone(554, 0.4, { type: 'triangle', g: 0.05, at: ac.currentTime + 0.12 }); },
+    sad: () => { tone(392, 0.5, { type: 'triangle', g: 0.07 }); tone(311, 0.9, { type: 'triangle', g: 0.07, at: ac.currentTime + 0.35 }); },
+    shriek: s => {
+      tone(1100, 0.7, { to: 180, type: 'sawtooth', g: 0.12, lp: 3000, v: s.v, pan: s.pan });
+      tone(1160, 0.7, { to: 200, type: 'sawtooth', g: 0.08, lp: 3000, v: s.v, pan: s.pan });
+      noise(0.6, { f: 2500, to: 400, q: 2, g: 0.12, v: s.v, pan: s.pan });
+    },
+    saved: () => [392, 494, 587, 784].forEach((f, i) => tone(f, 1.3, { type: 'triangle', g: 0.06, a: 0.02, at: ac.currentTime + i * 0.05 })),
+    captured: s => { [220, 262, 311].forEach(f => tone(f, 1.4, { type: 'sawtooth', lp: 700, g: 0.06 })); noise(1, { f: 1500, to: 200, g: 0.08, v: s.v, pan: s.pan }); },
+    banish: s => {
+      tone(380, 0.35, { to: 1500, g: 0.09, v: s.v, pan: s.pan });
+      tone(760, 0.3, { to: 2600, type: 'triangle', g: 0.04, v: s.v, pan: s.pan });
+      noise(0.25, { type: 'highpass', f: 3000, g: 0.06, v: s.v, pan: s.pan });
+    },
+    hurt: () => { tone(95, 0.35, { to: 45, g: 0.35 }); noise(0.2, { type: 'lowpass', f: 400, g: 0.25 }); tone(155, 0.4, { type: 'sawtooth', lp: 900, g: 0.05 }); tone(165, 0.4, { type: 'sawtooth', lp: 900, g: 0.05 }); },
+    roar: s => {
+      for (const f of [62, 66, 93]) tone(f, 1.8, { to: f * 0.7, type: 'sawtooth', lp: 500, a: 0.15, g: 0.16, v: Math.max(0.4, s.v), pan: s.pan });
+      noise(1.6, { type: 'lowpass', f: 700, to: 200, a: 0.1, g: 0.18, v: Math.max(0.4, s.v), pan: s.pan });
+    },
+    slam: s => { tone(70, 0.6, { to: 28, g: 0.5, v: s.v, pan: s.pan }); noise(0.5, { type: 'lowpass', f: 500, to: 80, g: 0.35, v: s.v, pan: s.pan }); },
+    bossStep: s => tone(55, 0.28, { to: 34, g: 0.3, v: s.v, pan: s.pan }),
+    ignite: () => {
+      noise(1.8, { type: 'lowpass', f: 300, to: 2400, a: 0.4, g: 0.25 });
+      for (const f of [700, 1150, 2400]) noise(2.6, { f, q: 3, a: 0.6, g: 0.05 });   // the crowd's cheer
+    },
+    dawn: () => {
+      [262, 330, 392, 523].forEach(f => tone(f, 3.2, { type: 'triangle', a: 0.8, g: 0.05 }));
+      for (let i = 0; i < 6; i++) tone(2800 + Math.random() * 900, 0.12, { to: 4200, g: 0.02, at: ac.currentTime + 0.6 + i * 0.25, pan: Math.random() * 2 - 1 });
+    },
+    fell: () => { tone(110, 2.4, { type: 'sawtooth', lp: 400, a: 0.2, g: 0.08 }); tone(117, 2.4, { type: 'sawtooth', lp: 400, a: 0.2, g: 0.08 }); },
+    cracker: s => {
+      noise(0.07, { type: 'highpass', f: 900, g: 0.35, v: s.v, pan: s.pan });
+      for (let i = 0; i < 7; i++) noise(0.02, { type: 'highpass', f: 2500, g: 0.12, v: s.v, pan: s.pan, at: ac.currentTime + 0.08 + Math.random() * 0.5 });
+    },
+    horn: s => { tone(440, 0.16, { type: 'square', lp: 1600, g: 0.05, v: s.v, pan: s.pan }); tone(466, 0.2, { type: 'square', lp: 1600, g: 0.05, v: s.v, pan: s.pan, at: ac.currentTime + 0.22 }); },
+    ferryHorn: s => { for (const f of [110, 165]) tone(f, 1.4, { type: 'sawtooth', lp: 650, a: 0.1, g: 0.09, v: Math.max(0.3, s.v), pan: s.pan }); },
+    bell: s => { for (const [k, g] of [[1, 1], [2.76, 0.45], [5.4, 0.2]]) tone(s.f * k, 2.6, { g: 0.07 * g, v: s.v, pan: s.pan }); }
+  };
+  function play(name, x, y, range) {
+    if (!ac || muted || ac.state !== 'running') return;
+    const s = where(x, y, range);
+    if (s.v < 0.02) return;
+    sounds[name](s);
+  }
+  // dhol and tasha from the effigy crews: 16 steps a bar, 150 bpm, faster once the pyre is lit
+  const BASS = [1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0], SLAP = [0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1];
+  function drums(at, v) {
+    const i = stepI % 16;
+    if (BASS[i]) { tone(115, 0.32, { to: 52, g: 0.4 * v, at }); noise(0.03, { type: 'lowpass', f: 1200, g: 0.1 * v, at }); }
+    if (SLAP[i]) noise(0.07, { f: 1700, q: 2.5, g: 0.18 * v, at });
+    noise(i % 4 === 0 ? 0.05 : 0.025, { type: 'highpass', f: 3200, g: (i % 4 === 0 ? 0.14 : 0.06) * v, at });
+    if (i >= 13) noise(0.02, { type: 'highpass', f: 3500, g: 0.05 * v, at: at + 0.045 });
+  }
+  function tick(dt) {
+    if (!ac || muted || ac.state !== 'running' || !S || !player) return;
+    const now = ac.currentTime, live = S.mode === 'play' || S.mode === 'talk';
+    set(layers.wind, 0.05 * (1 - S.dawn * 0.5));
+    set(layers.river, 0.07 * Math.max(0, 1 - Math.abs(riverC(Math.floor(player.y)) - player.x) / 12));
+    let gd = 99;
+    for (const d of demons) if (d.chasing) gd = Math.min(gd, hyp(d.x - player.x, d.y - player.y));
+    set(layers.growl, live ? 0.14 * Math.max(0, 1 - gd / 7) : 0);
+    set(layers.beam, live && S.beam ? 0.05 : 0);
+    set(layers.hum, live && S.beam ? 0.025 : 0);
+    set(layers.fire, S.burnT >= 0 ? Math.min(0.3, 0.06 + S.burnT * 0.06) : 0);
+
+    let ed = 99;
+    for (const p of props) if (p.kind === 'effigy' && !p.awake) ed = Math.min(ed, hyp(p.x - player.x, p.y - player.y));
+    let dv = Math.max(0.12, 1 - ed / 30) * 0.5;
+    if (S.phase === 'boss') dv = S.burnT >= 0 ? 0.7 : 0;
+    if (S.mode === 'end' || S.mode === 'intro') dv *= 0.4;
+    const step = S.burnT >= 0 ? 0.085 : 0.1;
+    if (drumT < now) drumT = now + 0.05;
+    while (drumT < now + 0.15) { if (dv > 0.01) drums(drumT, dv); drumT += step; stepI++; }
+
+    if (Math.random() < dt * 2.2 * (1 - S.dawn)) {   // crickets
+      const f = 4000 + Math.random() * 900, pan = Math.random() * 2 - 1, n = 3 + Math.floor(Math.random() * 3), g = 0.012 + Math.random() * 0.02;
+      for (let i = 0; i < n; i++) tone(f, 0.025, { g, pan, at: now + i * 0.055 });
+    }
+    wetT -= dt;
+    if (wetT <= 0) {
+      wetT = 1;
+      nearWet = false;
+      for (let y = -5; y <= 5 && !nearWet; y++) for (let x = -5; x <= 5; x++) { const t = at(Math.floor(player.x) + x, Math.floor(player.y) + y); if (t === PAD || t === WATER) { nearWet = true; break; } }
+    }
+    if (nearWet && Math.random() < dt * 0.7) tone(170 + Math.random() * 60, 0.22, { type: 'square', lp: 520, g: 0.035, pan: Math.random() * 2 - 1 });   // frogs
+    if (S.mode === 'play' && player.moving) { stepAcc += dt; if (stepAcc > 0.3) { stepAcc = 0; noise(0.05, { type: 'lowpass', f: 500, g: 0.035 }); } }
+    if (S.boss && S.burnT < 0) { const k = Math.floor(S.boss.step * 2 / Math.PI); if (k !== lastBossStep) { lastBossStep = k; play('bossStep', S.boss.x, S.boss.y, 26); } }
+    bellT -= dt;
+    if (bellT <= 0) {   // the temple and the chapel ring now and then
+      bellT = 16 + Math.random() * 14;
+      const e = exits.find(x => x.kind === (Math.random() < 0.5 ? 'temple' : 'chapel'));
+      if (e) { const s = where(e.x, e.y, 40); if (s.v > 0.02 && !muted) sounds.bell(Object.assign(s, { f: e.kind === 'temple' ? 520 : 330 })); }
+    }
+    if (S.dawn > 0.3 && Math.random() < dt * 3) tone(2900 + Math.random() * 1200, 0.1, { to: 4300, g: 0.02, pan: Math.random() * 2 - 1 });
+  }
+  function toggle() {
+    muted = !muted;
+    try { localStorage.setItem('rk-muted', muted ? '1' : '0'); } catch (e) {}
+    if (master) master.gain.setTargetAtTime(muted ? 0 : 0.85, ac.currentTime, 0.05);
+    label();
+    if (!muted) init();
+  }
+  return { init, play, tick, toggle };
+})();
+document.getElementById('soundBtn').addEventListener('click', e => { SFX.toggle(); e.currentTarget.blur(); });
+
 /* ---------- screens ---------- */
 const screen = document.getElementById('screen'), card = document.getElementById('card');
 const PLAY_URL = 'https://claude.ai/artifact/5TzkxY3xHZSJuVBJ9FTsXE';
@@ -2061,12 +2269,14 @@ function showIntro() {
   document.getElementById('startBtn').onclick = start;
 }
 function start() {
+  SFX.init();
   newGame(); S.mode = 'play'; screen.hidden = true; document.getElementById('talk').hidden = true;
   renderHud(); startRescue();
 }
 function endNight(kind) {
   S.mode = 'end'; renderHud();
   document.getElementById('talk').hidden = true;
+  SFX.play(kind === 'dawn' ? 'dawn' : 'fell');
   const count = r => S.log.filter(l => l.result === r).length;
   const saved = count('saved'), unmasked = count('unmasked'), fooled = count('fooled'), captured = count('captured'), wronged = count('wronged');
   const fakes = S.roster.filter(r => r.fake).length, real = S.roster.length - fakes;
@@ -2108,7 +2318,7 @@ function endNight(kind) {
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  update(dt); render();
+  update(dt); render(); SFX.tick(dt);
   requestAnimationFrame(frame);
 }
 resize();

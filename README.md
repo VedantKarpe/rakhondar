@@ -46,4 +46,8 @@ The file is written as an artifact page body, without `<!doctype>`, `<html>` or 
 - Blessings from each holy place (temple flare, chapel shield, devli ally).
 - A leaderboard by vaddo.
 - The sea: a beach, fishing boats on the sand, a shack.
-- Sound: dhol and tasha in the distance, crickets, the Rakhondar's whisper.
+- Real recordings to replace some synthesised sounds: a Narkasur-night dhol and tasha session, temple and chapel bells. Use CC0 sources (Freesound CC0, Sonniss GDC bundles) or your own recordings; avoid non-commercial licences if the game will be sold.
+
+## Sound
+
+Every sound is synthesised in the browser with the Web Audio API (the `SFX` module), so there are no audio files or licences to track. Beds: wind, river, demon growl, lamp hum, pyre fire. Ambience: crickets, frogs near water and paddy, dhol and tasha from the effigy crews (louder near them, faster once the pyre is lit), temple and chapel bells. Events: whispers, diya chime, Rakhondar call, banish, shrieks, the boss's roar, footsteps and slam, firecrackers, the pilot's horn, the ferry horn, dawn birds. `M` or the HUD button mutes; the choice is remembered per browser.
