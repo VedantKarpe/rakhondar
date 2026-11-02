@@ -40,6 +40,26 @@ The file is written as an artifact page body, without `<!doctype>`, `<html>` or 
 
 - **The night** (`startRescue`, `updateNpc`, `reveal`, `startBoss`, `updateBoss`): rescues, escort, disguises and the dawn boss. Roles and their lines live in `ROLES`.
 
+## Real villages
+
+The default map is **Tonca, Goa**, built from OpenStreetMap: its roads, the Mandovi and the tidal channel with the road bridge, khazan paddy, mangroves, the Tonca ferry, the Shantadurga temple and the Christ the King monument (used as the chapel square). Houses, walls, trees and people are generated around that real layout. "Random village" on the start screen still gives a generated one.
+
+Import another village:
+
+```bash
+python tools/osm_import.py fetch NAME LAT LON --radius 0.009
+python tools/osm_import.py survey NAME
+python tools/osm_import.py build NAME LAT LON --tile 12 --inline rakhondar.html
+```
+
+`survey` lists temples, churches, ferry points and bus stops to choose a centre; `build` prints the tile grid so you can check it before playing. Rural Goa has few building outlines in OpenStreetMap, so houses mostly come from the generator.
+
+Map data © OpenStreetMap contributors, available under the [Open Database License](https://opendatacommons.org/licenses/odbl/). The cached extract (`data/*.osm.json`) and the derived grids (`data/*.map.json`) are under the ODbL too. Keep the credit line the game shows on real maps.
+
+## Billboards and sponsors
+
+Five billboards stand by the roads and lanes. Their ads live in `ADS` near the top of the script. The current ones are **fictional placeholders** (a bakery, bike hire, a tailor, bebinca and a "your ad here" slot). Only replace them with ads from businesses that have agreed. A sponsor entry can carry `img`, a picture published next to the page (about 4:1, e.g. 480 x 120), which is drawn instead of the text.
+
 ## Ideas not built yet
 
 - More chapters from Goan folklore (the Devchar, Zagor, Sao Joao, Shigmo), each its own night with new rules. Check the folklore with real sources first.
