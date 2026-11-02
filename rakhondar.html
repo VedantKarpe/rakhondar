@@ -77,6 +77,27 @@ button:focus-visible { outline: 2px solid var(--lamp); outline-offset: 3px; }
   align-self: flex-start; font: 700 16px var(--body); color: var(--night); background: var(--lamp);
   border: 0; border-radius: 999px; padding: 12px 26px; cursor: pointer;
 }
+.oil { width: 96px; height: 6px; border-radius: 3px; background: #2a2d3a; overflow: hidden; }
+.oil span { display: block; height: 100%; width: 100%; background: var(--lamp); transition: width 0.15s; }
+.talk {
+  position: absolute; left: 0; right: 0; bottom: 76px; display: flex; justify-content: center;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.talk-card {
+  max-width: 30rem; width: 100%; background: var(--card); border: 1px solid rgba(159, 232, 214, 0.3);
+  border-radius: 6px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px;
+}
+.talk-card p { margin: 0; font-size: 16px; line-height: 1.5; color: #e2dbc6; }
+.talk-card .hint { font-size: 13px; color: var(--spirit); }
+.talk-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.ghost {
+  font: 600 15px var(--body); color: var(--ink); background: transparent; cursor: pointer;
+  border: 1px solid rgba(236, 228, 207, 0.4); border-radius: 999px; padding: 11px 20px;
+}
+.talk kbd, .start kbd { font: inherit; font-weight: 400; opacity: 0.6; margin-left: 4px; }
+.summary { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.summary b { color: var(--ink); font-weight: 600; text-align: right; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 520px) {
   .card { padding: 20px; }
   .card h1 { font-size: 36px; }
@@ -88,12 +109,23 @@ button:focus-visible { outline: 2px solid var(--lamp); outline-offset: 3px; }
 <div id="wrap">
   <canvas id="game"></canvas>
   <div class="hud">
-    <div class="stat"><span class="lbl">Courage</span><div class="pips" id="hearts"></div></div>
+    <div class="stat"><span class="lbl">Courage</span><div class="pips" id="hearts"></div><span class="lbl">Lamp oil</span><div class="oil"><span id="oilFill"></span></div></div>
     <div class="stat right"><span class="lbl">Rakhondar calls</span><div class="pips" id="charges"></div></div>
   </div>
   <div id="objective"></div>
   <div id="whisper" aria-live="polite"></div>
   <button id="callBtn" type="button">Call Rakhondar <kbd>Space</kbd></button>
+  <div class="talk" id="talk" hidden>
+    <div class="talk-card">
+      <span class="eyebrow" id="talkWho"></span>
+      <p id="talkLine"></p>
+      <p class="hint" id="talkHint"></p>
+      <div class="talk-actions">
+        <button class="start" id="btnTrust" type="button">Walk with them <kbd>E</kbd></button>
+        <button class="ghost" id="btnBanish" type="button">Banish the demon <kbd>Q</kbd></button>
+      </div>
+    </div>
+  </div>
   <div class="screen" id="screen">
     <div class="card" id="card"></div>
   </div>
@@ -117,9 +149,10 @@ const JY = 18;                      // ferry jetty rows JY and JY + 1
 const cv = document.getElementById('game'), ctx = cv.getContext('2d');
 const dark = document.createElement('canvas'), dctx = dark.getContext('2d');
 let dpr = 1, vw = 0, vh = 0, sc = 1, BAKE = 1;
-let map, rand, riverC, houses, lights, props, kids, walls, treeKind, exits, ground, statics, waterTiles, fireflies, mists;
+let map, rand, riverC, houses, lights, props, kids, walls, treeKind, exits, ground, statics, waterTiles, fireflies, mists, lanes;
 let demons, player, spirit, S;
-const dist = new Int16Array(W * H), queue = new Int32Array(W * H);
+// distance fields: from the child, from the person being escorted, from the current destination, and a scratch one
+const dist = new Int16Array(W * H), distN = new Int16Array(W * H), distD = new Int16Array(W * H), distT = new Int16Array(W * H), queue = new Int32Array(W * H);
 let lastPT = -1;
 
 function rng(seed) {
@@ -323,6 +356,12 @@ function gen(seed) {
   fill(29, 21, 40, 30, PLAZA);
   fill(33, 22, 36, 25, CHAPEL);
   set(34, 28, PROP); props.push({ kind: 'bigcross', x: 34, y: 28 });
+  // the vaddo's pyre on the square, where Narkasur burns at dawn, kept by kids with torches
+  for (const [a, sh] of [[0.6, '#3f7fbf'], [2.4, '#e0a33a'], [4.2, '#5aa05a']]) {
+    const vx = 31.5 + Math.cos(a) * 2.2, vy = 28.5 + Math.sin(a) * 1.8;
+    kids.push({ x: vx, y: vy, shirt: sh, face: Math.cos(a) > 0 ? -1 : 1, ph: rand() * 6, torch: true });
+    lights.push({ kind: 'torch', x: vx, y: vy, r: 1.8, lift: 10, color: '255,150,60' });
+  }
   for (const y of [JY, JY + 1]) for (let x = jc - 5; x <= jc - 1; x++) set(x, y, JETTY);
   for (const y of [JY + 3, JY + 4]) for (let x = jc - 5; x <= jc - 4; x++) set(x, y, MUD);
   fill(52, 47, 54, 48, SHELTER);
@@ -426,6 +465,7 @@ function gen(seed) {
   // diyas on the lanes, waiting to be lit
   const laneTiles = [];
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (map[y * W + x] === LANE) laneTiles.push([x, y]);
+  lanes = laneTiles;
   const diyas = [];
   for (let tries = 0; tries < 3000 && diyas.length < 15; tries++) {
     const [x, y] = laneTiles[Math.floor(rand() * laneTiles.length)];
@@ -842,27 +882,57 @@ function drawProp(g, p) {
     g.fillStyle = '#222'; g.fillRect(sx - 7, sy - 18, 10, 4);
     line(g, [sx + 9, sy - 9], [sx + 11, sy - 20], '#888', 2); line(g, [sx + 6, sy - 21], [sx + 16, sy - 18], '#888', 2);
   } else if (p.kind === 'effigy') {
+    if (p.awake) return;
     const fr = 0.42;
     for (const [u, v] of [[-fr, -fr], [fr, -fr], [-fr, fr], [fr, fr]]) line(g, P(cx + u, cy + v, 0), P(cx + u, cy + v, 14), '#a8874f', 2.5);
     for (const [a, b] of [[[-fr, fr], [fr, fr]], [[fr, -fr], [fr, fr]], [[-fr, -fr], [-fr, fr]]]) line(g, P(cx + a[0], cy + a[1], 14), P(cx + b[0], cy + b[1], 14), '#a8874f', 2.5);
     const [ex, ey] = P(cx, cy, 14);
-    line(g, [ex - 6, ey], [ex - 5, ey - 26], '#8a6a3a', 3); line(g, [ex + 6, ey], [ex + 5, ey - 26], '#8a6a3a', 3);
-    poly(g, [[ex - 16, ey - 24], [ex + 16, ey - 24], [ex + 11, ey - 58], [ex - 11, ey - 58]], '#2f4f2a');
-    g.fillStyle = '#c9a23a'; g.fillRect(ex - 13, ey - 42, 26, 4);
-    g.strokeStyle = '#3f6b3a'; g.lineWidth = 6; g.lineCap = 'round';
-    g.beginPath(); g.moveTo(ex - 9, ey - 54); g.lineTo(ex - 26, ey - 64); g.lineTo(ex - 30, ey - 82);
-    g.moveTo(ex + 9, ey - 54); g.lineTo(ex + 26, ey - 64); g.lineTo(ex + 30, ey - 82); g.stroke();
-    g.fillStyle = '#3f6b3a'; g.beginPath(); g.arc(ex, ey - 72, 15, 0, 7); g.fill();
-    g.fillStyle = '#e9e3d6';
-    g.beginPath(); g.moveTo(ex - 11, ey - 80); g.lineTo(ex - 21, ey - 101); g.lineTo(ex - 5, ey - 85); g.fill();
-    g.beginPath(); g.moveTo(ex + 11, ey - 80); g.lineTo(ex + 21, ey - 101); g.lineTo(ex + 5, ey - 85); g.fill();
-    g.fillStyle = '#fff'; g.fillRect(ex - 9, ey - 78, 7, 5); g.fillRect(ex + 2, ey - 78, 7, 5);
-    g.fillStyle = '#c0241b'; g.fillRect(ex - 7, ey - 77, 3, 3); g.fillRect(ex + 4, ey - 77, 3, 3);
-    g.fillRect(ex - 4, ey - 68, 8, 9);
-    g.fillStyle = '#e9e3d6'; g.fillRect(ex - 8, ey - 69, 3, 5); g.fillRect(ex + 5, ey - 69, 3, 5);
+    effigyFigure(g, ex, ey, 0);
   } else if (p.kind === 'car') drawCar(g, cx, cy, p.dir, p.col, false);
   else if (p.kind === 'devli') drawDevli(g, p);
   else if (p.kind === 'bigcross') drawBigCross(g);
+}
+// the papier-mache Narkasur; `walk` swings the arms and legs once he comes alive
+function effigyFigure(g, ex, ey, walk) {
+  const sw = Math.sin(walk) * 6;
+  line(g, [ex - 6, ey], [ex - 5 + sw * 0.4, ey - 26], '#8a6a3a', 3); line(g, [ex + 6, ey], [ex + 5 - sw * 0.4, ey - 26], '#8a6a3a', 3);
+  poly(g, [[ex - 16, ey - 24], [ex + 16, ey - 24], [ex + 11, ey - 58], [ex - 11, ey - 58]], '#2f4f2a');
+  g.fillStyle = '#c9a23a'; g.fillRect(ex - 13, ey - 42, 26, 4);
+  g.strokeStyle = '#3f6b3a'; g.lineWidth = 6; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(ex - 9, ey - 54); g.lineTo(ex - 26, ey - 64 + sw); g.lineTo(ex - 30, ey - 82 + sw);
+  g.moveTo(ex + 9, ey - 54); g.lineTo(ex + 26, ey - 64 - sw); g.lineTo(ex + 30, ey - 82 - sw); g.stroke();
+  g.fillStyle = '#3f6b3a'; g.beginPath(); g.arc(ex, ey - 72, 15, 0, 7); g.fill();
+  g.fillStyle = '#e9e3d6';
+  g.beginPath(); g.moveTo(ex - 11, ey - 80); g.lineTo(ex - 21, ey - 101); g.lineTo(ex - 5, ey - 85); g.fill();
+  g.beginPath(); g.moveTo(ex + 11, ey - 80); g.lineTo(ex + 21, ey - 101); g.lineTo(ex + 5, ey - 85); g.fill();
+  g.fillStyle = '#fff'; g.fillRect(ex - 9, ey - 78, 7, 5); g.fillRect(ex + 2, ey - 78, 7, 5);
+  g.fillStyle = '#c0241b'; g.fillRect(ex - 7, ey - 77, 3, 3); g.fillRect(ex + 4, ey - 77, 3, 3);
+  g.fillRect(ex - 4, ey - 68, 8, 9);
+  g.fillStyle = '#e9e3d6'; g.fillRect(ex - 8, ey - 69, 3, 5); g.fillRect(ex + 5, ey - 69, 3, 5);
+}
+function drawNarkasur(g, b) {
+  const [sx, sy] = iso(b.x, b.y);
+  g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(sx, sy, 30, 13, 0, 0, 7); g.fill();
+  g.save(); g.translate(sx, sy - Math.abs(Math.sin(b.step * 2)) * 4); g.scale(1.7, 1.7);
+  effigyFigure(g, 0, 0, b.step * 2);
+  g.restore();
+}
+// a stranded villager; a demon wearing their face has no shadow and feet that point backwards
+function drawPerson(g, n) {
+  const [sx, sy] = iso(n.x, n.y), o = n.role.look, s = o.h, t = S.t, f = n.face;
+  const step = n.moving ? Math.sin(t * 12) * 2 : 0;
+  g.globalAlpha = Math.max(0, n.alpha);
+  if (!n.fake) { g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(sx, sy, 9 * s, 4.5 * s, 0, 0, 7); g.fill(); }
+  g.fillStyle = '#1a120c';
+  for (const side of [-1, 1]) { g.beginPath(); g.ellipse(sx + side * 3 * s + (n.fake ? -f : f) * 3, sy - 0.5, 3.2, 1.6, 0, 0, 7); g.fill(); }
+  g.fillStyle = o.legs; g.fillRect(sx - 5 * s, sy - 12 * s - step * 0.3, 4 * s, 12 * s); g.fillRect(sx + 1 * s, sy - 12 * s + step * 0.3, 4 * s, 12 * s);
+  g.fillStyle = o.body; g.beginPath(); g.ellipse(sx, sy - 20 * s, (o.belly ? 10 : 8) * s, 9 * s, 0, 0, 7); g.fill();
+  if (o.basket) { g.fillStyle = '#9a7a3a'; g.beginPath(); g.ellipse(sx + f * 9, sy - 18, 6, 4, 0, 0, 7); g.fill(); g.fillStyle = '#f29a2a'; g.beginPath(); g.arc(sx + f * 8, sy - 21, 2.2, 0, 7); g.arc(sx + f * 11, sy - 21, 2.2, 0, 7); g.fill(); }
+  if (o.net) { g.strokeStyle = 'rgba(220,210,180,.7)'; g.lineWidth = 1; for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(sx - f * 6, sy - 28); g.lineTo(sx - f * 12 + i * 2, sy - 10); g.stroke(); } }
+  if (o.pole) line(g, [sx + f * 7, sy - 18], [sx - f * 22, sy - 2], '#c9a86a', 2.5);
+  g.fillStyle = '#b07a50'; g.beginPath(); g.arc(sx, sy - 33 * s, 6.5 * s, 0, 7); g.fill();
+  g.fillStyle = o.hair; g.beginPath(); g.arc(sx - f * 1.5, sy - 35 * s, 6.5 * s, Math.PI * 0.95, Math.PI * 2.05); g.fill();
+  g.globalAlpha = 1;
 }
 // a small hatchback, nose along +x or -x
 function drawCar(g, x, y, dir, col, lit) {
@@ -904,6 +974,21 @@ function drawKid(g, k) {
   line(g, [sx + k.face * 4, sy - 15], [sx + k.face * 10, sy - 22 + b], '#a87850', 2.5);
   g.fillStyle = '#a87850'; g.beginPath(); g.arc(sx, sy - 23 + b * 0.3, 5, 0, 7); g.fill();
   g.fillStyle = '#1a100a'; g.beginPath(); g.arc(sx - k.face, sy - 25 + b * 0.3, 5, Math.PI * 0.95, Math.PI * 2.05); g.fill();
+  if (k.torch) {
+    line(g, [sx + k.face * 10, sy - 22 + b], [sx + k.face * 12, sy - 40 + b], '#6b4a26', 2);
+    const fl = 1 + Math.sin(S.t * 14 + k.ph) * 0.2;
+    g.fillStyle = '#ffb347'; g.beginPath(); g.ellipse(sx + k.face * 12, sy - 44 + b, 3 * fl, 6 * fl, 0, 0, 7); g.fill();
+  }
+}
+function drawPyre(g) {
+  const lit = S.burnT >= 0;
+  for (let i = 0; i < 4; i++) {
+    const z = i * 4, a = i % 2 ? 0.12 : -0.12;
+    box(g, PYRE.x - 0.7, PYRE.y - 0.15 + a, PYRE.x + 0.7, PYRE.y + 0.15 + a, z, z + 4, lit ? '#3a2416' : '#7a5230', '#5a3a20', '#4a2e18');
+    box(g, PYRE.x - 0.15 - a, PYRE.y - 0.7, PYRE.x + 0.15 - a, PYRE.y + 0.7, z + 2, z + 6, lit ? '#3a2416' : '#8a6038', '#6a4426', '#4a2e18');
+  }
+  const [sx, sy] = P(PYRE.x, PYRE.y, 18);
+  g.fillStyle = '#c9a86a'; for (let i = 0; i < 7; i++) { g.save(); g.translate(sx, sy); g.rotate(-0.6 + i * 0.2); g.fillRect(-1, -14, 2, 14); g.restore(); }
 }
 
 // every standing object gets a depth key (x + y of its middle) and is drawn back to front
@@ -947,6 +1032,7 @@ function buildStatics() {
   add(53.5, 48, 101.5, g => blit(g, sspr));
   for (const p of props) { const c = p.kind === 'devli' ? 1 : 0.5; add(p.x + c, p.y + c, p.x + p.y + 2 * c, g => drawProp(g, p)); }
   for (const k of kids) add(k.x, k.y, k.x + k.y, g => drawKid(g, k));
+  add(PYRE.x, PYRE.y, PYRE.x + PYRE.y, drawPyre);
   const jc = riverC(JY);
   add(jc - 1.3, JY + 0.15, jc - 1.3 + JY + 0.15, g => {
     const [px, py] = iso(jc - 1.3, JY + 0.15);
@@ -956,22 +1042,29 @@ function buildStatics() {
 }
 
 /* ---------- pathing ---------- */
-function bfs(sx, sy) {
-  dist.fill(-1);
+function bfs(sx, sy, out = dist) {
+  out.fill(-1);
   let h = 0, t = 0;
   const s = sy * W + sx;
   if (solid(map[s])) return;
-  dist[s] = 0; queue[t++] = s;
+  out[s] = 0; queue[t++] = s;
   while (h < t) {
     const c = queue[h++], cx = c % W, cy = (c / W) | 0;
     for (const [dx, dy] of D4) {
       const nx = cx + dx, ny = cy + dy;
       if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
       const n = ny * W + nx;
-      if (dist[n] !== -1 || solid(map[n])) continue;
-      dist[n] = dist[c] + 1; queue[t++] = n;
+      if (out[n] !== -1 || solid(map[n])) continue;
+      out[n] = out[c] + 1; queue[t++] = n;
     }
   }
+}
+// step toward whatever a distance field was built from: the next tile downhill, or straight at it once adjacent
+function downhill(field, e, tx, ty) {
+  if (field[ty * W + tx] <= 1) return null;
+  let best = null, bd = 1e9;
+  for (const [ax, ay] of D4) { const n = field[(ty + ay) * W + tx + ax]; if (n >= 0 && n < bd) { bd = n; best = [ax, ay]; } }
+  return best ? [tx + best[0] + 0.5 - e.x, ty + best[1] + 0.5 - e.y] : null;
 }
 function blocked(x, y, r) {
   return solid(at(Math.floor(x - r), Math.floor(y - r))) || solid(at(Math.floor(x + r), Math.floor(y - r))) ||
@@ -981,12 +1074,20 @@ function moveEnt(e, dx, dy) {
   if (!blocked(e.x + dx, e.y, e.r)) e.x += dx;
   if (!blocked(e.x, e.y + dy, e.r)) e.y += dy;
 }
+// move a walker; if a corner keeps catching it, ease it back to the middle of its tile
+function steer(e, mx, my, dt) {
+  const x0 = e.x, y0 = e.y;
+  moveEnt(e, mx, my);
+  e.stuck = hyp(e.x - x0, e.y - y0) < hyp(mx, my) * 0.3 ? (e.stuck || 0) + dt : 0;
+  if (e.stuck > 0.25) { e.x += (Math.floor(e.x) + 0.5 - e.x) * 0.3; e.y += (Math.floor(e.y) + 0.5 - e.y) * 0.3; }
+}
 const diyaStrength = l => Math.min(1, 0.35 + l.life / 6);
 const ferryX = e => e.x + 1.3 + (1 - Math.min(1, e.wait / e.need)) * 1.5;
 function boatPos(b, t) {
   const y = (((t * b.sp + b.off * H) % H) + H) % H;
   return [riverC(Math.floor(y)) + 0.5 + b.side, y];
 }
+const holy = () => exits.filter(e => !e.need);
 function inSafe(x, y) {
   for (const l of lights) if (l.kind === 'diya' && l.lit && hyp(l.x - x, l.y - y) < l.safeR * diyaStrength(l)) return true;
   for (const e of exits) if (!e.need && hyp(x - e.x, y - e.y) < 3.2) return true;
@@ -994,13 +1095,18 @@ function inSafe(x, y) {
 }
 
 /* ---------- game state ---------- */
-function spawnDemon() {
+const OIL_MAX = 100, LAMP_RANGE = 3.4, COURAGE = 5, RESCUES = 5;
+const PYRE = { x: 31.5, y: 28.5 };
+function spawnDemon(near) {
   for (let tries = 0; tries < 400; tries++) {
-    const x = 1 + Math.floor(rand() * (W - 2)), y = 1 + Math.floor(rand() * (H - 2));
+    let x, y;
+    if (near) { const a = rand() * 6.28, r = 2.5 + rand() * 2.5; x = Math.floor(near.x + Math.cos(a) * r); y = Math.floor(near.y + Math.sin(a) * r); }
+    else { x = 1 + Math.floor(rand() * (W - 2)); y = 1 + Math.floor(rand() * (H - 2)); }
+    if (x < 1 || y < 1 || x > W - 2 || y > H - 2 || solid(map[y * W + x])) continue;
     const d = dist[y * W + x];
-    if (d < 18 || inSafe(x + 0.5, y + 0.5) || exits.some(e => !e.need && hyp(x - e.x, y - e.y) < 8)) continue;
-    demons.push({ x: x + 0.5, y: y + 0.5, r: 0.32, dir: D4[Math.floor(rand() * 4)], wt: 0, stun: 0, chasing: false, ph: rand() * 6 });
-    return;
+    if (d < 0 || (!near && d < 18) || inSafe(x + 0.5, y + 0.5) || holy().some(e => hyp(x - e.x, y - e.y) < 8)) continue;
+    demons.push({ x: x + 0.5, y: y + 0.5, r: 0.32, dir: D4[Math.floor(rand() * 4)], wt: 0, stun: 0, chasing: !!near, ph: rand() * 6, hp: 1, maxHp: 1, lit: 0 });
+    return demons[demons.length - 1];
   }
 }
 function newGame() {
@@ -1008,20 +1114,184 @@ function newGame() {
   for (let attempt = 0; attempt < 30; attempt++) {
     gen((Math.random() * 1e9) | 0);
     bfs(START.x, START.y);
-    if (map[START.y * W + START.x] === LANE && exits.every(e => dist[e.ty * W + e.tx] > 0)) break;
+    if (map[START.y * W + START.x] === LANE && exits.every(e => dist[e.ty * W + e.tx] > 0) && dist[Math.floor(PYRE.y) * W + Math.floor(PYRE.x)] > 0) break;
   }
   drawGround();
   player = { x: START.x + 0.5, y: START.y + 0.5, r: 0.3, face: 1, moving: false };
   spirit = { x: START.x, y: START.y, path: null, pi: 0 };
   demons = [];
-  S = { t: 0, hearts: 3, inv: 0, charges: 2, mode: 'intro', prints: [], spawnT: 32, flash: 0, seen: false, smoke: [], bursts: [], smokeT: 0, burstT: 3,
+  S = { t: 0, hearts: COURAGE, inv: 0, charges: 2, oil: OIL_MAX, mode: 'intro', phase: 'rescue', prints: [], spawnT: 3, flash: 0, shake: 0,
+    smoke: [], bursts: [], puffs: [], fire: [], smokeT: 0, burstT: 3,
+    ri: 0, roster: [], npc: null, dest: null, nextT: 0, clock: 0, log: [], banished: 0, firstTalk: true,
+    boss: null, burnT: -1, dawn: 0, beam: null,
     cars: [{ x: 6, y: RY + 1.5, dir: 1, col: '#e8e4dc' }, { x: 30, y: RY + 0.5, dir: -1, col: '#b8322a' }, { x: 44, y: RY + 1.5, dir: 1, col: '#2f4f7a' }],
     boats: [{ off: 0.15, sp: 0.35, side: -1.6 }, { off: 0.6, sp: -0.28, side: 1.2 }] };
   buildStatics();
   lastPT = -1;
   bfs(START.x, START.y);
-  for (let i = 0; i < 7; i++) spawnDemon();
+  for (let i = 0; i < 5; i++) spawnDemon();
+  setupRescues();
   renderHud();
+}
+
+/* ---------- the night's rescues ---------- */
+const ROLES = [
+  { id: 'kid', name: 'Anvi', who: 'a little girl from the effigy crew', dest: 'home', look: { body: '#e0a33a', legs: '#c08a5a', hair: '#1a100a', h: 0.78 },
+    line: 'I went to fetch more crackers and now every lane looks the same. Can you take me home?' },
+  { id: 'aaji', name: 'Shantabai', who: 'an old woman with a basket of flowers', dest: 'temple', look: { body: '#8a2f5a', legs: '#8a2f5a', hair: '#cfcac0', h: 0.92, basket: true },
+    line: 'These flowers are for the early puja. My eyes are weak in the dark, baba. Will you walk me to the temple?' },
+  { id: 'tio', name: 'Uncle Peter', who: 'a cheerful uncle outside the taverna', dest: 'bus', look: { body: '#3f6fa8', legs: '#3a3a44', hair: '#2a2018', h: 1, belly: true },
+    line: 'Missed the last bus, men! Just get me to the stop. The pilot will come.' },
+  { id: 'tia', name: 'Tia Rosa', who: 'a woman holding a rosary', dest: 'chapel', look: { body: '#2f4f7a', legs: '#2f4f7a', hair: '#e0dcd2', h: 0.92 },
+    line: 'I lit candles for my husband, and now the lanes are full of strange shadows. Take me to the chapel?' },
+  { id: 'fisher', name: 'Bostião', who: 'a fisherman with a net over his shoulder', dest: 'ferry', look: { body: '#c9733a', legs: '#5a4a3a', hair: '#1a100a', h: 1, net: true },
+    line: 'My canoe drifted off. If I reach the jetty, the ferryman will take me across.' },
+  { id: 'boy', name: 'Rohan', who: 'a boy dragging a bamboo pole', dest: 'devli', look: { body: '#5aa05a', legs: '#3a4a6a', hair: '#1a100a', h: 0.8, pole: true },
+    line: 'My aaji says if you are ever lost, go to the Rakhondar’s devli. Do you know the way?' }
+];
+const FAKE_ASKS = ['But keep that lamp away from me. The light hurts my eyes.', 'Let’s cut through the dark by the old well. It’s quicker, no?', 'Only, don’t take me past the holy places. I don’t like the bells.'];
+const PLACE_NAMES = { temple: 'the temple', chapel: 'the chapel', devli: 'the Rakhondar’s devli', bus: 'the bus stop', ferry: 'the ferry jetty' };
+
+function setupRescues() {
+  const pool = ROLES.filter(r => r.dest !== 'devli' || exits.some(e => e.kind === 'devli'));
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  const roster = pool.slice(0, RESCUES).map(role => ({ role, fake: false }));
+  // the first rescue is always genuine; one or two of the rest are demons in disguise
+  const fakes = 1 + (rand() < 0.5 ? 1 : 0);
+  const idx = [1, 2, 3, 4].sort(() => rand() - 0.5).slice(0, fakes);
+  for (const i of idx) if (roster[i]) roster[i].fake = true;
+  S.roster = roster;
+}
+function destFor(role) {
+  if (role.dest !== 'home') {
+    const e = exits.find(x => x.kind === role.dest);
+    e.wait = 0; e.told = false;
+    return Object.assign(e, { label: PLACE_NAMES[e.kind] });
+  }
+  const homes = houses.map(h => [h, h.x + Math.floor(h.w / 2), h.y + h.h]).filter(([, tx, ty]) => !solid(at(tx, ty)) && dist[ty * W + tx] > 6);
+  if (!homes.length) return destFor({ dest: 'chapel' });
+  const [h, tx, ty] = homes[Math.floor(rand() * homes.length)];
+  return { kind: 'home', x: tx + 0.5, y: ty + 0.5, tx, ty, r: 1.3, need: 0, wait: 0, label: 'her house', house: h };
+}
+function startRescue() {
+  const { role, fake } = S.roster[S.ri];
+  S.dest = destFor(role);
+  bfs(S.dest.tx, S.dest.ty, distD);
+  let spot = null;
+  for (let pass = 0; pass < 3 && !spot; pass++) {
+    const lo = [10, 6, 2][pass], hi = [28, 40, 99][pass];
+    for (let tries = 0; tries < 3000 && !spot; tries++) {
+      const [x, y] = lanes[Math.floor(rand() * lanes.length)], d = dist[y * W + x];
+      if (d >= lo && d <= hi && distD[y * W + x] >= 12 - pass * 4 && !inSafe(x + 0.5, y + 0.5)) spot = [x, y];
+    }
+  }
+  if (!spot) spot = [Math.floor(player.x), Math.floor(player.y)];
+  S.npc = { x: spot[0] + 0.5, y: spot[1] + 0.5, r: 0.28, role, fake, state: 'find', panic: 0, flee: 0, face: 1, moving: false,
+    fakeT: 0, fakeAt: 16 + rand() * 10, alpha: 1, tile: -1, ask: FAKE_ASKS[Math.floor(rand() * FAKE_ASKS.length)] };
+  whisper(S.ri === 0 ? 'Someone is stranded out there in the dark. Find them, and I will watch over you both.' : 'I can feel someone else lost in the lanes. Find them.');
+}
+function openTalk() {
+  const n = S.npc, { role } = n;
+  S.mode = 'talk';
+  document.getElementById('talkWho').textContent = `${role.name}, ${role.who}`;
+  document.getElementById('talkLine').textContent = `“${role.line}${n.fake ? ' ' + n.ask : ''}”`;
+  document.getElementById('talkHint').textContent = S.firstTalk
+    ? 'Rakhondar: look closely before you trust anyone tonight. Real people cast a shadow in your lamplight. A demon’s feet point backwards, and I flicker when one is close.'
+    : 'Rakhondar: shadow, feet, and what they ask of you. Decide carefully.';
+  S.firstTalk = false;
+  document.getElementById('talk').hidden = false;
+  document.getElementById('btnTrust').focus();
+}
+function closeTalk() { document.getElementById('talk').hidden = true; S.mode = 'play'; }
+function trust() {
+  if (S.mode !== 'talk') return;
+  closeTalk();
+  S.npc.state = 'escort';
+  whisper(`Stay close to ${S.npc.role.name}. Keep your lamp burning.`);
+}
+function accuse() {
+  if (S.mode !== 'talk') return;
+  closeTalk();
+  const n = S.npc;
+  if (n.fake) return reveal(true);
+  n.state = 'leave';
+  S.log.push({ name: n.role.name, result: 'wronged' });
+  whisper(`${n.role.name} stares at you. “How could you?” They walk off alone into the dark.`);
+  S.nextT = 3;
+}
+function reveal(unmasked) {
+  const n = S.npc, name = n.role.name;
+  const d = { x: n.x, y: n.y, r: 0.36, dir: [1, 0], wt: 0, stun: unmasked ? 1.2 : 0, chasing: true, ph: 0, hp: 2.6, maxHp: 2.6, lit: 0, big: true };
+  demons.push(d);
+  S.puffs.push({ x: n.x, y: n.y, born: S.t, big: true });
+  S.npc = null;
+  if (S.dest) { S.dest.wait = 0; }
+  if (unmasked) {
+    S.log.push({ name, result: 'unmasked' });
+    S.charges = Math.min(3, S.charges + 1); S.oil = OIL_MAX;
+    whisper(`That was never ${name}. Burn it with your lamp!`);
+  } else {
+    S.log.push({ name, result: 'fooled' });
+    for (let i = 0; i < 2; i++) spawnDemon(d);
+    S.shake = 0.5;
+    whisper(`${name} was a demon all along! It led you into a trap. Fight!`);
+  }
+  S.nextT = 4;
+  renderHud();
+}
+function deliver() {
+  const n = S.npc;
+  n.state = 'home';
+  S.log.push({ name: n.role.name, result: 'saved' });
+  S.dest.wait = 0;
+  const thanks = { home: 'Her mother pulls her inside and lights a lamp at the door.', temple: 'The pujari takes the flowers and sits her by the deepastambha.',
+    bus: 'The pilot revs up and Uncle Peter waves all the way down the road.', chapel: 'The candles are still burning. She will be safe until morning.',
+    ferry: 'The ferryman helps him aboard and the ferry pushes off.', devli: 'He touches the stone and sits down by the lamp, no longer afraid.' }[S.dest.kind];
+  whisper(`${n.role.name} is safe. ${thanks}`);
+  S.nextT = 2.5;
+}
+function captured() {
+  const n = S.npc;
+  S.log.push({ name: n.role.name, result: 'captured' });
+  S.puffs.push({ x: n.x, y: n.y, born: S.t, big: true });
+  S.npc = null; S.dest.wait = 0; S.flash = 0.8;
+  whisper(`The shadows took ${n.role.name}. I could not reach them in time.`);
+  S.nextT = 3.5;
+}
+function nextRescue() {
+  S.ri++; S.clock += 45;
+  if (S.ri >= S.roster.length) startBoss(); else startRescue();
+}
+function startBoss() {
+  S.phase = 'boss'; S.clock = 7 * 60; S.dest = null;
+  const effs = props.filter(p => p.kind === 'effigy');
+  let p = effs.sort((a, b) => hyp(b.x - PYRE.x, b.y - PYRE.y) - hyp(a.x - PYRE.x, a.y - PYRE.y))[0];
+  let bx, by;
+  if (p) {
+    p.awake = true; map[p.y * W + p.x] = MUD;
+    for (const l of lights) if (l.kind === 'effigy' && Math.floor(l.x) === p.x && Math.floor(l.y) === p.y) l.off = true;
+    bx = p.x + 0.5; by = p.y + 0.5;
+  } else { const [x, y] = lanes[Math.floor(rand() * lanes.length)]; bx = x + 0.5; by = y + 0.5; }
+  lastPT = -1;   // the effigy's tile just opened up, so the paths need rebuilding
+  S.boss = { x: bx, y: by, r: 0.3, slamT: 4, slam: null, spawnT: 5, lit: 0, step: 0 };
+  S.shake = 0.8;
+  for (let i = 0; i < 2; i++) spawnDemon(S.boss);
+  whisper('Four in the morning. The effigy is walking! A child’s lamp cannot kill Narkasur. Lead him to the pyre on the chapel square.');
+}
+function hurt(fx, fy) {
+  if (S.inv > 0) return;
+  S.hearts--; S.inv = 1.6; S.flash = 0.6;
+  const d = hyp(player.x - fx, player.y - fy) || 1, kx = (player.x - fx) / d, ky = (player.y - fy) / d;
+  for (let i = 0; i < 8; i++) moveEnt(player, kx * 0.1, ky * 0.1);
+  renderHud();
+  if (S.hearts <= 0) return endNight('fell');
+  whisper(S.hearts === 1 ? 'Get up. One more and they have you.' : 'Get up! Keep the lamp burning.');
+}
+function banish(d) {
+  demons.splice(demons.indexOf(d), 1);
+  S.banished++;
+  S.puffs.push({ x: d.x, y: d.y, born: S.t, big: d.big });
+  if (d.big) whisper('The disguised demon burns away into smoke.');
 }
 
 /* ---------- input: screen directions turned into map directions ---------- */
@@ -1032,6 +1302,8 @@ addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
   if (k === ' ' && !e.repeat) callSpirit();
+  if (k === 'e' && S && S.mode === 'talk') { e.preventDefault(); trust(); return; }
+  if (k === 'q' && S && S.mode === 'talk') { e.preventDefault(); accuse(); return; }
   keys.add(k);
 });
 addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
@@ -1041,14 +1313,23 @@ cv.addEventListener('pointermove', e => { if (e.pointerId === joy.id) { joy.dx =
 const endJoy = e => { if (e.pointerId === joy.id) { joy.id = null; joy.dx = joy.dy = 0; } };
 cv.addEventListener('pointerup', endJoy); cv.addEventListener('pointercancel', endJoy);
 document.getElementById('callBtn').addEventListener('click', callSpirit);
+document.getElementById('btnTrust').addEventListener('click', trust);
+document.getElementById('btnBanish').addEventListener('click', accuse);
 
 /* ---------- Rakhondar ---------- */
+function objective() {
+  if (S.phase === 'boss') return { x: PYRE.x, y: PYRE.y, tx: Math.floor(PYRE.x), ty: Math.floor(PYRE.y), what: 'the pyre' };
+  const n = S.npc;
+  if (!n) return null;
+  if (n.state === 'find') return { x: n.x, y: n.y, tx: Math.floor(n.x), ty: Math.floor(n.y), what: n.role.name };
+  if (n.state === 'escort') return { x: S.dest.x, y: S.dest.y, tx: S.dest.tx, ty: S.dest.ty, what: S.dest.label };
+  return null;
+}
 function callSpirit() {
   if (!S || S.mode !== 'play') return;
   if (S.charges <= 0) { whisper('I need light to walk ahead. Find a diya.'); return; }
-  let goal = null, gd = 1e9;
-  for (const e of exits) { const d = dist[e.ty * W + e.tx]; if (d >= 0 && d < gd) { gd = d; goal = e; } }
-  if (!goal) return;
+  const goal = objective();
+  if (!goal || dist[goal.ty * W + goal.tx] < 0) return;
   const path = [{ x: goal.tx, y: goal.ty }];
   let cx = goal.tx, cy = goal.ty;
   while (dist[cy * W + cx] > 0) {
@@ -1069,8 +1350,7 @@ function callSpirit() {
   spirit.path = shown; spirit.pi = 0;
   S.charges--;
   for (const d of demons) if (hyp(d.x - player.x, d.y - player.y) < 5.5) { d.stun = 2.6; d.chasing = false; }
-  const where = { temple: 'the temple', chapel: 'the chapel', devli: 'my devli', bus: 'the bus stop', ferry: 'the ferry' }[goal.kind];
-  whisper(shown.length < 23 ? `You are close to ${where}. Follow my footsteps.` : `Follow my footsteps toward ${where}.`);
+  whisper(shown.length < 23 ? `${goal.what} is close. Follow my footsteps.` : `Follow my footsteps toward ${goal.what}.`);
   renderHud();
 }
 
@@ -1079,14 +1359,16 @@ function whisper(text) {
   const el = document.getElementById('whisper');
   el.textContent = text; el.classList.add('show');
   clearTimeout(whisperTimer);
-  whisperTimer = setTimeout(() => el.classList.remove('show'), 3800);
+  whisperTimer = setTimeout(() => el.classList.remove('show'), 4200);
 }
 
 /* ---------- update ---------- */
 function update(dt) {
   S.t += dt;
   updateFx(dt);
+  S.shake = Math.max(0, S.shake - dt);
   if (S.mode !== 'play') return;
+  S.clock = Math.min(S.phase === 'boss' ? 8 * 60 : 6.9 * 60, S.clock + dt * 0.6);
 
   let sx = (keys.has('arrowright') || keys.has('d') ? 1 : 0) - (keys.has('arrowleft') || keys.has('a') ? 1 : 0);
   let sy = (keys.has('arrowdown') || keys.has('s') ? 1 : 0) - (keys.has('arrowup') || keys.has('w') ? 1 : 0);
@@ -1099,7 +1381,7 @@ function update(dt) {
   if (player.moving && sx) player.face = Math.sign(sx);
   const pTile = at(Math.floor(player.x), Math.floor(player.y));
   const sp = 4.3 * (pTile === PAD ? 0.6 : 1);
-  moveEnt(player, ix * sp * dt, iy * sp * dt);
+  if (S.burnT < 0) moveEnt(player, ix * sp * dt, iy * sp * dt);
 
   // traffic on the main road waits for a child standing in front of it
   for (const c of S.cars) {
@@ -1113,39 +1395,46 @@ function update(dt) {
   if (pt !== lastPT) { bfs(Math.floor(player.x), Math.floor(player.y)); lastPT = pt; }
   S.inv -= dt; S.flash = Math.max(0, S.flash - dt * 1.6);
 
+  // diyas: light them as you pass; lit diyas and holy places refill the lamp
+  let refuel = holy().some(e => hyp(player.x - e.x, player.y - e.y) < 3);
   for (const l of lights) if (l.kind === 'diya') {
     if (!l.lit && !l.spent && hyp(l.x - player.x, l.y - player.y) < 0.95) {
-      l.lit = true; l.life = 25;
+      l.lit = true; l.life = 35;
       const gained = S.charges < 3; S.charges = Math.min(3, S.charges + 1);
-      whisper(gained ? 'The diya holds them back, and gives me strength. It will not burn for long.' : 'The diya holds them back. It will not burn for long.');
+      whisper(gained ? 'The diya holds them back and gives me strength. Fill your lamp while it burns.' : 'The diya holds them back. Fill your lamp while it burns.');
       renderHud();
     }
-    if (l.lit) { l.life -= dt; if (l.life <= 0) { l.lit = false; l.spent = true; } }
+    if (l.lit) { l.life -= dt; if (hyp(l.x - player.x, l.y - player.y) < 1.4) refuel = true; if (l.life <= 0) { l.lit = false; l.spent = true; } }
   }
+  if (refuel) S.oil = Math.min(OIL_MAX, S.oil + dt * 35);
   const safe = inSafe(player.x, player.y);
 
-  for (const d of demons) {
-    d.stun -= dt;
-    const tx = Math.floor(d.x), ty = Math.floor(d.y), dd = dist[ty * W + tx];
-    const pd = hyp(d.x - player.x, d.y - player.y);
-    if (d.stun > 0 || safe || dd < 0) d.chasing = false;
-    else d.chasing = d.chasing ? dd < 18 : (pd < 6.5 && dd < 11);
-    if (d.chasing && !S.seen) { S.seen = true; whisper('Something is moving in the dark. Run, and keep to the lanes.'); }
+  // the person you are walking home
+  if (S.npc) { updateNpc(S.npc, dt); if (S.mode !== 'play') return; }
+  if (S.nextT > 0) { S.nextT -= dt; if (S.nextT <= 0) nextRescue(); }
 
-    let vx = 0, vy = 0, spd;
+  const npc = S.npc && S.npc.state === 'escort' && S.npc.flee >= 0 ? S.npc : null;
+  for (const d of demons.slice()) {
+    d.stun -= dt; d.lit -= dt;
+    const tx = Math.floor(d.x), ty = Math.floor(d.y), dd = dist[ty * W + tx];
+    const nd = npc ? distN[ty * W + tx] : -1;
+    // demons go for whoever is easier to reach: the child, or the person being walked home
+    const goNpc = npc && nd >= 0 && (dd < 0 || nd < dd) && !inSafe(npc.x, npc.y);
+    const field = goNpc ? distN : dist, tgt = goNpc ? npc : player, fd = goNpc ? nd : dd;
+    const pd = hyp(d.x - tgt.x, d.y - tgt.y);
+    if (d.stun > 0 || fd < 0 || (!goNpc && safe)) d.chasing = false;
+    else d.chasing = d.chasing ? fd < 18 : (pd < 6.5 && fd < 11);
+    if (d.chasing && !S.seen) { S.seen = true; whisper('Something is moving in the dark. Your lamp will burn it if it comes close.'); }
+
+    let v = null, spd;
     if (d.stun > 0 && dd >= 0) {
       let best = null, bd = -1;
       for (const [ax, ay] of D4) { const n = dist[(ty + ay) * W + tx + ax]; if (n > bd) { bd = n; best = [ax, ay]; } }
-      if (best) { vx = tx + best[0] + 0.5 - d.x; vy = ty + best[1] + 0.5 - d.y; }
+      if (best) v = [tx + best[0] + 0.5 - d.x, ty + best[1] + 0.5 - d.y];
       spd = 3.0;
     } else if (d.chasing) {
-      if (dd <= 1) { vx = player.x - d.x; vy = player.y - d.y; }
-      else {
-        let best = null, bd = 1e9;
-        for (const [ax, ay] of D4) { const n = dist[(ty + ay) * W + tx + ax]; if (n >= 0 && n < bd) { bd = n; best = [ax, ay]; } }
-        if (best) { vx = tx + best[0] + 0.5 - d.x; vy = ty + best[1] + 0.5 - d.y; }
-      }
-      spd = 3.55 + Math.min(0.5, S.t / 240);
+      v = downhill(field, d, tx, ty) || [tgt.x - d.x, tgt.y - d.y];
+      spd = (d.big ? 3.2 : 3.4) + Math.min(0.5, S.t / 300);
     } else {
       d.wt -= dt;
       if (d.wt <= 0 || solid(at(tx + d.dir[0], ty + d.dir[1]))) {
@@ -1153,29 +1442,45 @@ function update(dt) {
         d.dir = open.length ? open[Math.floor(rand() * open.length)] : d.dir;
         d.wt = 1 + rand() * 2;
       }
-      vx = tx + d.dir[0] + 0.5 - d.x; vy = ty + d.dir[1] + 0.5 - d.y;
+      v = [tx + d.dir[0] + 0.5 - d.x, ty + d.dir[1] + 0.5 - d.y];
       spd = 1.4;
     }
-    const vm = hyp(vx, vy);
+    const vm = v ? hyp(v[0], v[1]) : 0;
     if (vm > 0.01) {
       if (at(tx, ty) === PAD) spd *= 0.65;
-      const mx = vx / vm * spd * dt, my = vy / vm * spd * dt;
+      if (d.lit > 0) spd *= 0.45;
+      const mx = v[0] / vm * spd * dt, my = v[1] / vm * spd * dt;
       if (inSafe(d.x + mx * 4, d.y + my * 4)) { d.chasing = false; d.wt = 0; d.dir = [-d.dir[0], -d.dir[1]]; }
-      else moveEnt(d, mx, my);
+      else steer(d, mx, my, dt);
     }
-
-    if (!safe && S.inv <= 0 && d.stun <= 0 && pd < 0.62) {
-      S.hearts--; S.inv = 1.6; S.flash = 0.6; d.stun = 1.4;
-      const kx = (player.x - d.x) / (pd || 1), ky = (player.y - d.y) / (pd || 1);
-      for (let i = 0; i < 8; i++) moveEnt(player, kx * 0.1, ky * 0.1);
-      renderHud();
-      if (S.hearts <= 0) return end('caught');
-      whisper(S.hearts === 1 ? 'Get up. One more and they have you.' : 'Get up! Keep moving.');
+    if (goNpc && d.stun <= 0 && hyp(d.x - npc.x, d.y - npc.y) < 0.6) { captured(); break; }
+    if (!safe && S.inv <= 0 && d.stun <= 0 && hyp(d.x - player.x, d.y - player.y) < 0.62) {
+      d.stun = 1.4; hurt(d.x, d.y);
+      if (S.mode !== 'play') return;
     }
   }
 
+  // the blessed lamp burns the nearest demon in reach
+  S.beam = null;
+  if (S.oil > 0) {
+    let best = null, bd = LAMP_RANGE;
+    for (const d of demons) { const dd = hyp(d.x - player.x, d.y - player.y); if (dd < bd) { bd = dd; best = d; } }
+    if (best) {
+      best.hp -= dt * 1.1; best.lit = 0.15; S.beam = best;
+      S.oil = Math.max(0, S.oil - dt * 7);
+      if (best.hp <= 0) { banish(best); S.beam = null; }
+    } else if (S.boss && S.burnT < 0 && hyp(S.boss.x - player.x, S.boss.y - player.y) < LAMP_RANGE + 0.5) {
+      S.boss.lit = 0.15; S.beam = S.boss; S.oil = Math.max(0, S.oil - dt * 7);
+    }
+  }
+
+  if (S.boss) updateBoss(S.boss, dt);
+  if (S.mode !== 'play') return;
+
+  // the night thickens as it goes on
   S.spawnT -= dt;
-  if (S.spawnT <= 0) { if (demons.length < 13) spawnDemon(); S.spawnT = 30; }
+  const want = S.burnT >= 0 ? 0 : 5 + S.ri + (S.boss ? 2 : 0);
+  if (S.spawnT <= 0) { if (demons.length < want) spawnDemon(); S.spawnT = 3; }
 
   if (spirit.path) {
     const p = spirit.path[Math.min(spirit.path.length - 1, Math.floor(spirit.pi))];
@@ -1190,22 +1495,102 @@ function update(dt) {
     spirit.y += (ty - spirit.y) * Math.min(1, dt * 3);
   }
   S.prints = S.prints.filter(p => S.t - p.born < p.life);
-
-  for (const e of exits) {
-    if (hyp(player.x - e.x, player.y - e.y) >= e.r) continue;
-    if (!e.need) return end(e.kind);
-    if (!e.told) { e.told = true; whisper(e.kind === 'bus' ? 'Wait here for the pilot. I will stand with you.' : 'The ferry is on the far bank. Wait, and I will stand with you.'); }
-    e.wait += dt;
-    if (e.wait >= e.need) return end(e.kind);
-  }
   setObjective();
+}
+
+function updateNpc(n, dt) {
+  const pd = hyp(n.x - player.x, n.y - player.y);
+  if (n.state === 'find') { if (pd < 1.3) openTalk(); return; }
+  if (n.state === 'leave' || n.state === 'home') {
+    n.alpha -= dt * 0.5;
+    if (n.state === 'leave') moveEnt(n, -n.face * dt * 0.8, dt * 0.8);
+    if (n.alpha <= 0) S.npc = null;
+    return;
+  }
+  const tx = Math.floor(n.x), ty = Math.floor(n.y);
+  if (n.tile !== ty * W + tx) { n.tile = ty * W + tx; bfs(tx, ty, distN); }
+  // fear builds when a demon is near and neither your lamp nor a holy light covers them
+  let threat = null, td = 1e9;
+  for (const d of demons) { const dd = hyp(d.x - n.x, d.y - n.y); if (dd < td) { td = dd; threat = d; } }
+  const covered = (pd < 2.6 && S.oil > 0) || inSafe(n.x, n.y);
+  n.panic = Math.max(0, Math.min(1, n.panic + (threat && td < 3.2 && !covered ? dt * 0.5 : -dt * 0.25)));
+  if (n.panic >= 1 && n.flee <= 0) { n.flee = 2.5; whisper(`${n.role.name} panics and runs! Catch up with them.`); }
+  let v = null, spd = 3.7;
+  if (n.flee > 0) {
+    n.flee -= dt; spd = 4;
+    if (threat) v = [n.x - threat.x, n.y - threat.y];
+    if (n.flee <= 0) n.panic = 0.5;
+  } else if (distD[ty * W + tx] >= 0 && distD[ty * W + tx] <= 4) {
+    // home is in sight: they hurry the last few steps on their own
+    if (hyp(n.x - S.dest.x, n.y - S.dest.y) > 0.3) v = downhill(distD, n, tx, ty) || [S.dest.x - n.x, S.dest.y - n.y];
+  } else if (pd > 1.3) {
+    v = downhill(dist, n, tx, ty) || [player.x - n.x, player.y - n.y];
+  }
+  if (v) {
+    const vm = hyp(v[0], v[1]);
+    if (vm > 0.01) {
+      if (at(tx, ty) === PAD) spd *= 0.6;
+      steer(n, v[0] / vm * spd * dt, v[1] / vm * spd * dt, dt);
+      const s = v[0] - v[1]; if (Math.abs(s) > 0.05) n.face = Math.sign(s);
+    }
+  }
+  n.moving = !!v;
+  // a demon in disguise drops the act near holy ground, at a ride home, or once it has you somewhere dark
+  if (n.fake) {
+    n.fakeT += dt;
+    const nearHoly = holy().some(e => hyp(n.x - e.x, n.y - e.y) < 4.5);
+    const atRide = S.dest.need && hyp(n.x - S.dest.x, n.y - S.dest.y) < S.dest.r + 1.2;
+    if (nearHoly || atRide || n.fakeT > n.fakeAt) return reveal(false);
+  }
+  const d = S.dest, nd = hyp(n.x - d.x, n.y - d.y);
+  if (d.need) {
+    if (nd < d.r + 0.6 && hyp(player.x - d.x, player.y - d.y) < d.r + 1) {
+      if (!d.told) { d.told = true; whisper(d.kind === 'bus' ? 'Wait here with him for the pilot. Keep the shadows off.' : 'The ferry is crossing. Hold the jetty until it lands.'); }
+      d.wait += dt;
+      if (d.wait >= d.need) deliver();
+    }
+  } else if (nd < d.r) deliver();
+}
+
+function updateBoss(b, dt) {
+  if (S.burnT >= 0) {
+    S.burnT += dt;
+    for (const d of demons.slice()) if (rand() < dt * 0.8) banish(d);
+    if (S.burnT > 4) S.dawn = Math.min(1, S.dawn + dt / 3);
+    if (S.dawn >= 1) endNight('dawn');
+    return;
+  }
+  const tx = Math.floor(b.x), ty = Math.floor(b.y);
+  b.lit -= dt;
+  const v = downhill(dist, b, tx, ty) || [player.x - b.x, player.y - b.y], vm = hyp(v[0], v[1]);
+  const spd = 2.5 * (b.lit > 0 ? 0.55 : 1);
+  if (vm > 0.01) { steer(b, v[0] / vm * spd * dt, v[1] / vm * spd * dt, dt); b.step += dt * spd; }
+  // a ground slam where the child stands, with a moment's warning
+  b.slamT -= dt;
+  if (!b.slam && b.slamT <= 0 && hyp(b.x - player.x, b.y - player.y) < 4.5) b.slam = { x: player.x, y: player.y, t: 1.1 };
+  if (b.slam) {
+    b.slam.t -= dt;
+    if (b.slam.t <= 0) {
+      S.shake = 0.5;
+      if (hyp(player.x - b.slam.x, player.y - b.slam.y) < 1.6) hurt(b.slam.x, b.slam.y);
+      b.slam = null; b.slamT = 5;
+      if (S.mode !== 'play') return;
+    }
+  }
+  if (hyp(b.x - player.x, b.y - player.y) < 0.95) { hurt(b.x, b.y); if (S.mode !== 'play') return; }
+  b.spawnT -= dt;
+  if (b.spawnT <= 0) { spawnDemon(b); b.spawnT = 7; }
+  if (hyp(b.x - PYRE.x, b.y - PYRE.y) < 1.5) {
+    S.burnT = 0; S.shake = 0.6;
+    whisper('The whole vaddo rushes in with torches. The pyre catches, and Narkasur burns!');
+  }
 }
 
 function updateFx(dt) {
   S.smokeT -= dt;
   if (S.smokeT <= 0) {
     S.smokeT = 0.35;
-    for (const p of props) if (p.kind === 'effigy' && hyp(p.x - player.x, p.y - player.y) < 22)
+    for (const p of props) if (p.kind === 'effigy' && !p.awake && hyp(p.x - player.x, p.y - player.y) < 22)
       S.smoke.push({ x: p.x + 0.5 + (rand() - 0.5) * 1.5, y: p.y + 0.5 + (rand() - 0.5) * 1.5, born: S.t, life: 6, vz: 8 + rand() * 6, dx: 0.12 + rand() * 0.1 });
   }
   S.burstT -= dt;
@@ -1217,24 +1602,33 @@ function updateFx(dt) {
       S.bursts.push({ x: p.x + 0.5 + (rand() - 0.5) * 3, y: p.y + 0.5 + (rand() - 0.5) * 3, z: 60 + rand() * 60, born: S.t, hue: ['255,200,80', '255,90,70', '120,220,255', '200,255,120'][Math.floor(rand() * 4)] });
     }
   }
+  if (S.burnT >= 0) for (let i = 0; i < 3; i++) S.fire.push({ x: PYRE.x + (rand() - 0.5) * 1.6, y: PYRE.y + (rand() - 0.5) * 1.6, born: S.t, life: 0.8 + rand() * 0.8, vz: 40 + rand() * 50 });
   S.smoke = S.smoke.filter(s => S.t - s.born < s.life);
   S.bursts = S.bursts.filter(b => S.t - b.born < 1.4);
+  S.puffs = S.puffs.filter(p => S.t - p.born < 0.9);
+  S.fire = S.fire.filter(f => S.t - f.born < f.life);
 }
 
 let lastObj = '';
+function clockText() {
+  const m = Math.floor(S.clock / 5) * 5, h = (21 + Math.floor(m / 60)) % 24, mm = m % 60;
+  return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${h >= 12 && h < 24 ? 'PM' : 'AM'}`;
+}
 function setObjective() {
-  let t = 'Reach the temple, the chapel or the Rakhondar’s devli, or catch a ride at the bus stop or the ferry.';
-  for (const e of exits) if (e.wait > 0) {
-    const left = Math.ceil(e.need - e.wait), here = hyp(player.x - e.x, player.y - e.y) < e.r;
-    const what = e.kind === 'bus' ? "The pilot's motorbike is coming" : 'The ferry is crossing';
-    t = here ? `${what}. ${left}s` : `Get back to the ${e.kind === 'bus' ? 'bus stop' : 'jetty'}. ${left}s more.`;
-  }
+  let t;
+  const n = S.npc;
+  if (S.phase === 'boss') t = S.burnT >= 0 ? 'Dawn is coming' : 'Lead Narkasur to the pyre on the chapel square';
+  else if (!n || n.state === 'leave' || n.state === 'home') t = `Rescue ${Math.min(S.ri + 1, RESCUES)} of ${RESCUES}`;
+  else if (n.state === 'find') t = `Rescue ${S.ri + 1} of ${RESCUES} · Someone is stranded. Find them`;
+  else if (S.dest.need && S.dest.wait > 0) t = `${S.dest.kind === 'bus' ? 'The pilot is coming' : 'The ferry is crossing'} · ${Math.ceil(S.dest.need - S.dest.wait)}s`;
+  else t = `Walk ${n.role.name} to ${S.dest.label}`;
+  t = `${clockText()} · ${t}`;
   if (t !== lastObj) { document.getElementById('objective').textContent = t; lastObj = t; }
 }
 
 function renderHud() {
   const pips = (n, max, cls) => Array.from({ length: max }, (_, i) => `<span class="pip ${cls}${i < n ? ' on' : ''}"></span>`).join('');
-  document.getElementById('hearts').innerHTML = pips(S.hearts, 3, 'courage');
+  document.getElementById('hearts').innerHTML = pips(S.hearts, COURAGE, 'courage');
   document.getElementById('charges').innerHTML = pips(S.charges, 3, 'spirit');
   document.getElementById('callBtn').disabled = S.charges <= 0 || S.mode !== 'play';
 }
@@ -1285,7 +1679,8 @@ function drawDemon(g, d) {
 
 function render() {
   const [px, py] = iso(player.x, player.y);
-  const camX = px - vw / sc / 2, camY = py - 18 - vh / sc / 2;
+  const shake = S.shake * 10;
+  const camX = px - vw / sc / 2 + (Math.random() - 0.5) * shake, camY = py - 18 - vh / sc / 2 + (Math.random() - 0.5) * shake;
   const k = dpr * sc;
   const toWorld = c => c.setTransform(k, 0, 0, k, -camX * k, -camY * k);
   const t = S.t;
@@ -1324,6 +1719,8 @@ function render() {
   list.push({ key: player.x + player.y, draw: g => drawChild(g, 1) });
   for (const d of demons) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: d.x + d.y, draw: g => drawDemon(g, d) }); }
   for (const c of S.cars) { const [sx, sy] = iso(c.x, c.y); if (inView(sx, sy)) list.push({ key: c.x + c.y, draw: g => drawCar(g, c.x, c.y, c.dir, c.col, true) }); }
+  if (S.npc) list.push({ key: S.npc.x + S.npc.y, draw: g => drawPerson(g, S.npc) });
+  if (S.boss) list.push({ key: S.boss.x + S.boss.y, draw: g => drawNarkasur(g, S.boss) });
   list.sort((a, b) => a.key - b.key);
   for (const o of list) o.draw(ctx);
 
@@ -1331,7 +1728,7 @@ function render() {
   dctx.setTransform(1, 0, 0, 1, 0, 0);
   dctx.globalCompositeOperation = 'source-over';
   dctx.clearRect(0, 0, dark.width, dark.height);
-  dctx.fillStyle = 'rgba(6,11,30,0.9)'; dctx.fillRect(0, 0, dark.width, dark.height);
+  dctx.fillStyle = `rgba(6,11,30,${0.9 * (1 - 0.85 * S.dawn)})`; dctx.fillRect(0, 0, dark.width, dark.height);
   dctx.globalCompositeOperation = 'destination-out';
   toWorld(dctx);
   const hole = (wx, wy, r, a, lift = 0) => {
@@ -1343,13 +1740,18 @@ function render() {
     dctx.fillStyle = g; dctx.fillRect(-rr, -rr, rr * 2, rr * 2);
     dctx.restore();
   };
-  hole(player.x, player.y, 4.3 + Math.sin(t * 3) * 0.12, 0.95, 10);
+  hole(player.x, player.y, 3.2 + 1.4 * S.oil / OIL_MAX + Math.sin(t * 3) * 0.12, 0.95, 10);
   hole(spirit.x, spirit.y, 1.8, 0.6, 20);
+  if (S.npc) hole(S.npc.x, S.npc.y, 1.2, 0.5, 10);
+  if (S.boss) hole(S.boss.x, S.boss.y, 2.4, 0.55, 30);
+  if (S.burnT >= 0) hole(PYRE.x, PYRE.y, 3 + Math.min(4, S.burnT * 2), 0.95, 20);
+  if (S.dest && S.dest.kind === 'home' && S.npc && S.npc.state === 'escort') hole(S.dest.x, S.dest.y, 1.8, 0.85, 8);
   const glows = [];
   for (const l of lights) {
     let r = l.r, on = true;
     if (l.kind === 'diya') { on = l.lit; r *= diyaStrength(l) * (1 + Math.sin(t * 13 + l.y) * 0.04); }
     if (l.kind === 'effigy') r *= 1 + Math.sin(t * 7 + l.x) * 0.05;
+    if (l.off) on = false;
     if (on) { hole(l.x, l.y, r, 0.95, l.lift || 4); glows.push([l, r]); }
   }
   for (const p of S.prints) { const age = t - p.born; if (age > 0) hole(p.x, p.y, 0.9, 0.35 * Math.min(1, (p.life - age) / 2)); }
@@ -1467,8 +1869,74 @@ function render() {
     ctx.fillStyle = `rgba(210,255,120,${a * 0.25})`; ctx.beginPath(); ctx.arc(sx, sy, 5, 0, 7); ctx.fill();
     ctx.fillStyle = `rgba(230,255,160,${a})`; ctx.beginPath(); ctx.arc(sx, sy, 1.4, 0, 7); ctx.fill();
   }
+  // the pyre burning, Narkasur in flames
+  for (const f of S.fire) {
+    const age = (t - f.born) / f.life, [fx, fy] = P(f.x, f.y, 10 + age * f.vz);
+    ctx.fillStyle = `rgba(255,${Math.round(200 - age * 150)},60,${0.8 * (1 - age)})`;
+    ctx.beginPath(); ctx.arc(fx, fy, 9 * (1 - age) + 2, 0, 7); ctx.fill();
+  }
+  if (S.boss && S.burnT >= 0) {
+    const [bx, by] = iso(S.boss.x, S.boss.y);
+    for (let i = 0; i < 10; i++) {
+      const a = (t * 3 + i * 0.7) % 1;
+      ctx.fillStyle = `rgba(255,${150 + i * 8},50,${0.7 * (1 - a)})`;
+      ctx.beginPath(); ctx.arc(bx + Math.sin(i * 2.3) * 22, by - 30 - a * 140 - i * 6, 10 * (1 - a) + 3, 0, 7); ctx.fill();
+    }
+  }
+  // the boss's slam: a warning ring, then the blow
+  if (S.boss && S.boss.slam) {
+    const s = S.boss.slam, k2 = 1 - s.t / 1.1;
+    ctx.strokeStyle = `rgba(255,70,40,${0.4 + 0.5 * k2})`; ctx.lineWidth = 3;
+    onGround(ctx, s.x, s.y, g => { g.beginPath(); g.arc(0, 0, 1.6 * 32, 0, 7); g.stroke(); g.fillStyle = `rgba(255,70,40,${0.25 * k2})`; g.beginPath(); g.arc(0, 0, 1.6 * 32 * k2, 0, 7); g.fill(); });
+  }
+  // the blessed lamp's beam
+  if (S.beam) {
+    const [ax, ay] = iso(player.x, player.y), [bx, by] = iso(S.beam.x, S.beam.y), lift = S.beam === S.boss ? 90 : 22;
+    ctx.globalCompositeOperation = 'lighter';
+    for (const [w, a] of [[9, 0.18], [4, 0.45], [1.6, 0.9]]) {
+      ctx.strokeStyle = `rgba(255,214,120,${a * (0.8 + Math.sin(t * 40) * 0.2)})`; ctx.lineWidth = w;
+      ctx.beginPath(); ctx.moveTo(ax + player.face * 6, ay - 22); ctx.lineTo(bx + Math.sin(t * 30) * 2, by - lift); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // the child's lamp
+  { const [ax, ay] = iso(player.x, player.y); ctx.fillStyle = S.oil > 0 ? '#ffd36b' : '#5a4a3a'; ctx.beginPath(); ctx.ellipse(ax + player.face * 6, ay - 22, 2.6, 3.6, 0, 0, 7); ctx.fill(); }
+  // banished demons breaking into sparks
+  for (const p of S.puffs) {
+    const age = (t - p.born) / 0.9, [sx, sy] = iso(p.x, p.y);
+    for (let i = 0; i < (p.big ? 18 : 10); i++) {
+      const a = i * 2.4, r = age * (p.big ? 50 : 32);
+      ctx.fillStyle = i % 2 ? `rgba(200,170,255,${1 - age})` : `rgba(255,240,200,${1 - age})`;
+      ctx.beginPath(); ctx.arc(sx + Math.cos(a) * r, sy - 20 + Math.sin(a) * r * 0.6 - age * 20, 2, 0, 7); ctx.fill();
+    }
+  }
+  // the stranded person: a beacon while lost, a fear meter while you walk them
+  if (S.npc && S.npc.alpha > 0) {
+    const n = S.npc, [sx, sy] = iso(n.x, n.y), top = sy - 48 * n.role.look.h;
+    if (n.state === 'find') {
+      const p = 1 + Math.sin(t * 4) * 0.15;
+      ctx.fillStyle = 'rgba(236,228,207,.2)'; ctx.beginPath(); ctx.arc(sx, top - 8, 12 * p, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ece4cf'; ctx.font = '700 16px Mukta, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('!', sx, top - 2); ctx.textAlign = 'left';
+    } else if (n.state === 'escort') {
+      ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(sx - 15, top, 30, 4);
+      ctx.fillStyle = n.panic > 0.6 ? '#ff5b3a' : '#f2b441'; ctx.fillRect(sx - 15, top, 30 * n.panic, 4);
+      ctx.fillStyle = 'rgba(236,228,207,.8)'; ctx.font = '600 10px Mukta, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(n.role.name, sx, top - 4); ctx.textAlign = 'left';
+    }
+  }
   // the child shows through anything standing in front of them
   drawChild(ctx, 0.3);
+  if (S.boss) {
+    const [bx, by] = iso(S.boss.x, S.boss.y);
+    ctx.shadowColor = '#ff3b2f'; ctx.shadowBlur = 14; ctx.fillStyle = '#ff5b3a';
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(bx + s * 8, by - 127 - Math.abs(Math.sin(S.boss.step * 2)) * 4, 3.2, 0, 7); ctx.fill(); }
+    ctx.shadowBlur = 0;
+  }
+  // big demons show how much burning they still need
+  for (const d of demons) if (d.big) {
+    const [sx, sy] = iso(d.x, d.y);
+    ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(sx - 16, sy - 56, 32, 4);
+    ctx.fillStyle = '#c9a0ff'; ctx.fillRect(sx - 16, sy - 56, 32 * Math.max(0, d.hp / d.maxHp), 4);
+  }
   // demon eyes burn through the dark
   for (const d of demons) {
     const [sx, sy] = iso(d.x, d.y), stunned = d.stun > 0;
@@ -1524,8 +1992,11 @@ function render() {
   {
     const [x, y0] = iso(spirit.x, spirit.y), y = y0 - 34 + Math.sin(t * 2.2) * 4, pulse = 1 + Math.sin(t * 4) * 0.12;
     ctx.fillStyle = 'rgba(159,232,214,.18)'; ctx.beginPath(); ctx.ellipse(x, y0, 10, 5, 0, 0, 7); ctx.fill();
+    // the Rakhondar flickers red when a demon wearing a human face is close
+    const n = S.npc, warn = n && n.fake && n.alpha > 0 && hyp(n.x - spirit.x, n.y - spirit.y) < 3.5 && Math.sin(t * 22) > 0;
+    const c1 = warn ? '255,170,160' : '230,255,248', c2 = warn ? '255,90,80' : '159,232,214';
     const g = ctx.createRadialGradient(x, y, 0, x, y, 22 * pulse);
-    g.addColorStop(0, 'rgba(230,255,248,.95)'); g.addColorStop(0.25, 'rgba(159,232,214,.55)'); g.addColorStop(1, 'rgba(159,232,214,0)');
+    g.addColorStop(0, `rgba(${c1},.95)`); g.addColorStop(0.25, `rgba(${c2},.55)`); g.addColorStop(1, `rgba(${c2},0)`);
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 22 * pulse, 0, 7); ctx.fill();
     for (let i = 0; i < 3; i++) {
       const a = t * 2.4 + i * 2.094;
@@ -1539,6 +2010,27 @@ function render() {
   const mg = ctx.createRadialGradient(cv.width * 0.85, 0, 0, cv.width * 0.85, 0, cv.height * 0.6);
   mg.addColorStop(0, 'rgba(170,190,240,.13)'); mg.addColorStop(1, 'rgba(170,190,240,0)');
   ctx.fillStyle = mg; ctx.fillRect(0, 0, cv.width, cv.height);
+  if (S.dawn > 0) {
+    const dg = ctx.createLinearGradient(0, 0, 0, cv.height);
+    dg.addColorStop(0, `rgba(255,170,110,${0.35 * S.dawn})`); dg.addColorStop(1, `rgba(255,220,170,${0.12 * S.dawn})`);
+    ctx.fillStyle = dg; ctx.fillRect(0, 0, cv.width, cv.height);
+  }
+  // an arrow at the screen edge pointing to whatever needs you next
+  const goal = S.mode === 'play' ? objective() : null;
+  if (goal) {
+    const [gx, gy] = iso(goal.x, goal.y), qx = (gx - camX) * k, qy = (gy - 20 - camY) * k, pad = 44 * dpr;
+    if (qx < pad || qy < pad * 2 || qx > cv.width - pad || qy > cv.height - pad * 2) {
+      const cx = cv.width / 2, cy = cv.height / 2, a = Math.atan2(qy - cy, qx - cx);
+      const ex = Math.max(pad, Math.min(cv.width - pad, cx + Math.cos(a) * cv.width)), ey = Math.max(pad * 2, Math.min(cv.height - pad * 2, cy + Math.sin(a) * cv.height));
+      ctx.save(); ctx.translate(ex, ey); ctx.rotate(a);
+      ctx.fillStyle = S.phase === 'boss' ? 'rgba(255,150,60,.9)' : 'rgba(159,232,214,.9)';
+      ctx.beginPath(); ctx.moveTo(14 * dpr, 0); ctx.lineTo(-8 * dpr, -9 * dpr); ctx.lineTo(-4 * dpr, 0); ctx.lineTo(-8 * dpr, 9 * dpr); ctx.fill();
+      ctx.restore();
+    }
+  }
+  // the oil gauge in the HUD
+  const oilPct = Math.round(100 * S.oil / OIL_MAX);
+  if (oilPct !== S.oilShown) { S.oilShown = oilPct; document.getElementById('oilFill').style.width = oilPct + '%'; }
   if (S.flash > 0) { ctx.fillStyle = `rgba(160,20,15,${S.flash * 0.45})`; ctx.fillRect(0, 0, cv.width, cv.height); }
   if (joy.id !== null && S.mode === 'play') {
     ctx.strokeStyle = 'rgba(236,228,207,.3)'; ctx.lineWidth = 2 * dpr;
@@ -1551,42 +2043,64 @@ function render() {
 
 /* ---------- screens ---------- */
 const screen = document.getElementById('screen'), card = document.getElementById('card');
+const PLAY_URL = 'https://claude.ai/artifact/5TzkxY3xHZSJuVBJ9FTsXE';
 function showIntro() {
   card.innerHTML = `
-    <span class="eyebrow">Naraka Chaturdashi night · a village in Goa</span>
+    <span class="eyebrow">Chapter 1 · Narkasur night · a village in Goa</span>
     <h1>Rakhondar<small>राखणदार</small></h1>
-    <p>You wandered off while the vaddo was raising its Narkasur effigy. Now every lane between the laterite walls looks the same, and something with red eyes is moving between the coconut palms.</p>
-    <p>A small light has come to stand beside you. It is the Rakhondar, the guardian who walks this village at night. It can lead you to a safe place, which might be the temple, the chapel or its own little devli. It can also lead you to a ride home, either a pilot's motorbike on the main road or the ferry on the river.</p>
+    <p>Tonight the vaddo is raising its Narkasur effigies, and the dark is full of his shadows. At dusk the Rakhondar, the guardian who walks this village at night, chose you. It blessed your little clay lamp, and now its light burns demons.</p>
+    <p>People are stranded out in the lanes. Find them and walk them to safety before the shadows take them. But be careful who you trust: some of Narkasur’s demons are wearing the faces of people you know.</p>
     <div class="controls">
       <b>Move</b><span>Arrow keys or WASD move you up, down, left and right on screen. Press two together to follow a lane. On a phone, drag anywhere.</span>
-      <b>Call Rakhondar</b><span>Space or the button. It lights footsteps toward the nearest way home and drives back nearby demons.</span>
-      <b>Diyas</b><span>Walk over one to light it. Demons can't enter its glow, and it gives the Rakhondar strength. It burns out.</span>
+      <b>Your lamp</b><span>It burns the nearest demon by itself while it has oil. Refill it at lit diyas and holy places.</span>
+      <b>Trust or banish</b><span>When you meet someone, decide. Look for a shadow, the way their feet point, and what they ask of you.</span>
+      <b>Call Rakhondar</b><span>Space or the button. It lights footsteps toward your next goal and drives back nearby demons.</span>
     </div>
-    <button class="start" id="startBtn" type="button">Start walking</button>`;
+    <button class="start" id="startBtn" type="button">Begin the night</button>`;
   screen.hidden = false;
   document.getElementById('startBtn').onclick = start;
 }
 function start() {
-  newGame(); S.mode = 'play'; screen.hidden = true; renderHud();
-  whisper('I am the Rakhondar of this village. Stay near the light.');
+  newGame(); S.mode = 'play'; screen.hidden = true; document.getElementById('talk').hidden = true;
+  renderHud(); startRescue();
 }
-function end(kind) {
+function endNight(kind) {
   S.mode = 'end'; renderHud();
-  const text = {
-    temple: ['Safe at the temple', 'You reach the temple courtyard. The deepastambha burns all night, and nothing follows you past its light. The Rakhondar settles at the gate to keep watch until dawn. Dev borem korum.'],
-    bus: ['The pilot came', 'A motorbike pulls up, its headlight cutting through the dark. You climb on behind the pilot. As you ride out, a small light hangs at the edge of the village until you are gone.'],
-    chapel: ['Safe in the chapel', 'You push the heavy chapel door open. Candles are still burning before the altar, and the dark stops at the threshold. At dawn the sacristan finds you asleep on a pew and walks you home.'],
-    devli: ['At the Rakhondar’s devli', 'You reach the little shrine under the trees. The guardian’s light sinks into the sindoor-red stone, and the lamp flares up. Nothing from the dark will cross this plinth tonight.'],
-    ferry: ['Across the river', 'The ferry bumps against the jetty and the ferryman waves you aboard. The mangroves slide past in the moonlight. On the far bank, a small light watches until you reach home.'],
-    caught: ['The dark caught you', 'Your courage ran out. The Rakhondar pulls you back to the lane where you started. The village changes every time you return.']
-  }[kind];
+  document.getElementById('talk').hidden = true;
+  const count = r => S.log.filter(l => l.result === r).length;
+  const saved = count('saved'), unmasked = count('unmasked'), fooled = count('fooled'), captured = count('captured'), wronged = count('wronged');
+  const fakes = S.roster.filter(r => r.fake).length, real = S.roster.length - fakes;
+  const dawn = kind === 'dawn';
+  const score = saved * 100 + unmasked * 150 + S.banished * 10 + (dawn ? 300 : 0) - wronged * 50 - fooled * 50;
+  const title = dawn ? 'Dawn over the vaddo' : 'The dark took your courage';
+  const text = dawn
+    ? 'Narkasur burns on the chapel square as the sky turns pink. The village cheers, the children run for their oil baths, and somewhere under the trees a small light settles back into its stone.'
+    : 'Your lamp gutters out and the shadows close in. The Rakhondar carries you home before dawn. Tomorrow night it will choose you again.';
+  const share = `Rakhondar, Narkasur night: I brought ${saved} of ${real} people home, unmasked ${unmasked} of ${fakes} disguised demons and banished ${S.banished} shadows${dawn ? ', then burned Narkasur at dawn' : ''}. Score ${score}. ${PLAY_URL}`;
   card.innerHTML = `
-    <span class="eyebrow">${kind === 'caught' ? 'Caught' : 'You made it home'} · ${Math.floor(S.t / 60)}m ${Math.floor(S.t % 60)}s</span>
-    <h1>${text[0]}</h1>
-    <p>${text[1]}</p>
-    <button class="start" id="startBtn" type="button">${kind === 'caught' ? 'Try again' : 'Walk a new village'}</button>`;
+    <span class="eyebrow">${dawn ? 'Night survived' : 'Night lost'} · score ${score}</span>
+    <h1>${title}</h1>
+    <p>${text}</p>
+    <div class="summary">
+      <span>People brought home</span><b>${saved} of ${real}</b>
+      <span>Disguised demons unmasked</span><b>${unmasked} of ${fakes}</b>
+      <span>Fooled by a disguise</span><b>${fooled}</b>
+      <span>Taken by the shadows</span><b>${captured}</b>
+      <span>Wrongly accused</span><b>${wronged}</b>
+      <span>Shadows banished</span><b>${S.banished}</b>
+    </div>
+    <p class="hint" id="shareText" style="font-size:13px;color:var(--muted);user-select:all">${share}</p>
+    <div class="row">
+      <button class="start" id="startBtn" type="button">Play another night</button>
+      <button class="ghost" id="copyBtn" type="button">Copy result</button>
+    </div>`;
   screen.hidden = false;
   document.getElementById('startBtn').onclick = start;
+  document.getElementById('copyBtn').onclick = () => {
+    const btn = document.getElementById('copyBtn');
+    const fallback = () => { const r = document.createRange(); r.selectNodeContents(document.getElementById('shareText')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = 'Selected, copy it'; };
+    try { navigator.clipboard.writeText(share).then(() => { btn.textContent = 'Copied'; }, fallback); } catch (e) { fallback(); }
+  };
   document.getElementById('startBtn').focus();
 }
 
