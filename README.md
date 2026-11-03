@@ -25,8 +25,9 @@ The night ends with a summary and a score you can copy and share.
 | Move | Arrow keys or WASD (two together to follow a lane) | Drag anywhere |
 | Trust / banish | E / Q | Buttons on the card |
 | Call the Rakhondar | Space | Button, bottom right |
+| Zoom | Mouse wheel or + / − | |
 
-The lamp fires by itself at the nearest demon while it has oil. Refill it at lit diyas (walk over one to light it) and at holy places. Calling the Rakhondar lights footsteps toward your next goal and drives back nearby demons; diyas and unmasked demons recharge it.
+The lamp burns the nearest demon in front of the child (about 55° either side of where you last walked, or anything touching you) while it has oil, so turn to face what's coming. Refill it at lit diyas (walk over one to light it) and at holy places. Calling the Rakhondar lights footsteps toward your next goal and drives back nearby demons; diyas and unmasked demons recharge it.
 
 ## The code
 

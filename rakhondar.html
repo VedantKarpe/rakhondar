@@ -1305,6 +1305,7 @@ function inSafe(x, y) {
 
 /* ---------- game state ---------- */
 const OIL_MAX = 100, LAMP_RANGE = 3.4, COURAGE = 5, RESCUES = 5;
+const LAMP_CONE = Math.cos(0.95), LAMP_POINT = 0.9; // the beam reaches about 55 degrees either side, or anything touching the child
 let PYRE = { x: 31.5, y: 28.5 };
 function spawnDemon(near) {
   for (let tries = 0; tries < 400; tries++) {
@@ -1326,7 +1327,7 @@ function newGame() {
     if (map[START.y * W + START.x] === LANE && exits.every(e => dist[e.ty * W + e.tx] > 0) && dist[Math.floor(PYRE.y) * W + Math.floor(PYRE.x)] > 0) break;
   }
   drawGround();
-  player = { x: START.x + 0.5, y: START.y + 0.5, r: 0.3, face: 1, moving: false };
+  player = { x: START.x + 0.5, y: START.y + 0.5, r: 0.3, face: 1, moving: false, hx: 0.7071, hy: 0.7071 };
   spirit = { x: START.x, y: START.y, path: null, pi: 0 };
   demons = [];
   S = { t: 0, hearts: COURAGE, inv: 0, charges: 2, oil: OIL_MAX, mode: 'intro', phase: 'rescue', prints: [], spawnT: 3, flash: 0, shake: 0,
@@ -1523,6 +1524,8 @@ addEventListener('keydown', e => {
   if (k === ' ' && !e.repeat) callSpirit();
   if (k === 'e' && S && S.mode === 'talk') { e.preventDefault(); trust(); return; }
   if (k === 'q' && S && S.mode === 'talk') { e.preventDefault(); accuse(); return; }
+  if (k === '=' || k === '+') zoomBy(1.1);
+  if (k === '-' || k === '_') zoomBy(1 / 1.1);
   if (k === 'm' && !e.repeat) SFX.toggle(); else SFX.init();
   keys.add(k);
 });
@@ -1601,6 +1604,7 @@ function update(dt) {
   if (m > 0) { ix = ix / m * mag; iy = iy / m * mag; }
   player.moving = mag > 0.05;
   if (player.moving && sx) player.face = Math.sign(sx);
+  if (player.moving) { const hm = hyp(ix, iy); player.hx = ix / hm; player.hy = iy / hm; }
   const pTile = at(Math.floor(player.x), Math.floor(player.y));
   const sp = 4.3 * (pTile === PAD ? 0.6 : 1);
   if (S.burnT < 0) moveEnt(player, ix * sp * dt, iy * sp * dt);
@@ -1656,7 +1660,7 @@ function update(dt) {
       spd = 3.0;
     } else if (d.chasing) {
       v = downhill(field, d, tx, ty) || [tgt.x - d.x, tgt.y - d.y];
-      spd = (d.big ? 3.2 : 3.4) + Math.min(0.5, S.t / 300);
+      spd = (d.big ? 3.3 : 3.6) + Math.min(0.5, S.t / 300);
     } else {
       d.wt -= dt;
       if (d.wt <= 0 || solid(at(tx + d.dir[0], ty + d.dir[1]))) {
@@ -1682,17 +1686,18 @@ function update(dt) {
     }
   }
 
-  // the blessed lamp burns the nearest demon in reach
+  // the blessed lamp burns the nearest demon in front of the child: turn to face what is coming
   S.beam = null;
+  const ahead = e => { const ex = e.x - player.x, ey = e.y - player.y, m = hyp(ex, ey); return m < LAMP_POINT || (ex * player.hx + ey * player.hy) / m > LAMP_CONE; };
   if (S.oil > 0) {
     let best = null, bd = LAMP_RANGE;
-    for (const d of demons) { const dd = hyp(d.x - player.x, d.y - player.y); if (dd < bd) { bd = dd; best = d; } }
+    for (const d of demons) { const dd = hyp(d.x - player.x, d.y - player.y); if (dd < bd && ahead(d)) { bd = dd; best = d; } }
     if (best) {
-      best.hp -= dt * 1.1; best.lit = 0.15; S.beam = best;
-      S.oil = Math.max(0, S.oil - dt * 7);
+      best.hp -= dt * 0.8; best.lit = 0.15; S.beam = best;
+      S.oil = Math.max(0, S.oil - dt * 8);
       if (best.hp <= 0) { banish(best); S.beam = null; }
-    } else if (S.boss && S.burnT < 0 && hyp(S.boss.x - player.x, S.boss.y - player.y) < LAMP_RANGE + 0.5) {
-      S.boss.lit = 0.15; S.beam = S.boss; S.oil = Math.max(0, S.oil - dt * 7);
+    } else if (S.boss && S.burnT < 0 && hyp(S.boss.x - player.x, S.boss.y - player.y) < LAMP_RANGE + 0.5 && ahead(S.boss)) {
+      S.boss.lit = 0.15; S.beam = S.boss; S.oil = Math.max(0, S.oil - dt * 8);
     }
   }
 
@@ -1864,9 +1869,18 @@ function resize() {
   vw = cv.clientWidth; vh = cv.clientHeight;
   cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr);
   dark.width = cv.width; dark.height = cv.height;
-  sc = Math.max(0.6, Math.min(1.25, vw / 1000));
+  // close in: about 7 tiles across on a phone, 10 on a desktop, times the player's own zoom
+  sc = Math.max(0.6, Math.min(2.6, vw / (2 * HW * (vw < 700 ? 7 : 10)) * zoomMul));
+}
+let zoomMul = 1;
+try { zoomMul = Math.max(0.6, Math.min(1.6, +localStorage.getItem('rk-zoom') || 1)); } catch (e) {}
+function zoomBy(f) {
+  zoomMul = Math.max(0.6, Math.min(1.6, zoomMul * f));
+  try { localStorage.setItem('rk-zoom', zoomMul); } catch (e) {}
+  resize();
 }
 addEventListener('resize', resize);
+cv.addEventListener('wheel', e => { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1.1 : 1 / 1.1); }, { passive: false });
 
 const mistSprite = (() => {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128;
@@ -1965,7 +1979,10 @@ function render() {
     dctx.fillStyle = g; dctx.fillRect(-rr, -rr, rr * 2, rr * 2);
     dctx.restore();
   };
-  hole(player.x, player.y, 3.2 + 1.4 * S.oil / OIL_MAX + Math.sin(t * 3) * 0.12, 0.95, 10);
+  // a small pool of lamplight, and a longer throw where the child is facing
+  const lampR = 2.2 + 1.0 * S.oil / OIL_MAX + Math.sin(t * 3) * 0.1;
+  hole(player.x, player.y, lampR, 0.95, 10);
+  if (S.oil > 0) for (const f of [1.3, 2.4]) hole(player.x + player.hx * f, player.y + player.hy * f, lampR * (f > 2 ? 0.55 : 0.7), 0.85, 6);
   hole(spirit.x, spirit.y, 1.8, 0.6, 20);
   if (S.npc) hole(S.npc.x, S.npc.y, 1.2, 0.5, 10);
   if (S.boss) hole(S.boss.x, S.boss.y, 2.4, 0.55, 30);
@@ -2114,6 +2131,17 @@ function render() {
     ctx.strokeStyle = `rgba(255,70,40,${0.4 + 0.5 * k2})`; ctx.lineWidth = 3;
     onGround(ctx, s.x, s.y, g => { g.beginPath(); g.arc(0, 0, 1.6 * 32, 0, 7); g.stroke(); g.fillStyle = `rgba(255,70,40,${0.25 * k2})`; g.beginPath(); g.arc(0, 0, 1.6 * 32 * k2, 0, 7); g.fill(); });
   }
+  // the lamp's reach: a faint wedge on the ground where it will burn
+  if (S.oil > 0 && S.mode === 'play') {
+    const a = Math.atan2(player.hy, player.hx), r = LAMP_RANGE * 32, w = Math.acos(LAMP_CONE);
+    ctx.globalCompositeOperation = 'lighter';
+    onGround(ctx, player.x, player.y, g => {
+      const gr = g.createRadialGradient(0, 0, 8, 0, 0, r);
+      gr.addColorStop(0, 'rgba(255,200,110,.13)'); gr.addColorStop(1, 'rgba(255,200,110,0)');
+      g.fillStyle = gr; g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, r, a - w, a + w); g.closePath(); g.fill();
+    });
+    ctx.globalCompositeOperation = 'source-over';
+  }
   // the blessed lamp's beam
   if (S.beam) {
     const [ax, ay] = iso(player.x, player.y), [bx, by] = iso(S.beam.x, S.beam.y), lift = S.beam === S.boss ? 90 : 22;
@@ -2240,6 +2268,17 @@ function render() {
     dg.addColorStop(0, `rgba(255,170,110,${0.35 * S.dawn})`); dg.addColorStop(1, `rgba(255,220,170,${0.12 * S.dawn})`);
     ctx.fillStyle = dg; ctx.fillRect(0, 0, cv.width, cv.height);
   }
+  // names of the places nearby, so the village reads as the real one
+  ctx.textAlign = 'center'; ctx.font = `400 ${15 * dpr}px "Yatra One", serif`;
+  for (const e of exits) {
+    const pd = hyp(e.x - player.x, e.y - player.y), name = PLACE_NAMES[e.kind];
+    if (!name || pd > 9) continue;
+    const [gx, gy] = iso(e.x, e.y), qx = (gx - camX) * k, qy = (gy - 70 - camY) * k;
+    const label = name.replace(/^the /, ''), al = Math.min(1, (9 - pd) / 3) * (1 - S.dawn);
+    ctx.fillStyle = `rgba(6,11,30,${0.6 * al})`; ctx.fillText(label[0].toUpperCase() + label.slice(1), qx + dpr, qy + dpr);
+    ctx.fillStyle = `rgba(242,226,190,${0.9 * al})`; ctx.fillText(label[0].toUpperCase() + label.slice(1), qx, qy);
+  }
+  ctx.textAlign = 'start';
   // an arrow at the screen edge pointing to whatever needs you next
   const goal = S.mode === 'play' ? objective() : null;
   if (goal) {
