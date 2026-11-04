@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rakhondar First Person</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mukta:wght@400;600;700&family=Yatra+One&display=swap">
+<style>
+/* Layout: a full-screen first-person night; HUD at the edges, a crosshair in the middle, story cards over the view */
+:root {
+  --night: #070a16; --ink: #ece4cf; --muted: #9aa0b4; --lamp: #f2b441; --spirit: #9fe8d6; --danger: #ff6a5a;
+  --card: rgba(9, 12, 26, 0.9);
+  --display: "Yatra One", "Mukta", Georgia, serif; --body: "Mukta", system-ui, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--night); color: var(--ink); font-family: var(--body); overflow: hidden; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.hud { position: absolute; top: 12px; left: 16px; right: 16px; display: flex; justify-content: space-between; pointer-events: none; }
+.lbl { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.pips { display: flex; gap: 6px; margin: 4px 0 6px; }
+.pip { width: 12px; height: 16px; border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%; background: #2a2d3a; }
+.pip.on { background: var(--lamp); box-shadow: 0 0 10px var(--lamp); }
+.pip.sp { border-radius: 50%; height: 12px; }
+.pip.sp.on { background: var(--spirit); box-shadow: 0 0 10px var(--spirit); }
+.oil { width: 96px; height: 6px; border-radius: 3px; background: #2a2d3a; overflow: hidden; }
+.oil span { display: block; height: 100%; background: var(--lamp); }
+#objective { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); font-size: 14px; color: var(--muted); text-align: center; pointer-events: none; max-width: 50%; }
+#compass { position: absolute; top: 40px; left: 50%; width: 26px; height: 26px; margin-left: -13px; pointer-events: none; color: var(--spirit); font-size: 22px; line-height: 26px; text-align: center; }
+#cross { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(236, 228, 207, 0.7); pointer-events: none; }
+#whisper { position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%); max-width: min(32rem, calc(100% - 32px)); text-align: center;
+  font-family: var(--display); font-size: 20px; color: var(--spirit); text-shadow: 0 0 14px rgba(159, 232, 214, 0.55); opacity: 0; transition: opacity 0.5s; pointer-events: none; }
+#whisper.show { opacity: 1; }
+#flash { position: absolute; inset: 0; background: rgba(160, 20, 15, 0.45); opacity: 0; pointer-events: none; }
+.credit { position: absolute; bottom: 8px; left: 16px; font-size: 11px; color: var(--muted); opacity: 0.8; pointer-events: none; }
+.screen { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px 16px; background: rgba(7, 10, 22, 0.75); }
+.card { max-width: 34rem; background: var(--card); border: 1px solid rgba(242, 180, 65, 0.25); border-radius: 6px; padding: 26px; display: flex; flex-direction: column; gap: 12px; max-height: 100%; overflow-y: auto; }
+.eyebrow { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lamp); }
+.card h1 { font-family: var(--display); font-weight: 400; font-size: 40px; line-height: 1.05; margin: 0; }
+.card p { margin: 0; line-height: 1.55; color: #d6cfbd; }
+.controls { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; font-size: 14px; color: var(--muted); }
+.controls b { color: var(--ink); font-weight: 600; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.start { font: 700 16px var(--body); color: var(--night); background: var(--lamp); border: 0; border-radius: 999px; padding: 12px 26px; cursor: pointer; }
+.ghost { font: 600 15px var(--body); color: var(--ink); background: transparent; border: 1px solid rgba(236, 228, 207, 0.4); border-radius: 999px; padding: 11px 20px; cursor: pointer; }
+.talk { position: absolute; left: 0; right: 0; bottom: 84px; display: flex; justify-content: center; padding: 0 16px; }
+.talk-card { max-width: 30rem; width: 100%; background: var(--card); border: 1px solid rgba(159, 232, 214, 0.3); border-radius: 6px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.talk-card .hint { font-size: 13px; color: var(--spirit); margin: 0; }
+.talk-card p { margin: 0; }
+kbd { font: inherit; opacity: 0.65; margin-left: 4px; }
+.touch { position: absolute; bottom: 20px; right: 16px; display: none; gap: 10px; }
+.touch button { font: 700 15px var(--body); border: 0; border-radius: 999px; padding: 14px 18px; }
+#fireBtn { background: var(--lamp); color: var(--night); }
+#callBtn { background: var(--spirit); color: var(--night); }
+@media (pointer: coarse) { .touch { display: flex; } }
+</style>
+
+<canvas id="view"></canvas>
+<div class="hud">
+  <div><span class="lbl">Courage</span><div class="pips" id="hearts"></div><span class="lbl">Lamp oil</span><div class="oil"><span id="oil"></span></div></div>
+  <div style="text-align:right"><span class="lbl">Rakhondar calls</span><div class="pips" id="charges" style="justify-content:flex-end"></div></div>
+</div>
+<div id="objective"></div>
+<div id="compass">▲</div>
+<div id="cross"></div>
+<div id="flash"></div>
+<div id="whisper" aria-live="polite"></div>
+<div class="credit">Tonca, Goa · Map data © OpenStreetMap contributors</div>
+<div class="touch"><button id="callBtn" type="button">Call</button><button id="fireBtn" type="button">Lamp</button></div>
+<div class="talk" id="talk" hidden>
+  <div class="talk-card">
+    <span class="eyebrow" id="talkWho"></span>
+    <p id="talkLine"></p>
+    <p class="hint">Rakhondar: if I flicker red beside them, it is not who it seems.</p>
+    <div class="row"><button class="start" id="trustBtn" type="button">Walk with them <kbd>E</kbd></button><button class="ghost" id="banishBtn" type="button">Banish <kbd>Q</kbd></button></div>
+  </div>
+</div>
+<div class="screen" id="screen"><div class="card" id="card"></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// Rakhondar in first person: a prototype on the real Tonca map (OpenStreetMap, ODbL).
+// The village grid is the same one the isometric game uses; one tile is S world units.
+const V = {"name": "Tonca", "centre": [15.5355, 73.9574], "tile": 12.0, "W": 72, "H": 56, "credit": "Map data \u00a9 OpenStreetMap contributors (ODbL)", "rows": ["GGGGLLLLLLLGGGGPPPGGPPPPPPPPPPPPPPPPPPPLLGMMMMMWWWWWWWWWWWWWWWWWWWWWWWWW", "GGGGGGGGGGLLLGGGGGGGGPPPPPPPGGPPPPPPPPPPLGGGMMWWWWWWWWWWWWWWWWWWWWWWWWWW", "GGGGGGGGGGGGLLLGGGGGPPPPPPPGGGGPPPPPPPPPLGGGWWWWWWWWWWWWWWWWWWWWWWWWWWWW", "GGGGGGGGGGGGGGLLGGGPPPPPPPGGGGGGPPPPPPLLLGGWWWWWWWWWWWWWWWWWWWWWWWWWWWWW", "GGGGGGGGGGGGGGGLLLGGPPPPPGGGGGGGGPPPLLLLGGWWWWWWWWWMMMMMMWWWWWWWWWWWWWWW", "GGGGGGGGGGGGGGGGGLLGGPPPGGGGGGGGGGGLLLGGWWWWWWWWMMMMMMMMMMMMMMWWWWWWWWWW", "GGGGGGGGGGGGGGGGGGLLGGGGGGGGGGGGGGGLLGGWWWWWWWMMMMMMMMMMMMMMMMMMMWWWWWWW", "GGGGGGGGGGGGGGGGGGGLLGGGGGGGGGGGGGLLGGWWWWWWWMMMMMMMMMMMMMMMMMMMMMMWWWWW", "GGGGGGGGGGGGGGGGGGGGLLGGGGGGGGGGGLLGGWWWWWWMMMMMMMMMMMMMMMMMMMMMMMMMMMWW", "GGGGGGGGGGGGGGGGGGGGGLLGGGGGGGGGLLGGWWWWWWMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM", "GGGGGGGGGGGGGGGGGGGGGGLLLGGGGGGGLGGWWWWWMMMMMLLLLLLLLMMMMMMMMMMMMMMMMMMM", "GGGGGGGGGGGGGGGGGGGGGGGLLLGGGGGLLGGWWWWWMMLLLLLLLLLLLLLLLMMMMMMMMMMMMMMM", "GGGGGGGGGGGGGGGGGGGGGGGGLLLGGGGLGGGWWWWMLLLGMMMMMMMMMMMMLLLLLMMMMMMMMMMM", "GGGGGGGGGGGGGGGGGGGGGGGGGGLLGGLLGGWWWWMLLMMMMMMMMMMMMMMMMMMLLLLLMMMMMMMM", "GGGGGGGGGGGGGGGGGGGGGGGGGGGLLLLGGGWWWMMLGMMMMMMMMMMMMMMMMMMMMMGLLLMMMMMM", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGLLGGGGWWWMLLMMMMMMMMMMMMMMMMMMMMMMMMGLLLMMMM", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGLLLGGGWWMLLMMMMMMMMMMMMMMMMMMMMMMMMMMGLLLMM", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGLLLGGWWWMLMMMMMMMMMMMMMMMMMMMMMMMMMMMMGLLL", "GGGGGGGGGGGGGGGGGGLLLLGGGGGGGGGLLLGWWWMLLMMMMMMMMWWWWWWWWWMMMMMMMMMMGGGG", "GGGGGGGGGGGGGGGLGLLLLLGGGGGGGGGGLLLWWWMLLMMMMMMMWWWMMMMMMMMMMMMMMMMGGGGG", "GGGGGGGGGGGGGLLLLLGGGLLGGGGGGGGGGLLWWWMMLWMMMMMWWMMMMMGGGGGGGGGMMMMGGGGG", "GGGGGGGGGGGGLLLGLLGGGGLLGGGGGGGGGGLGWWWMLWWMMMWWMMMGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGGGGLLLGGGLLGGGLLGGGGGGGGGGLGWWWMLLWWWWWMMMGGGGGLLLLLLLLLLGGGGGGG", "GGGGGGGGGGLLGGGGGGLLGGGLLGGGGGGGGGLGWWWMMLWWWWMMMGGGGLLLLGGGGGGLLLLGGGGG", "GGGGGGGGGGLLGGGGGGLLGGGGLLGGGGGGGLLGWWWWMLWWMMMMGGGGLLLGGGGGGGGGGGLLGGGG", "GGGGGGGGGLLGGGGGGGGLLGGGLLLGLLLGGLLGWWWWMLWWMMMGGGGLLLGGGGGGGGGGGGGLLGGL", "GGGGGGGGGLLGGGGGGGGGLLGGGLLLLLLLLLGGWWWWMLWMMMGGGGLLGGGGGGGGGGGGGGGGLLLL", "GGGGGGGGGLLGGGGGGGGGGLLGGGGGGGGLLGGGWWWWMLWMMGGGGLLGGGGGGGGGGGGGGGGGGLLG", "GGGGGGGGGLLGGGGGGGGGGLLGGGGGGGLLGGGGWWWWMLWMGGGGLLGGGGGGGGGGGGGGGGGGGLLG", "GGGGGGGGGLLGGGGGGLGGGGLLGGGGLLLGGGGGWWRWMLWGGGLLLGGGGGGGGGGGGGGGGGGGGGLL", "GGGGGGGGGLLGGGLGLLGGGGGLLGGLLLGGGGGWWRRRRLWGGLLLGGGGGGGGGGGGGGGGGGGGGGLL", "GGGGGGGGGLGGGGLLGLGGGGGGLLLLGGGGGGWWWWRRRRRGLLGGGGGGGGGGGGGGGGGGGGGGGGGL", "GGGGGGGGGLGGGGLLGLLGGGGGLLLGGGGGGGWWWWGGRRRRLGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGLLGGGGGLLGLGGGLLLGGGGGGGGWWWWGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGLLGGGGGLLGLLLLLGGGGGGGGGWWWWWGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGLLGGGGGGLGLLLGGGGGGGGGGWWWWWGGGGGRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "LLLGGGGGLGGGGGGLLLLGGGGGGGGGGGWWWWWGGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GLLLLLGGLGGRRRRRLGGGGGGGGGGGGWWWWWGGGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGLLLLRRRRRRRRGGGGGGGGGGGGWWWWWGGGGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "RRRRRRRRRRRRGGGRRGGGGGGGGGGGWWWWWGGGGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "RRRRRRRRRGGGGGGRRRGGGGGGGGGWWWWWGGGGGGGGRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "LGGGGGGLGGGGGGGGRRRGGGGGGGWWWWWGGGGGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "LLLGGGGLGGGGGGGGGRRRGGGGGGWWWWGGGGGGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "LLLLLLLLGGGGGGPPPPRRRGGGGWWWWWGGGGGGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "LLGGGLLLGGGGPPPPPPPRRRGGWWWWWGGGGGGGGGGRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "LLGLLLLLGGGPPPPPPPPPRRRWWWWWWGGGGGGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GLLLLLLLGGGPPPPPPPPPLRRRWWWWGGGGGGGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGGGGPPPPPPPPPLLRRRRWWGGGGGGGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGPPPPPPPPPPPPLLWWWRRRGGGGGGGGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGPPPPPPPPPPPPPLLWWWWWRRRGGGGGGGGGGRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GPPPPPPPPPPPPPPPPPLWWWWWWWRRRRGGGGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GPPPPPPPPPPPPPPPPLGWWWWWWMGGRRRGGGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GPPPPPPPPPPPPPLLLLWWWWWWWMMMPRRRRGGGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "PPPPPPPPPPPPPLLMMWWWWWWWMMMMPPGRRRGGGRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "PPPPPPPPPPPPPLMMWWWWWWWWMMMPPPGGRRRRGRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "PPPPPPPPPPPPLLMMWWWWWWWMMMMPPPGGGGRRRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"], "houses": [[67, 29, 3, 3], [23, 20, 3, 3]], "anchors": {"ferry": [38.4, 30.3], "chapel": [2.5, 19.0], "temple": [68.8, 30.4]}, "names": {"ferry": "Tonca Ferry", "chapel": "Christ the King Monument", "temple": "Shree Shantadurga Temple"}};
+const W = V.W, H = V.H, S = 3, EYE = 1.35;
+const GR = 0, LANE = 1, ROAD = 2, PAD = 3, WATER = 4, MANG = 5, HOUSE = 6, TREE = 7, TEMPLE = 8, CHAPEL = 9;
+const SOLID = [0, 0, 0, 0, 1, 1, 1, 1, 1, 1];
+const D4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const hyp = Math.hypot;
+let seed = (Math.random() * 1e9) | 0;
+const rand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+const grid = new Uint8Array(W * H);
+const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? HOUSE : grid[y * W + x];
+const solid = (x, y) => SOLID[at(x, y)] === 1;
+const code = { G: GR, L: LANE, R: ROAD, P: PAD, W: WATER, M: MANG };
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) grid[y * W + x] = code[V.rows[y][x]] ?? GR;
+
+/* ---------- the village: landmarks at their real places, generated houses and palms ---------- */
+const clampX = (v, m) => Math.max(m, Math.min(W - 1 - m, Math.round(v)));
+const clampY = (v, m) => Math.max(m, Math.min(H - 1 - m, Math.round(v)));
+const fill = (x0, y0, x1, y1, t) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (x >= 0 && y >= 0 && x < W && y < H) grid[y * W + x] = t; };
+const tp = { x: clampX(V.anchors.temple[0], 4), y: clampY(V.anchors.temple[1], 4) };
+fill(tp.x - 2, tp.y - 2, tp.x + 1, tp.y + 1, TEMPLE);
+fill(tp.x - 3, tp.y + 2, tp.x + 2, tp.y + 3, LANE);
+const cp = { x: clampX(V.anchors.chapel[0] + 2, 4), y: clampY(V.anchors.chapel[1], 4) };
+fill(cp.x - 1, cp.y - 2, cp.x + 1, cp.y, CHAPEL);
+fill(cp.x - 2, cp.y + 1, cp.x + 2, cp.y + 2, LANE);
+// the ferry: the bank tile nearest the real ferry point
+let fp = null, fd = 1e9;
+for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+  if (solid(x, y) || !D4.some(([dx, dy]) => at(x + dx, y + dy) === WATER)) continue;
+  const d = hyp(x - V.anchors.ferry[0], y - V.anchors.ferry[1]);
+  if (d < fd) { fd = d; fp = { x, y }; }
+}
+grid[fp.y * W + fp.x] = LANE;
+const wd = D4.find(([dx, dy]) => at(fp.x + dx, fp.y + dy) === WATER);
+fp.dir = wd;
+const PLACES = {
+  temple: { name: 'the Shantadurga Temple', x: tp.x - 0.5, y: tp.y + 2.5 },
+  chapel: { name: 'the chapel', x: cp.x + 0.5, y: cp.y + 1.5 },
+  ferry: { name: 'the Tonca ferry', x: fp.x + 0.5, y: fp.y + 0.5 }
+};
+const houses = [];
+const laneNear = (x, y, r) => { for (let yy = y - r; yy <= y + r; yy++) for (let xx = x - r; xx <= x + r; xx++) if (at(xx, yy) === LANE || at(xx, yy) === ROAD) return true; return false; };
+for (let t = 0; t < 5000 && houses.length < 45; t++) {
+  const w = 2 + Math.floor(rand() * 2), h = 2, x = 2 + Math.floor(rand() * (W - 6)), y = 2 + Math.floor(rand() * (H - 5));
+  let ok = true;
+  for (let yy = y - 1; yy <= y + h && ok; yy++) for (let xx = x - 1; xx <= x + w; xx++) if (![GR, PAD].includes(at(xx, yy))) { ok = false; break; }
+  if (!ok || !laneNear(x + 1, y + 1, 2)) continue;
+  fill(x, y, x + w - 1, y + h - 1, HOUSE);
+  houses.push({ x, y, w, h });
+}
+const palms = [];
+for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+  const t = at(x, y);
+  if (t === GR && !laneNear(x, y, 1) && rand() < 0.07) { grid[y * W + x] = TREE; palms.push({ x, y, mang: false }); }
+  else if (t === MANG && rand() < 0.25) palms.push({ x, y, mang: true });
+}
+for (let x = 0; x < W; x++) for (const y of [0, H - 1]) if (!solid(x, y)) grid[y * W + x] = TREE;
+for (let y = 0; y < H; y++) for (const x of [0, W - 1]) if (!solid(x, y)) grid[y * W + x] = TREE;
+const lanes = [];
+for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (at(x, y) === LANE) lanes.push([x, y]);
+
+/* ---------- three.js scene ---------- */
+const cv = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+const scene = new THREE.Scene();
+const NIGHT = new THREE.Color(0x060a18);
+scene.background = NIGHT.clone();
+scene.fog = new THREE.FogExp2(0x060a18, 0.034);
+const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 220);
+scene.add(new THREE.AmbientLight(0x4a5a8a, 1.0));
+const moon = new THREE.DirectionalLight(0x9aaaff, 0.6); moon.position.set(-40, 60, -20); scene.add(moon);
+const lamp = new THREE.PointLight(0xffb860, 2, 18, 1.6); scene.add(lamp);
+const beamLight = new THREE.SpotLight(0xffd090, 1.6, 24, 0.32, 0.5, 1.5); scene.add(beamLight); scene.add(beamLight.target);
+// a handful of shared warm lights moved each frame to the nearest lit diyas and lamps
+const pool = Array.from({ length: 6 }, () => { const l = new THREE.PointLight(0xffaa50, 0, 9, 2); scene.add(l); return l; });
+
+// the ground: one texture painted from the tile grid
+const gtex = (() => {
+  const c = document.createElement('canvas'), k = 8; c.width = W * k; c.height = H * k;
+  const g = c.getContext('2d');
+  const col = { [GR]: '#24452a', [LANE]: '#7a4a30', [ROAD]: '#2a2b30', [PAD]: '#2f5a28', [WATER]: '#0c2234', [MANG]: '#2b2a1e', [HOUSE]: '#3a3328', [TREE]: '#24452a', [TEMPLE]: '#6d665b', [CHAPEL]: '#82533b' };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const t = at(x, y); g.fillStyle = col[t]; g.fillRect(x * k, y * k, k, k);
+    for (let i = 0; i < 3; i++) { g.fillStyle = rand() < 0.5 ? 'rgba(0,0,0,.15)' : 'rgba(255,255,255,.05)'; g.fillRect(x * k + rand() * k, y * k + rand() * k, 2, 2); }
+  }
+  const tx = new THREE.CanvasTexture(c); tx.magFilter = THREE.LinearFilter; return tx;
+})();
+const groundMesh = new THREE.Mesh(new THREE.PlaneGeometry(W * S, H * S), new THREE.MeshLambertMaterial({ map: gtex }));
+groundMesh.rotation.x = -Math.PI / 2; groundMesh.position.set(W * S / 2, 0, H * S / 2); scene.add(groundMesh);
+const water = new THREE.Mesh(new THREE.PlaneGeometry(W * S, H * S), new THREE.MeshPhongMaterial({ color: 0x10283c, shininess: 90, transparent: true, opacity: 0.0 }));
+const wx = (x) => (x + 0.5) * S, wz = (y) => (y + 0.5) * S;
+
+// Indo-Portuguese houses: lime-washed walls in Goan colours, tiled hip roofs, a warm window or two
+const wallCols = [0xd9a441, 0x3f6fa8, 0x8c2f3c, 0x3f7f5a, 0xc9733a, 0x5a7fb0, 0xb84a5a, 0xe0c35a];
+const roofMat = new THREE.MeshLambertMaterial({ color: 0x9a3a22 });
+const winMat = new THREE.MeshBasicMaterial({ color: 0xffc070 });
+const darkWin = new THREE.MeshLambertMaterial({ color: 0x22201c });
+for (const h of houses) {
+  const bw = h.w * S - 0.4, bd = h.h * S - 0.4, bh = 3.2, cx = (h.x + h.w / 2) * S, cz = (h.y + h.h / 2) * S;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), new THREE.MeshLambertMaterial({ color: wallCols[Math.floor(rand() * wallCols.length)] }));
+  body.position.set(cx, bh / 2, cz); scene.add(body);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(1, 1.6, 4, 1), roofMat);
+  roof.rotation.y = Math.PI / 4; roof.scale.set(bw * 0.78, 1, bd * 0.78); roof.position.set(cx, bh + 0.8, cz); scene.add(roof);
+  for (const side of [-1, 1]) {
+    const win = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.1), rand() < 0.45 ? winMat : darkWin);
+    win.position.set(cx + side * bw * 0.25, 1.7, cz + bd / 2 + 0.02); scene.add(win);
+  }
+}
+// coconut palms and mangroves
+{
+  const P = palms.filter(p => !p.mang), M = palms.filter(p => p.mang);
+  const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.2, 6, 5), new THREE.MeshLambertMaterial({ color: 0x6a5238 }), P.length);
+  const crown = new THREE.InstancedMesh(new THREE.ConeGeometry(2.2, 1.1, 7), new THREE.MeshLambertMaterial({ color: 0x2f6a2a }), P.length);
+  const bush = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.2, 0), new THREE.MeshLambertMaterial({ color: 0x24402a }), M.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
+  P.forEach((t, i) => {
+    const lean = (rand() - 0.5) * 0.25, hgt = 0.85 + rand() * 0.4;
+    e.set(lean, rand() * 6, lean * 0.5); q.setFromEuler(e); s.set(1, hgt, 1); p.set(wx(t.x), 3 * hgt, wz(t.y)); m.compose(p, q, s); trunk.setMatrixAt(i, m);
+    e.set(Math.PI, rand() * 6, 0); q.setFromEuler(e); s.set(1, 1, 1); p.set(wx(t.x) + lean * 3, 6 * hgt, wz(t.y)); m.compose(p, q, s); crown.setMatrixAt(i, m);
+  });
+  M.forEach((t, i) => { e.set(0, rand() * 6, 0); q.setFromEuler(e); const k = 0.8 + rand() * 0.6; s.set(k * 1.3, k, k * 1.3); p.set(wx(t.x), k * 0.8, wz(t.y)); m.compose(p, q, s); bush.setMatrixAt(i, m); });
+  scene.add(trunk, crown, bush);
+}
+// the Shantadurga temple: a white hall, an octagonal drum and dome, and a deepastambha
+{
+  const white = new THREE.MeshLambertMaterial({ color: 0xece4d4 });
+  const cx = tp.x * S, cz = tp.y * S;
+  const hall = new THREE.Mesh(new THREE.BoxGeometry(4 * S - 0.6, 4, 4 * S - 0.6), white); hall.position.set(cx, 2, cz); scene.add(hall);
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 2.6, 8), white); drum.position.set(cx, 5.3, cz); scene.add(drum);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(3, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), white); dome.position.set(cx, 6.6, cz); scene.add(dome);
+  const kal = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.4, 8), new THREE.MeshLambertMaterial({ color: 0xd9a441 })); kal.position.set(cx, 10.2, cz); scene.add(kal);
+  const st = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.6, 7, 8), white); st.position.set(cx - 2 * S, 3.5, cz + 2.5 * S); scene.add(st);
+  for (let i = 0; i < 6; i++) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 4), winMat); f.position.set(cx - 2 * S + 0.6, 1.2 + i * 1.0, cz + 2.5 * S); scene.add(f); }
+}
+// the chapel: a white baroque facade with a cross
+{
+  const white = new THREE.MeshLambertMaterial({ color: 0xf1ece2 });
+  const cx = (cp.x + 0.5) * S, cz = (cp.y - 0.5) * S;
+  const nave = new THREE.Mesh(new THREE.BoxGeometry(3 * S - 0.6, 4.5, 3 * S - 0.6), white); nave.position.set(cx, 2.25, cz); scene.add(nave);
+  const front = new THREE.Mesh(new THREE.BoxGeometry(3 * S - 0.2, 7, 0.4), white); front.position.set(cx, 3.5, cz + 1.5 * S - 0.2); scene.add(front);
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.4), winMat); door.position.set(cx, 1.2, cz + 1.5 * S + 0.01); scene.add(door);
+  const cr1 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.6, 0.2), white), cr2 = new THREE.Mesh(new THREE.BoxGeometry(1, 0.2, 0.2), white);
+  cr1.position.set(cx, 7.8, cz + 1.5 * S - 0.2); cr2.position.set(cx, 8.1, cz + 1.5 * S - 0.2); scene.add(cr1, cr2);
+}
+// the ferry jetty out over the water
+{
+  const j = new THREE.Mesh(new THREE.BoxGeometry(fp.dir[0] ? 4 * S : 1.6, 0.3, fp.dir[0] ? 1.6 : 4 * S), new THREE.MeshLambertMaterial({ color: 0x5a3e26 }));
+  j.position.set(wx(fp.x) + fp.dir[0] * 2 * S, 0.2, wz(fp.y) + fp.dir[1] * 2 * S); scene.add(j);
+}
+
+/* ---------- sprites: demons, people, the Rakhondar, diya flames ---------- */
+function spriteTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); return new THREE.CanvasTexture(c); }
+const demonTex = spriteTex(128, 220, (g) => {
+  g.fillStyle = '#0d0610';
+  for (let i = 0; i < 9; i++) { g.beginPath(); g.ellipse(64 + Math.sin(i) * 6, 200 - i * 20, 34 - i * 2, 26, 0, 0, 7); g.fill(); }
+  g.beginPath(); g.moveTo(40, 50); g.lineTo(28, 6); g.lineTo(56, 40); g.fill(); g.beginPath(); g.moveTo(88, 50); g.lineTo(100, 6); g.lineTo(72, 40); g.fill();
+  g.fillStyle = '#ff3a2a'; g.shadowColor = '#ff3a2a'; g.shadowBlur = 12;
+  g.beginPath(); g.ellipse(50, 66, 7, 4, 0.2, 0, 7); g.fill(); g.beginPath(); g.ellipse(78, 66, 7, 4, -0.2, 0, 7); g.fill();
+});
+function personTex(body, hair) {
+  return spriteTex(96, 200, (g) => {
+    g.fillStyle = '#2a2018'; g.fillRect(30, 130, 14, 66); g.fillRect(52, 130, 14, 66);
+    g.fillStyle = body; g.beginPath(); g.ellipse(48, 104, 30, 42, 0, 0, 7); g.fill();
+    g.fillStyle = '#b07a50'; g.beginPath(); g.arc(48, 40, 22, 0, 7); g.fill();
+    g.fillStyle = hair; g.beginPath(); g.arc(48, 34, 22, Math.PI, Math.PI * 2); g.fill();
+  });
+}
+const glowTex = (c) => spriteTex(64, 64, (g) => { const r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, c); r.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); });
+const spiritTex = glowTex('rgba(200,255,240,1)'), redTex = glowTex('rgba(255,120,100,1)'), flameTex = glowTex('rgba(255,200,90,1)');
+const sprite = (tex, w, h, extra = {}) => { const s = new THREE.Sprite(new THREE.SpriteMaterial(Object.assign({ map: tex, transparent: true, depthWrite: false }, extra))); s.scale.set(w, h, 1); scene.add(s); return s; };
+
+const ROLES = [
+  { name: 'Anvi', who: 'a little girl from the effigy crew', body: '#e0a33a', hair: '#1a100a', dest: 'chapel', line: 'I went to fetch crackers and now every lane looks the same. Can you take me to the chapel? My mother is there.' },
+  { name: 'Shantabai', who: 'an old woman with a basket of flowers', body: '#8a2f5a', hair: '#cfcac0', dest: 'temple', line: 'These flowers are for the early puja, baba. Will you walk me to the Shantadurga temple?' },
+  { name: 'Bostião', who: 'a fisherman with a net', body: '#c9733a', hair: '#1a100a', dest: 'ferry', line: 'My canoe drifted off. If I reach the Tonca ferry, the ferryman will take me across.' },
+  { name: 'Tia Rosa', who: 'a woman holding a rosary', body: '#2f4f7a', hair: '#e0dcd2', dest: 'chapel', line: 'The lanes are full of strange shadows. Take me to the chapel?' }
+];
+
+/* ---------- pathing: distance fields over the tile grid ---------- */
+const dist = new Int16Array(W * H), distN = new Int16Array(W * H), queue = new Int32Array(W * H);
+function bfs(sx, sy, out) {
+  out.fill(-1); if (solid(sx, sy)) return;
+  let h = 0, t = 0; out[sy * W + sx] = 0; queue[t++] = sy * W + sx;
+  while (h < t) {
+    const c = queue[h++], cx = c % W, cy = (c / W) | 0;
+    for (const [dx, dy] of D4) { const nx = cx + dx, ny = cy + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue; const n = ny * W + nx; if (out[n] === -1 && !solid(nx, ny)) { out[n] = out[c] + 1; queue[t++] = n; } }
+  }
+}
+function downhill(field, e) {
+  const tx = Math.floor(e.x), ty = Math.floor(e.y), d = field[ty * W + tx];
+  if (d <= 1) return null;
+  let best = null, bd = d;
+  for (const [dx, dy] of D4) { const n = field[(ty + dy) * W + tx + dx]; if (n >= 0 && n < bd) { bd = n; best = [dx, dy]; } }
+  return best ? [tx + best[0] + 0.5 - e.x, ty + best[1] + 0.5 - e.y] : null;
+}
+const blocked = (x, y, r) => solid(Math.floor(x - r), Math.floor(y - r)) || solid(Math.floor(x + r), Math.floor(y - r)) || solid(Math.floor(x - r), Math.floor(y + r)) || solid(Math.floor(x + r), Math.floor(y + r));
+function move(e, dx, dy) { if (!blocked(e.x + dx, e.y, e.r)) e.x += dx; if (!blocked(e.x, e.y + dy, e.r)) e.y += dy; }
+
+/* ---------- game state ---------- */
+let G, yaw = 0, pitch = 0, last = performance.now();
+const keys = new Set();
+let firing = false;
+function pickStart() {
+  const sites = Object.values(PLACES);
+  const ok = lanes.filter(([x, y]) => !D4.some(([dx, dy]) => [WATER, MANG].includes(at(x + dx * 2, y + dy * 2))));
+  ok.sort((a, b) => Math.min(...sites.map(p => hyp(b[0] - p.x, b[1] - p.y))) - Math.min(...sites.map(p => hyp(a[0] - p.x, a[1] - p.y))));
+  return ok[Math.floor(rand() * Math.min(20, ok.length))];
+}
+function newGame() {
+  if (G) { for (const d of G.demons) scene.remove(d.spr); for (const l of G.diyas) scene.remove(l.spr); if (G.npc) scene.remove(G.npc.spr); }
+  const [sx, sy] = pickStart();
+  G = { p: { x: sx + 0.5, y: sy + 0.5, r: 0.25 }, hearts: 5, oil: 100, charges: 2, inv: 0, t: 0, clock: 0, demons: [], diyas: [], npc: null, ri: 0, roster: [], saved: 0, banished: 0, mode: 'intro', lastTile: -1, spawnT: 3, dawn: 0, log: [] };
+  bfs(sx, sy, dist);
+  for (let i = 0; i < 14; i++) {
+    const [x, y] = lanes[Math.floor(rand() * lanes.length)];
+    if (hyp(x - sx, y - sy) < 5 || G.diyas.some(d => hyp(d.x - x, d.y - y) < 7)) continue;
+    G.diyas.push({ x: x + 0.5, y: y + 0.5, lit: false, life: 0, spr: sprite(flameTex, 0.6, 0.9, { opacity: 0.15 }) });
+  }
+  const roles = ROLES.slice().sort(() => rand() - 0.5).slice(0, 3);
+  G.roster = roles.map((r, i) => ({ role: r, fake: false }));
+  G.roster[1 + Math.floor(rand() * 2)].fake = true;
+  for (let i = 0; i < 6; i++) spawnDemon();
+  yaw = Math.atan2(-(PLACES.temple.x - sx), -(PLACES.temple.y - sy));
+  hud();
+}
+function spawnDemon(near) {
+  for (let t = 0; t < 300; t++) {
+    let x, y;
+    if (near) { const a = rand() * 6.28, r = 3 + rand() * 3; x = Math.floor(near.x + Math.cos(a) * r); y = Math.floor(near.y + Math.sin(a) * r); }
+    else { x = 1 + Math.floor(rand() * (W - 2)); y = 1 + Math.floor(rand() * (H - 2)); }
+    const d = dist[y * W + x];
+    if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1 || solid(x, y) || d < 0 || (!near && d < 14)) continue;
+    if (Object.values(PLACES).slice(0, 2).some(p => hyp(p.x - x, p.y - y) < 6)) continue;
+    const dm = { x: x + 0.5, y: y + 0.5, r: 0.3, hp: near && near.big ? 2.5 : 1, max: near && near.big ? 2.5 : 1, stun: 0, lit: 0, wander: [1, 0], wt: 0, chasing: !!near, big: !!(near && near.big) };
+    dm.spr = sprite(demonTex, dm.big ? 2.4 : 1.6, dm.big ? 4.1 : 2.75, { fog: true });
+    G.demons.push(dm); return dm;
+  }
+}
+function startRescue() {
+  const { role, fake } = G.roster[G.ri];
+  let spot = null;
+  for (let t = 0; t < 3000 && !spot; t++) { const [x, y] = lanes[Math.floor(rand() * lanes.length)], d = dist[y * W + x]; if (d >= 12 && d <= 30) spot = [x, y]; }
+  spot = spot || lanes[0];
+  const dest = PLACES[role.dest];
+  G.npc = { x: spot[0] + 0.5, y: spot[1] + 0.5, r: 0.25, role, fake, dest, state: 'find', panic: 0, fakeT: 0, spr: sprite(personTex(role.body, role.hair), 0.95, 1.95, { fog: true }) };
+  whisper(G.ri === 0 ? 'Someone is stranded out there in the dark. Find them, and I will watch over you both.' : 'I can feel someone else lost in the lanes. Find them.');
+}
+const holy = () => [PLACES.temple, PLACES.chapel];
+const safeAt = (x, y) => holy().some(p => hyp(p.x - x, p.y - y) < 3) || G.diyas.some(d => d.lit && hyp(d.x - x, d.y - y) < 2.2);
+
+let wTimer = 0;
+function whisper(t) { const el = document.getElementById('whisper'); el.textContent = t; el.classList.add('show'); clearTimeout(wTimer); wTimer = setTimeout(() => el.classList.remove('show'), 4200); }
+function hud() {
+  const pips = (n, m, c) => Array.from({ length: m }, (_, i) => `<span class="pip ${c}${i < n ? ' on' : ''}"></span>`).join('');
+  document.getElementById('hearts').innerHTML = pips(G.hearts, 5, '');
+  document.getElementById('charges').innerHTML = pips(G.charges, 3, 'sp');
+}
+function hurt() {
+  if (G.inv > 0) return;
+  G.hearts--; G.inv = 1.4; hud();
+  const f = document.getElementById('flash'); f.style.transition = 'none'; f.style.opacity = 1; requestAnimationFrame(() => { f.style.transition = 'opacity .6s'; f.style.opacity = 0; });
+  if (G.hearts <= 0) end(false); else whisper(G.hearts === 1 ? 'Get up. One more and they have you.' : 'Get up! Keep the lamp burning.');
+}
+function talk(open) {
+  document.getElementById('talk').hidden = !open;
+  if (!open) return;
+  const n = G.npc; G.mode = 'talk'; document.exitPointerLock && document.exitPointerLock();
+  document.getElementById('talkWho').textContent = `${n.role.name}, ${n.role.who}`;
+  document.getElementById('talkLine').textContent = `“${n.role.line}${n.fake ? ' Only, don’t take me past the holy places. I don’t like the bells.' : ''}”`;
+}
+function trust() { if (G.mode !== 'talk') return; talk(false); G.mode = 'play'; G.npc.state = 'escort'; whisper(`Stay close to ${G.npc.role.name}. Keep your lamp burning.`); }
+function banish() {
+  if (G.mode !== 'talk') return;
+  talk(false); G.mode = 'play';
+  const n = G.npc;
+  if (n.fake) reveal(true);
+  else { G.log.push('wronged'); whisper(`${n.role.name} stares at you. “How could you?” They walk off into the dark.`); scene.remove(n.spr); G.npc = null; next(3); }
+}
+function reveal(unmasked) {
+  const n = G.npc; scene.remove(n.spr); G.npc = null;
+  spawnDemon({ x: n.x, y: n.y, big: true });
+  const d = G.demons[G.demons.length - 1]; if (d) { d.x = n.x; d.y = n.y; }
+  if (unmasked) { G.log.push('unmasked'); G.oil = 100; G.charges = Math.min(3, G.charges + 1); whisper(`That was never ${n.role.name}. Burn it with your lamp!`); }
+  else { G.log.push('fooled'); spawnDemon(n); spawnDemon(n); whisper(`${n.role.name} was a demon all along! It led you into a trap.`); }
+  hud(); next(4);
+}
+function next(delay) { G.nextT = delay; }
+function end(win) {
+  G.mode = 'end'; document.exitPointerLock && document.exitPointerLock();
+  const saved = G.log.filter(l => l === 'saved').length, unm = G.log.filter(l => l === 'unmasked').length;
+  card(`<span class="eyebrow">${win ? 'Night survived' : 'Night lost'} · prototype</span>
+    <h1>${win ? 'Dawn over Tonca' : 'The dark took your courage'}</h1>
+    <p>${win ? 'The sky turns pink over the Mandovi. The effigies burn, and somewhere under the palms a small light settles back into its stone.' : 'Your lamp gutters out and the shadows close in. The Rakhondar carries you home before dawn.'}</p>
+    <p>People brought home: <b>${saved}</b> · Disguises unmasked: <b>${unm}</b> · Shadows banished: <b>${G.banished}</b></p>
+    <div class="row"><button class="start" id="go" type="button">Play again</button></div>`, () => { newGame(); begin(); });
+}
+
+/* ---------- the frame ---------- */
+const fwd = new THREE.Vector3();
+function update(dt) {
+  G.t += dt; G.inv -= dt;
+  if (G.mode !== 'play') return;
+  const p = G.p;
+  // walking: WASD relative to where you look; map x is world x, map y is world z
+  let mx = (keys.has('d') ? 1 : 0) - (keys.has('a') ? 1 : 0) + touch.mx, mz = (keys.has('s') ? 1 : 0) - (keys.has('w') ? 1 : 0) + touch.mz;
+  const m = hyp(mx, mz);
+  if (m > 0) {
+    mx /= Math.max(1, m); mz /= Math.max(1, m);
+    const c = Math.cos(yaw), s = Math.sin(yaw), slow = at(Math.floor(p.x), Math.floor(p.y)) === PAD ? 0.6 : 1;
+    const vx = mx * c + mz * s, vy = -mx * s + mz * c, sp = 2.1 * slow * dt;
+    move(p, vx * sp, vy * sp);
+  }
+  G.walk = m > 0 ? (G.walk || 0) + dt : 0;
+  const tile = Math.floor(p.y) * W + Math.floor(p.x);
+  if (tile !== G.lastTile) { bfs(Math.floor(p.x), Math.floor(p.y), dist); G.lastTile = tile; }
+
+  // diyas: walk over one to light it; standing by a lit one or holy ground refills the lamp
+  let refuel = holy().some(h => hyp(h.x - p.x, h.y - p.y) < 3);
+  for (const d of G.diyas) {
+    if (!d.lit && d.life === 0 && hyp(d.x - p.x, d.y - p.y) < 0.8) { d.lit = true; d.life = 35; G.charges = Math.min(3, G.charges + 1); hud(); whisper('The diya holds them back. Fill your lamp while it burns.'); }
+    if (d.lit) { d.life -= dt; if (hyp(d.x - p.x, d.y - p.y) < 1.5) refuel = true; if (d.life <= 0) { d.lit = false; d.life = -1; } }
+  }
+  if (refuel) G.oil = Math.min(100, G.oil + dt * 35);
+
+  // the lamp: hold to throw its beam; it burns the demon you aim at
+  camera.getWorldDirection(fwd);
+  G.beam = null;
+  if (firing && G.oil > 0) {
+    G.oil = Math.max(0, G.oil - dt * 9);
+    let best = null, bd = 1e9;
+    for (const d of G.demons) {
+      const dx = (d.x - p.x) * S, dz = (d.y - p.y) * S, dy = (d.big ? 2 : 1.3) - EYE, L = Math.hypot(dx, dy, dz);
+      const cos = (dx * fwd.x + dy * fwd.y + dz * fwd.z) / L;
+      if (L < 6 * S && cos > 0.96 && L < bd) { bd = L; best = d; }
+    }
+    if (best) { best.hp -= dt * 1.1; best.lit = 0.15; G.beam = best; if (best.hp <= 0) { scene.remove(best.spr); G.demons.splice(G.demons.indexOf(best), 1); G.banished++; } }
+  }
+
+  // the person you found, and the one you walk home
+  const n = G.npc;
+  if (n) {
+    const pd = hyp(n.x - p.x, n.y - p.y);
+    if (n.state === 'find' && pd < 1.4) talk(true);
+    if (n.state === 'escort') {
+      const tx = Math.floor(n.x), ty = Math.floor(n.y);
+      if (n.tile !== ty * W + tx) { n.tile = ty * W + tx; bfs(tx, ty, distN); }
+      if (pd > 1.2) { const v = downhill(dist, n) || [p.x - n.x, p.y - n.y], vm = hyp(v[0], v[1]) || 1; move(n, v[0] / vm * 2.0 * dt, v[1] / vm * 2.0 * dt); }
+      if (n.fake) { n.fakeT += dt; if (n.fakeT > 18 || holy().some(h => hyp(h.x - n.x, h.y - n.y) < 4.5)) { reveal(false); return; } }
+      else if (hyp(n.dest.x - n.x, n.dest.y - n.y) < 2) {
+        G.log.push('saved'); scene.remove(n.spr); G.npc = null; whisper(`${n.role.name} is safe at ${n.dest.name}.`); next(2.5);
+      }
+    }
+  }
+  if (G.nextT > 0) { G.nextT -= dt; if (G.nextT <= 0) { G.ri++; G.clock += 120; if (G.ri >= G.roster.length) { G.ending = true; whisper('The night is ending. Hold on until dawn.'); } else startRescue(); } }
+
+  // demons: wander, then hunt the child or the person they're escorting, whoever is closer
+  const safe = safeAt(p.x, p.y), esc = G.npc && G.npc.state === 'escort' ? G.npc : null;
+  for (const d of G.demons.slice()) {
+    d.stun -= dt; d.lit -= dt;
+    const tx = Math.floor(d.x), ty = Math.floor(d.y), dd = dist[ty * W + tx], nd = esc ? distN[ty * W + tx] : -1;
+    const goN = esc && nd >= 0 && (dd < 0 || nd < dd) && !safeAt(esc.x, esc.y);
+    const tgt = goN ? esc : p, fd = goN ? nd : dd, field = goN ? distN : dist;
+    if (d.stun > 0 || fd < 0 || (!goN && safe)) d.chasing = false;
+    else d.chasing = d.chasing ? fd < 18 : (hyp(d.x - tgt.x, d.y - tgt.y) < 7 && fd < 11);
+    let v, sp;
+    if (d.stun > 0) { v = [d.x - p.x, d.y - p.y]; sp = 2.2; }
+    else if (d.chasing) { v = downhill(field, d) || [tgt.x - d.x, tgt.y - d.y]; sp = (d.big ? 1.6 : 1.85) + Math.min(0.4, G.t / 400); }
+    else { d.wt -= dt; if (d.wt <= 0 || solid(tx + d.wander[0], ty + d.wander[1])) { const open = D4.filter(([a, b]) => !solid(tx + a, ty + b)); d.wander = open[Math.floor(rand() * open.length)] || d.wander; d.wt = 1 + rand() * 2; } v = [tx + d.wander[0] + 0.5 - d.x, ty + d.wander[1] + 0.5 - d.y]; sp = 0.8; }
+    if (d.lit > 0) sp *= 0.45;
+    const vm = hyp(v[0], v[1]);
+    if (vm > 0.01) {
+      const ax = v[0] / vm * sp * dt, ay = v[1] / vm * sp * dt;
+      if (safeAt(d.x + ax * 4, d.y + ay * 4)) { d.chasing = false; d.wt = 0; d.wander = [-d.wander[0], -d.wander[1]]; } else move(d, ax, ay);
+    }
+    if (goN && d.stun <= 0 && hyp(d.x - esc.x, d.y - esc.y) < 0.6) {
+      G.log.push('captured'); scene.remove(esc.spr); G.npc = null; whisper(`The shadows took ${esc.role.name}. I could not reach them in time.`); next(3.5); break;
+    }
+    if (!safe && d.stun <= 0 && hyp(d.x - p.x, d.y - p.y) < 0.55) { d.stun = 1.4; hurt(); if (G.mode !== 'play') return; }
+  }
+  G.spawnT -= dt;
+  if (G.spawnT <= 0) { G.spawnT = 3; if (!G.ending && G.demons.length < 6 + G.ri * 2) spawnDemon(); }
+  if (G.ending) { G.dawn = Math.min(1, G.dawn + dt / 8); for (const d of G.demons.slice()) if (rand() < dt * 0.6) { scene.remove(d.spr); G.demons.splice(G.demons.indexOf(d), 1); } if (G.dawn >= 1) end(true); }
+}
+function callSpirit() {
+  if (!G || G.mode !== 'play' || G.charges <= 0) return;
+  G.charges--; hud();
+  for (const d of G.demons) if (hyp(d.x - G.p.x, d.y - G.p.y) < 6) { d.stun = 2.6; d.chasing = false; }
+  G.lead = 3;
+  whisper('Go! Follow my light.');
+}
+function objective() {
+  const n = G.npc;
+  if (!n) return null;
+  return n.state === 'find' ? { x: n.x, y: n.y, what: `Find ${n.role.name}` } : { x: n.dest.x, y: n.dest.y, what: `Walk ${n.role.name} to ${n.dest.name}` };
+}
+
+const spirit = sprite(spiritTex, 0.5, 0.5, { blending: THREE.AdditiveBlending });
+const beamMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.35, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd080, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+scene.add(beamMesh);
+const tmp = new THREE.Vector3();
+function render() {
+  const p = G.p, bob = Math.sin((G.walk || 0) * 9) * 0.05;
+  camera.position.set(p.x * S, EYE + bob, p.y * S);
+  camera.rotation.set(pitch, yaw, 0, 'YXZ');
+  camera.getWorldDirection(fwd);
+  lamp.position.set(p.x * S + fwd.x * 0.6, EYE - 0.3, p.y * S + fwd.z * 0.6);
+  lamp.intensity = G.oil > 0 ? 1.8 + 0.2 * Math.sin(G.t * 9) : 0.5;
+  beamLight.position.copy(camera.position); beamLight.target.position.copy(camera.position).addScaledVector(fwd, 10);
+  beamLight.intensity = G.oil > 0 ? (firing ? 3 : 1.2) : 0;
+  // the dawn: the sky and fog warm up and the night lifts
+  const sky = NIGHT.clone().lerp(new THREE.Color(0xd88a6a), G.dawn);
+  scene.background.copy(sky); scene.fog.color.copy(sky); scene.fog.density = 0.034 - 0.02 * G.dawn;
+  // warm lights go to the nearest lit diyas
+  const lit = G.diyas.filter(d => d.lit).sort((a, b) => hyp(a.x - p.x, a.y - p.y) - hyp(b.x - p.x, b.y - p.y));
+  pool.forEach((l, i) => { const d = lit[i]; if (d) { l.position.set(d.x * S, 0.8, d.y * S); l.intensity = 0.9 * Math.min(1, d.life / 6); } else l.intensity = 0; });
+  for (const d of G.diyas) { d.spr.position.set(d.x * S, 0.35, d.y * S); d.spr.material.opacity = d.lit ? 0.9 : 0.18; }
+  for (const d of G.demons) {
+    d.spr.position.set(d.x * S, (d.big ? 2.05 : 1.37) + Math.sin(G.t * 3 + d.x) * 0.08, d.y * S);
+    d.spr.material.color.setRGB(d.lit > 0 ? 1.6 : 1, d.lit > 0 ? 0.8 : 1, d.lit > 0 ? 0.6 : 1);
+  }
+  const n = G.npc;
+  if (n) {
+    n.spr.position.set(n.x * S, 0.98, n.y * S);
+    const k = Math.max(0.15, Math.min(1, 1.5 - hyp(n.x - p.x, n.y - p.y) / 6));
+    n.spr.material.color.setScalar(k);
+  }
+  // the Rakhondar: a green light at your shoulder, red when a disguised demon is near; called, it runs ahead toward your goal
+  const goal = objective();
+  G.lead = Math.max(0, (G.lead || 0) - 1 / 60);
+  // it hovers ahead and to the left of you, out of the line of sight
+  let sx = p.x * S + fwd.x * 2.5 + fwd.z * 1.4, sz = p.y * S + fwd.z * 2.5 - fwd.x * 1.4;
+  if (G.lead > 0 && goal) { const gx = goal.x - p.x, gy = goal.y - p.y, gm = hyp(gx, gy) || 1, k = Math.min(gm, (3 - G.lead) * 4); sx = (p.x + gx / gm * k) * S; sz = (p.y + gy / gm * k) * S; }
+  spirit.position.set(sx, 1.9 + Math.sin(G.t * 2.2) * 0.12, sz);
+  const warn = n && n.fake && hyp(n.x - p.x, n.y - p.y) < 4 && Math.sin(G.t * 10) > 0;
+  spirit.material.map = warn ? redTex : spiritTex;
+  // the beam
+  beamMesh.visible = firing && G.oil > 0;
+  if (beamMesh.visible) {
+    const len = G.beam ? hyp((G.beam.x - p.x) * S, (G.beam.y - p.y) * S) : 14;
+    tmp.copy(camera.position).addScaledVector(fwd, len / 2 + 0.3); tmp.y -= 0.25;
+    beamMesh.position.copy(tmp); beamMesh.scale.set(1, len, 1);
+    beamMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), fwd.clone().negate());
+  }
+  // HUD: clock, objective and a compass arrow toward it
+  const mins = Math.min(7 * 60, Math.floor((G.clock + G.t * 0.6) / 5) * 5), hh = (21 + Math.floor(mins / 60)) % 24;
+  const clock = `${((hh + 11) % 12) + 1}:${String(mins % 60).padStart(2, '0')} ${hh >= 12 ? 'PM' : 'AM'}`;
+  document.getElementById('objective').textContent = `${clock} · ${goal ? goal.what : G.ending ? 'Dawn is coming' : 'Rescue ' + Math.min(G.ri + 1, G.roster.length) + ' of ' + G.roster.length}`;
+  const cmp = document.getElementById('compass');
+  if (goal) { const bearing = Math.atan2(-(goal.x - p.x), -(goal.y - p.y)); cmp.style.transform = `rotate(${(-(bearing - yaw)) * 180 / Math.PI}deg)`; cmp.hidden = false; } else cmp.hidden = true;
+  document.getElementById('oil').style.width = G.oil + '%';
+  renderer.render(scene, camera);
+}
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize);
+function frame(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; update(dt); render(); requestAnimationFrame(frame); }
+
+/* ---------- input: mouse look with pointer lock, WASD; on a phone, left half moves and right half looks ---------- */
+const touch = { mx: 0, mz: 0, move: null, look: null };
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase(); keys.add(k);
+  if (k === 'e') trust(); if (k === 'q') banish(); if (k === ' ') { e.preventDefault(); callSpirit(); } if (k === 'f') firing = true;
+});
+addEventListener('keyup', e => { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'f') firing = false; });
+addEventListener('blur', () => { keys.clear(); firing = false; });
+cv.addEventListener('mousedown', e => { if (e.pointerType === 'touch') return; if (document.pointerLockElement !== cv && G.mode === 'play') { lock(); return; } firing = true; });
+addEventListener('mouseup', () => { firing = false; });
+addEventListener('mousemove', e => { if (document.pointerLockElement === cv) { yaw -= e.movementX * 0.0024; pitch = Math.max(-1.2, Math.min(1.2, pitch - e.movementY * 0.0024)); } });
+cv.addEventListener('touchstart', e => {
+  for (const t of e.changedTouches) { if (t.clientX < innerWidth / 2 && !touch.move) touch.move = { id: t.identifier, x: t.clientX, y: t.clientY }; else if (!touch.look) touch.look = { id: t.identifier, x: t.clientX, y: t.clientY }; }
+  e.preventDefault();
+}, { passive: false });
+cv.addEventListener('touchmove', e => {
+  for (const t of e.changedTouches) {
+    if (touch.move && t.identifier === touch.move.id) { touch.mx = Math.max(-1, Math.min(1, (t.clientX - touch.move.x) / 50)); touch.mz = Math.max(-1, Math.min(1, (t.clientY - touch.move.y) / 50)); }
+    if (touch.look && t.identifier === touch.look.id) { yaw -= (t.clientX - touch.look.x) * 0.006; pitch = Math.max(-1.2, Math.min(1.2, pitch - (t.clientY - touch.look.y) * 0.006)); touch.look.x = t.clientX; touch.look.y = t.clientY; }
+  }
+  e.preventDefault();
+}, { passive: false });
+cv.addEventListener('touchend', e => { for (const t of e.changedTouches) { if (touch.move && t.identifier === touch.move.id) { touch.move = null; touch.mx = touch.mz = 0; } if (touch.look && t.identifier === touch.look.id) touch.look = null; } });
+const fireBtn = document.getElementById('fireBtn');
+fireBtn.addEventListener('touchstart', e => { firing = true; e.preventDefault(); }, { passive: false });
+fireBtn.addEventListener('touchend', () => { firing = false; });
+document.getElementById('callBtn').addEventListener('click', callSpirit);
+document.getElementById('trustBtn').addEventListener('click', trust);
+document.getElementById('banishBtn').addEventListener('click', banish);
+
+// pointer lock can be refused (an embedded frame, too soon after Esc); the game still works by clicking again
+function lock() { try { const r = cv.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
+
+/* ---------- screens ---------- */
+function card(html, go) {
+  document.getElementById('card').innerHTML = html; document.getElementById('screen').hidden = false;
+  document.getElementById('go').onclick = go;
+}
+function begin() {
+  document.getElementById('screen').hidden = true; G.mode = 'play';
+  if (matchMedia('(pointer: fine)').matches) lock();
+  startRescue();
+}
+resize(); newGame(); render();
+card(`<span class="eyebrow">Prototype · Tonca, Goa · Narkasur night</span>
+  <h1>Rakhondar, first person</h1>
+  <p>The same night in Tonca, seen through the child’s eyes. The lanes, the river and the landmarks follow the real village from OpenStreetMap. The demons are close, the lamp is small, and some of the people asking for help are not people.</p>
+  <div class="controls">
+    <b>Move and look</b><span>WASD and the mouse (click to capture it, Esc to release). On a phone: drag on the left to walk, on the right to look.</span>
+    <b>Lamp</b><span>Hold the mouse button, F, or the Lamp button. It burns the demon you aim at and uses oil. Light diyas by walking over them; stand near one to refill.</span>
+    <b>Trust or banish</b><span>E or Q when you meet someone. Watch the green light: it flickers red beside a disguise.</span>
+    <b>Call Rakhondar</b><span>Space or Call. It drives nearby demons back and runs ahead toward your goal.</span>
+  </div>
+  <div class="row"><button class="start" id="go" type="button">Begin the night</button></div>`, begin);
+requestAnimationFrame(frame);
+</script>
