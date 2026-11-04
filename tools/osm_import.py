@@ -2,7 +2,7 @@
 
     python tools/osm_import.py fetch NAME LAT LON [--radius 0.007]
     python tools/osm_import.py survey NAME
-    python tools/osm_import.py build NAME LAT LON [--tile 9] [--inline rakhondar.html]
+    python tools/osm_import.py build NAME LAT LON [--tile 9] [--inline rakhondar.html] [--anchor kind=lat,lon[,name]]
 
 `fetch` downloads everything around the point once and caches it in data/NAME.osm.json.
 `survey` lists the places of worship, ferry points and bus stops in the cache, to pick a centre.
@@ -40,7 +40,7 @@ def fetch(name, lat, lon, radius):
          f'nwr["waterway"]{b};nwr["amenity"]{b};nwr["highway"="bus_stop"]{b};nwr["place"]{b};);out geom;')
     d = overpass(q)
     DATA.mkdir(exist_ok=True)
-    (DATA / f'{name}.osm.json').write_text(json.dumps(d), encoding='utf-8')
+    (DATA / f'{name}.osm.json').write_text(json.dumps(d), encoding='utf-8', newline=chr(10))
     print(f'{len(d["elements"])} elements cached in data/{name}.osm.json')
 
 
@@ -79,7 +79,7 @@ def survey(name):
             print(f'{k:8s} {la:.5f} {lo:.5f}  {t.get("name", "")} {t.get("name:en", "")}')
 
 
-def build(name, lat, lon, tile, inline):
+def build(name, lat, lon, tile, inline, pins=()):
     kx = 111320 * math.cos(math.radians(lat)) / tile
     ky = 110540 / tile
 
@@ -88,21 +88,23 @@ def build(name, lat, lon, tile, inline):
 
     grid = [['G'] * W for _ in range(H)]
 
-    def paint_poly(pts, ch, only=None):
-        if len(pts) < 3:
+    def paint_poly(rings_, ch):
+        """Even-odd scanline fill over every ring at once, so inner rings (islands in a river) stay holes."""
+        rings_ = [r for r in rings_ if len(r) >= 3]
+        if not rings_:
             return
-        ys = [p[1] for p in pts]
+        ys = [p[1] for r in rings_ for p in r]
         for ty in range(max(0, int(min(ys))), min(H, int(max(ys)) + 1)):
             cy = ty + 0.5
             xs = []
-            for (x1, y1), (x2, y2) in zip(pts, pts[1:] + pts[:1]):
-                if (y1 <= cy < y2) or (y2 <= cy < y1):
-                    xs.append(x1 + (cy - y1) * (x2 - x1) / (y2 - y1))
+            for pts in rings_:
+                for (x1, y1), (x2, y2) in zip(pts, pts[1:] + pts[:1]):
+                    if (y1 <= cy < y2) or (y2 <= cy < y1):
+                        xs.append(x1 + (cy - y1) * (x2 - x1) / (y2 - y1))
             xs.sort()
             for a, b in zip(xs[::2], xs[1::2]):
                 for tx in range(max(0, math.ceil(a - 0.5)), min(W, math.floor(b - 0.5) + 1)):
-                    if only is None or grid[ty][tx] in only:
-                        grid[ty][tx] = ch
+                    grid[ty][tx] = ch
 
     def paint_line(pts, width, ch, keep=()):
         r = width / 2
@@ -120,11 +122,11 @@ def build(name, lat, lon, tile, inline):
     geo = lambda e: [xy(p['lat'], p['lon']) for p in e.get('geometry') or [] if p]
 
     def rings(e):
-        """Closed outlines of an area: a closed way, or a multipolygon's outer members stitched end to end."""
+        """Closed outlines of an area: a closed way, or a multipolygon's members (outer and inner) stitched end to end."""
         if e['type'] == 'way':
             return [geo(e)]
         parts = [[xy(p['lat'], p['lon']) for p in m.get('geometry') or [] if p]
-                 for m in e.get('members', []) if m.get('type') == 'way' and m.get('role', 'outer') in ('outer', '')]
+                 for m in e.get('members', []) if m.get('type') == 'way' and m.get('role', 'outer') in ('outer', 'inner', '')]
         parts = [p for p in parts if len(p) > 1]
         out = []
         while parts:
@@ -143,8 +145,7 @@ def build(name, lat, lon, tile, inline):
         return out
 
     def area(e, ch):
-        for r in rings(e):
-            paint_poly(r, ch)
+        paint_poly(rings(e), ch)
 
     # paint in layers: fields (khazan farmland counts, even when also tagged wetland), mangroves, water, then roads on top
     tagged = lambda e: e.get('tags', {})
@@ -200,11 +201,19 @@ def build(name, lat, lon, tile, inline):
                 if k not in anchors or d < anchors[k][2]:
                     anchors[k] = (round(x, 1), round(y, 1), d)
                     names[k] = t.get('name:en') or t.get('name') or ''
+    # --anchor kind=lat,lon[,name] pins a landmark the tags don't mark (an untagged ferry point, a particular temple)
+    for pin in pins:
+        k, rest = pin.split('=', 1)
+        parts = rest.split(',', 2)
+        x, y = xy(float(parts[0]), float(parts[1]))
+        anchors[k] = (round(x, 1), round(y, 1), 0)
+        if len(parts) > 2:
+            names[k] = parts[2]
     out = {'name': name.title(), 'centre': [lat, lon], 'tile': tile, 'W': W, 'H': H,
            'credit': 'Map data © OpenStreetMap contributors (ODbL)',
            'rows': [''.join(r) for r in grid], 'houses': houses,
            'anchors': {k: [v[0], v[1]] for k, v in anchors.items()}, 'names': names}
-    (DATA / f'{name}.map.json').write_text(json.dumps(out), encoding='utf-8')
+    (DATA / f'{name}.map.json').write_text(json.dumps(out), encoding='utf-8', newline=chr(10))
     for r in out['rows']:
         print(r)
     print('anchors', out['anchors'], names)
@@ -212,12 +221,13 @@ def build(name, lat, lon, tile, inline):
     if inline:
         f = pathlib.Path(inline)
         src = f.read_text(encoding='utf-8')
-        block = 'const VILLAGE = ' + json.dumps(out, ensure_ascii=False, separators=(',', ':')) + ';'
-        src, n = re.subn(r'/\* VILLAGE-DATA \*/.*?/\* END VILLAGE-DATA \*/',
-                         lambda m: '/* VILLAGE-DATA */' + block + '/* END VILLAGE-DATA */', src, flags=re.S)
-        if n != 1:
-            sys.exit('VILLAGE-DATA markers not found in ' + inline)
-        f.write_text(src, encoding='utf-8')
+        block = f'/* VILLAGE-DATA {name} */VILLAGES.{name} = ' + json.dumps(out, ensure_ascii=False, separators=(',', ':')) + f';/* END VILLAGE-DATA {name} */'
+        src, n = re.subn(rf'/\* VILLAGE-DATA {name} \*/.*?/\* END VILLAGE-DATA {name} \*/', lambda m: block, src, flags=re.S)
+        if n == 0:
+            if '/* VILLAGES-END */' not in src:
+                sys.exit('VILLAGES-END marker not found in ' + inline)
+            src = src.replace('/* VILLAGES-END */', block + '\n/* VILLAGES-END */')
+        f.write_text(src, encoding='utf-8', newline=chr(10))
         print('inlined into', inline)
 
 
@@ -230,10 +240,11 @@ if __name__ == '__main__':
     ap.add_argument('--radius', type=float, default=0.007)
     ap.add_argument('--tile', type=float, default=9)
     ap.add_argument('--inline')
+    ap.add_argument('--anchor', action='append', default=[], help='kind=lat,lon[,name], e.g. ferry=15.5277,73.9046,Piedade Ferry')
     a = ap.parse_args()
     if a.cmd == 'fetch':
         fetch(a.name, a.lat, a.lon, a.radius)
     elif a.cmd == 'survey':
         survey(a.name)
     else:
-        build(a.name, a.lat, a.lon, a.tile, a.inline)
+        build(a.name, a.lat, a.lon, a.tile, a.inline, a.anchor)
