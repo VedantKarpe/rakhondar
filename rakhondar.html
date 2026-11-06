@@ -1896,7 +1896,7 @@ addEventListener('keydown', e => {
   if (k === ' ' && !e.repeat) callSpirit();
   if (k === 'e' && S && S.mode === 'talk') { e.preventDefault(); trust(); return; }
   if (k === 'q' && S && S.mode === 'talk') { e.preventDefault(); accuse(); return; }
-  if ((k === 'z' || k === 'x') && !e.repeat && S && S.mode !== 'talk') turnView(k === 'z' ? -1 : 1);
+  if ((k === 'z' || k === 'x') && S && S.mode !== 'talk') turnView(k === 'z' ? -1 : 1);
   if (k === '=' || k === '+') zoomBy(1.1);
   if (k === '-' || k === '_') zoomBy(1 / 1.1);
   if (k === 'm' && !e.repeat) SFX.toggle(); else SFX.init();
@@ -2600,11 +2600,39 @@ function drawBell(g) {
   g.restore();
 }
 
+// a smooth quarter turn: the old view swings away and the new one swings in, pivoting on the child.
+// The ground plane turns exactly (an affine map); buildings lean a little mid-turn and settle when it ends.
+const turnSnap = document.createElement('canvas'), turnNew = document.createElement('canvas');
+let turnAnim = null, turnPivot = [0, 0];
 function turnView(d) {
-  if (!S) return;
+  if (!S || turnAnim) return;
+  turnSnap.width = cv.width; turnSnap.height = cv.height; turnSnap.getContext('2d').drawImage(cv, 0, 0);
   ROT = (ROT + d + 4) % 4; OX = (ROT % 2 ? W : H) * HW;
   drawGround(); buildStatics();
   try { localStorage.setItem('rk-rot', ROT); } catch (e) {}
+  turnAnim = { d, t: 0, pivot: turnPivot.slice() };
+}
+// screen transform that turns the ground plane by theta around the view's vertical axis
+function groundTurn(th) {
+  const c = Math.cos(th), sn = Math.sin(th), det = 2 * HW * HH;
+  const a = HW * c - HW * sn, b = -HW * sn - HW * c, cc = HH * c + HH * sn, dd = HH * c - HH * sn;
+  return [(a * HH - b * HH) / det, (cc * HH - dd * HH) / det, (a * HW + b * HW) / det, (cc * HW + dd * HW) / det];
+}
+function drawTurned(src, th, alpha, pv) {
+  const [m11, m21, m12, m22] = groundTurn(th);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = alpha;
+  ctx.translate(pv[0], pv[1]); ctx.transform(m11, m21, m12, m22, 0, 0); ctx.translate(-pv[0], -pv[1]);
+  ctx.drawImage(src, 0, 0); ctx.restore();
+}
+function compositeTurn(dt) {
+  const a = turnAnim;
+  a.t = Math.min(1, a.t + dt / 0.55);
+  const e = a.t * a.t * (3 - 2 * a.t), q = Math.PI / 2 * a.d;
+  turnNew.width = cv.width; turnNew.height = cv.height; turnNew.getContext('2d').drawImage(cv, 0, 0);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#070a16'; ctx.fillRect(0, 0, cv.width, cv.height);
+  drawTurned(turnSnap, -q * e, 1 - e, a.pivot);
+  drawTurned(turnNew, q * (1 - e), e, a.pivot);
+  if (a.t >= 1) turnAnim = null;
 }
 try { const r = +localStorage.getItem('rk-rot'); if (r >= 0 && r < 4) { ROT = r; OX = (ROT % 2 ? W : H) * HW; } } catch (e) {}
 let turnDrag = null;
@@ -2629,6 +2657,7 @@ function render() {
   look.x += (look.tx - look.x) * 0.08; look.y += (look.ty - look.y) * 0.08;
   const camX = px - vw / sc / 2 + look.x / sc + (Math.random() - 0.5) * shake, camY = py - 18 - vh / sc / 2 + look.y / sc + (Math.random() - 0.5) * shake;
   const k = dpr * sc;
+  turnPivot = [(px - camX) * k, (py - camY) * k];
   const toWorld = c => c.setTransform(k, 0, 0, k, -camX * k, -camY * k);
   const t = S.t;
   const L = camX - 160, R = camX + vw / sc + 160, Tp = camY - 80, B = camY + vh / sc + 260;
@@ -3391,7 +3420,7 @@ function endNight(kind) {
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  update(dt); render(); SFX.tick(dt);
+  update(dt); render(); if (turnAnim) compositeTurn(dt); SFX.tick(dt);
   requestAnimationFrame(frame);
 }
 resize();
