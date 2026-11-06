@@ -1215,32 +1215,59 @@ function drawProp(g, p) {
   }
 }
 // the papier-mache Narkasur; `walk` swings the arms and legs once he comes alive
-function effigyFigure(g, ex, ey, walk) {
+function effigyFigure(g, ex, ey, walk, alive) {
   // Narkasur as the vaddos build him: blue, moustached, tongue out, horns and a big sword
-  const sw = Math.sin(walk) * 6;
-  blob(g, ex - 5, ey - 10, 4, 11, '#3a68d0', 1.4); blob(g, ex + 5, ey - 10, 4, 11, '#3a68d0', 1.4);
+  const sw = Math.sin(walk) * 6, SK = alive ? '#22398a' : '#3a68d0';
+  blob(g, ex - 5, ey - 10, 4, 11, SK, 1.4); blob(g, ex + 5, ey - 10, 4, 11, SK, 1.4);
   poly(g, [[ex - 11, ey - 18], [ex + 11, ey - 18], [ex + 8, ey - 30], [ex - 8, ey - 30]], '#f2c230');
-  blob(g, ex, ey - 44, 14, 15, '#3a68d0');
+  blob(g, ex, ey - 44, 14, 15, SK);
   g.strokeStyle = INK; g.lineWidth = 1; g.beginPath(); g.moveTo(ex, ey - 52); g.lineTo(ex, ey - 34); g.moveTo(ex - 8, ey - 44); g.quadraticCurveTo(ex - 3, ey - 41, ex, ey - 44); g.moveTo(ex + 8, ey - 44); g.quadraticCurveTo(ex + 3, ey - 41, ex, ey - 44); g.stroke();
   g.strokeStyle = '#e0b030'; g.lineWidth = 3; g.beginPath(); g.arc(ex, ey - 56, 8, 0.3, Math.PI - 0.3); g.stroke();
-  blob(g, ex - 18, ey - 52 + sw * 0.5, 5, 9, '#3a68d0', 1.4);
-  blob(g, ex + 18, ey - 54 - sw * 0.5, 5, 9, '#3a68d0', 1.4);
+  blob(g, ex - 18, ey - 52 + sw * 0.5, 5, 9, SK, 1.4);
+  blob(g, ex + 18, ey - 54 - sw * 0.5, 5, 9, SK, 1.4);
+  if (alive) for (const side of [-1, 1]) { g.fillStyle = '#efe6d0'; for (let i = 0; i < 3; i++) poly(g, [[ex + side * 18 + i * 2 - 2, ey - 44 + (side < 0 ? sw * 0.5 : -sw * 0.5)], [ex + side * 19 + i * 2 - 2, ey - 37], [ex + side * 20 + i * 2 - 2, ey - 44]], '#efe6d0'); }
   poly(g, [[ex + 19, ey - 60 - sw * 0.5], [ex + 44, ey - 96 - sw], [ex + 41, ey - 99 - sw], [ex + 16, ey - 63 - sw * 0.5]], '#e8eef4');
   const hx = ex, hy = ey - 74;
   for (const side of [-1, 1]) poly(g, [[hx + side * 9, hy - 10], [hx + side * 20, hy - 26], [hx + side * 13, hy - 9]], '#f4ecd8');
   for (let i = 0; i < 9; i++) blob(g, hx - 14 + i * 3.5, hy - 12 - Math.abs(4 - i) * -0.6, 4, 4, INK, 0.5);
-  blob(g, hx, hy, 14, 14, '#3a68d0');
+  blob(g, hx, hy, 14, 14, SK);
   g.fillStyle = '#d0242a'; g.fillRect(hx - 4, hy - 13, 8, 3);
-  for (const side of [-1, 1]) { blob(g, hx + side * 5.5, hy - 2, 4.5, 4.5, '#f8e080', 1.1); g.fillStyle = INK; g.beginPath(); g.arc(hx + side * 5.5, hy - 2, 1.8, 0, 7); g.fill(); }
+  if (alive) {
+    // awake: war paint, eyes burning yellow with red slits, brows crashing down
+    g.strokeStyle = '#d0242a'; g.lineWidth = 1.6;
+    for (const side of [-1, 1]) for (const k of [0, 3]) { g.beginPath(); g.moveTo(hx + side * 8, hy + 2 + k); g.lineTo(hx + side * 13, hy + 1 + k); g.stroke(); }
+    for (const side of [-1, 1]) {
+      blob(g, hx + side * 5.5, hy - 2, 4.2, 3.4, '#ffd23a', 1.1);
+      g.fillStyle = '#b0100a'; g.beginPath(); g.ellipse(hx + side * 5.5, hy - 2, 0.9, 3, 0, 0, 7); g.fill();
+      poly(g, [[hx + side * 1.5, hy - 4], [hx + side * 11, hy - 10], [hx + side * 11, hy - 7], [hx + side * 2, hy - 2]], INK);
+    }
+  } else for (const side of [-1, 1]) { blob(g, hx + side * 5.5, hy - 2, 4.5, 4.5, '#f8e080', 1.1); g.fillStyle = INK; g.beginPath(); g.arc(hx + side * 5.5, hy - 2, 1.8, 0, 7); g.fill(); }
   g.fillStyle = INK; g.beginPath(); g.moveTo(hx - 12, hy + 6); g.quadraticCurveTo(hx, hy + 1, hx + 12, hy + 6); g.quadraticCurveTo(hx + 14, hy + 2, hx + 9, hy + 3); g.quadraticCurveTo(hx, hy + 4, hx - 9, hy + 3); g.quadraticCurveTo(hx - 14, hy + 2, hx - 12, hy + 6); g.fill();
-  blob(g, hx, hy + 11, 3.5, 5, '#e04a5a', 1);
-  for (const side of [-1, 1]) { g.fillStyle = '#fff'; g.beginPath(); g.moveTo(hx + side * 6, hy + 6); g.lineTo(hx + side * 7, hy + 10); g.lineTo(hx + side * 8, hy + 6); g.fill(); }
+  if (alive) {
+    // a roaring mouth, long fangs, and the tongue lolling to his chin
+    blob(g, hx, hy + 9, 7, 4.5, '#3a0a10', 1.2);
+    blob(g, hx, hy + 13, 3.2, 7, '#e04a5a', 1);
+    for (const side of [-1, 1]) poly(g, [[hx + side * 5.5, hy + 5.5], [hx + side * 4.2, hy + 13], [hx + side * 3, hy + 5.5]], '#fff8e0');
+  } else {
+    blob(g, hx, hy + 11, 3.5, 5, '#e04a5a', 1);
+    for (const side of [-1, 1]) { g.fillStyle = '#fff'; g.beginPath(); g.moveTo(hx + side * 6, hy + 6); g.lineTo(hx + side * 7, hy + 10); g.lineTo(hx + side * 8, hy + 6); g.fill(); }
+  }
 }
+const NK = 2.3;   // how much bigger the walking Narkasur is than the effigies
 function drawNarkasur(g, b) {
-  const [sx, sy] = iso(b.x, b.y);
-  g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(sx, sy, 30, 13, 0, 0, 7); g.fill();
-  g.save(); g.translate(sx, sy - Math.abs(Math.sin(b.step * 2)) * 4); g.scale(1.7, 1.7);
-  effigyFigure(g, 0, 0, b.step * 2);
+  const [sx, sy] = iso(b.x, b.y), t = S.t;
+  // a red heat around him, and black smoke curling off his shoulders
+  const glow = g.createRadialGradient(sx, sy - 110, 10, sx, sy - 110, 150);
+  glow.addColorStop(0, `rgba(255,60,30,${0.22 + Math.sin(t * 6) * 0.05})`); glow.addColorStop(1, 'rgba(255,60,30,0)');
+  g.fillStyle = glow; g.fillRect(sx - 150, sy - 260, 300, 300);
+  g.fillStyle = 'rgba(0,0,0,.5)'; g.beginPath(); g.ellipse(sx, sy, 42, 18, 0, 0, 7); g.fill();
+  for (let i = 0; i < 6; i++) {
+    const a = (t * 0.6 + i / 6) % 1;
+    g.fillStyle = `rgba(20,10,20,${0.45 * (1 - a)})`;
+    g.beginPath(); g.arc(sx + (i % 2 ? 30 : -30) + Math.sin(t + i) * 6, sy - 120 - a * 90, 10 + a * 16, 0, 7); g.fill();
+  }
+  g.save(); g.translate(sx, sy - Math.abs(Math.sin(b.step * 2)) * 6); g.scale(NK, NK);
+  effigyFigure(g, 0, 0, b.step * 2, true);
   g.restore();
 }
 // a stranded villager; a demon wearing their face has no shadow and feet that point backwards
@@ -2518,10 +2545,18 @@ function drawBell(g) {
   g.restore();
 }
 
+// mouse look-ahead: point at the edge of the screen and the view leans that way, up to a third of the screen
+const look = { x: 0, y: 0, tx: 0, ty: 0 };
+addEventListener('mousemove', e => {
+  if (!matchMedia('(pointer: fine)').matches || !S || S.mode !== 'play') return;
+  look.tx = (e.clientX / innerWidth - 0.5) * innerWidth * 0.6; look.ty = (e.clientY / innerHeight - 0.5) * innerHeight * 0.6;
+});
+document.addEventListener('mouseleave', () => { look.tx = look.ty = 0; });
 function render() {
   const [px, py] = iso(player.x, player.y);
   const shake = S.shake * 10;
-  const camX = px - vw / sc / 2 + (Math.random() - 0.5) * shake, camY = py - 18 - vh / sc / 2 + (Math.random() - 0.5) * shake;
+  look.x += (look.tx - look.x) * 0.08; look.y += (look.ty - look.y) * 0.08;
+  const camX = px - vw / sc / 2 + look.x / sc + (Math.random() - 0.5) * shake, camY = py - 18 - vh / sc / 2 + look.y / sc + (Math.random() - 0.5) * shake;
   const k = dpr * sc;
   const toWorld = c => c.setTransform(k, 0, 0, k, -camX * k, -camY * k);
   const t = S.t;
@@ -2843,7 +2878,7 @@ function render() {
   if (S.boss) {
     const [bx, by] = iso(S.boss.x, S.boss.y);
     ctx.shadowColor = '#ff3b2f'; ctx.shadowBlur = 14; ctx.fillStyle = '#ff5b3a';
-    for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(bx + s * 8, by - 127 - Math.abs(Math.sin(S.boss.step * 2)) * 4, 3.2, 0, 7); ctx.fill(); }
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(bx + s * 5.5 * NK, by - 76 * NK - Math.abs(Math.sin(S.boss.step * 2)) * 6, 3.4, 0, 7); ctx.fill(); }
     ctx.shadowBlur = 0;
   }
   // big demons show how much burning they still need
