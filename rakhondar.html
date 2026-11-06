@@ -70,6 +70,12 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   border: 1px solid rgba(236, 228, 207, 0.3); border-radius: 6px; padding: 9px 12px; max-width: 16rem;
 }
 .check { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--muted); }
+#rideBtn {
+  position: absolute; bottom: 20px; right: calc(max(16px, env(safe-area-inset-right, 0px)) + 190px);
+  font: 600 15px var(--body); color: var(--night); background: var(--lamp);
+  border: 0; border-radius: 999px; padding: 12px 18px; cursor: pointer;
+}
+#rideBtn kbd { font: inherit; font-weight: 400; opacity: 0.7; margin-left: 4px; }
 #callBtn {
   position: absolute; bottom: 20px; right: max(16px, env(safe-area-inset-right, 0px));
   font: 600 15px var(--body); color: var(--night); background: var(--spirit);
@@ -148,6 +154,7 @@ button:focus-visible { outline: 2px solid var(--lamp); outline-offset: 3px; }
   <div id="whisper" aria-live="polite"></div>
   <div class="credit" id="credit"></div>
   <button id="callBtn" type="button">Call Rakhondar <kbd>Space</kbd></button>
+  <button id="rideBtn" type="button" hidden>Ride <kbd>B</kbd></button>
   <div class="talk" id="talk" hidden>
     <div class="talk-card">
       <span class="eyebrow" id="talkWho"></span>
@@ -244,7 +251,7 @@ const cv = document.getElementById('game'), ctx = cv.getContext('2d');
 const dark = document.createElement('canvas'), dctx = dark.getContext('2d');
 let dpr = 1, vw = 0, vh = 0, sc = 1, BAKE = 1;
 let map, rand, riverC, houses, lights, props, kids, walls, treeKind, exits, ground, statics, waterTiles, fireflies, mists, lanes, cars0, boats0;
-let demons, player, spirit, S;
+let demons, player, spirit, S, bikes0 = [];
 // distance fields: from the child, from the person being escorted, from the current destination, a scratch one, and from water
 const dist = new Int16Array(W * H), distN = new Int16Array(W * H), distD = new Int16Array(W * H), distT = new Int16Array(W * H),
       distW = new Int16Array(W * H), queue = new Int32Array(W * H);
@@ -1672,6 +1679,9 @@ function newGame() {
     if (map[START.y * W + START.x] === LANE && exits.every(e => e.locked === 'seal' || dist[e.ty * W + e.tx] > 0) && reach(PYRE.x, PYRE.y) &&
         seals.every(p => reach(p.x, p.y)) && (!sacr || reach(sacr.x, sacr.y)) && (!BELL || reach(BELL.x, BELL.y))) break;
   }
+  // parked motorbikes: no longer solid, each with a little petrol in the tank
+  bikes0 = props.filter(p => p.kind === 'bike').map(p => { map[p.y * W + p.x] = GR; return { x: p.x + 0.5, y: p.y + 0.5, hx: 1, hy: 0, fuel: 35 + rand() * 25, col: ['#d8302a', '#2f6fd0', '#f2c230', '#2a2a30'][Math.floor(rand() * 4)] }; });
+  props = props.filter(p => p.kind !== 'bike');
   drawGround();
   player = { x: START.x + 0.5, y: START.y + 0.5, r: 0.3, face: 1, moving: false, hx: 0.7071, hy: 0.7071 };
   spirit = { x: START.x, y: START.y, path: null, pi: 0 };
@@ -1682,7 +1692,7 @@ function newGame() {
     boss: null, burnT: -1, dawn: 0, beam: null,
     dogs: dogs0.map(g => Object.assign({ state: 'sleep', t: 0, barkT: 0 }, g)), crackers: crackers0.map(c => Object.assign({ state: 'idle', t: 0 }, c)),
     fallT: 0, tideHigh: false, floodK: -1, sealNext: 1, key: false, ringT: 0, guardT: 0, voice: null, voiceT: 40 + Math.random() * 20,
-    hints: {}, ending: null, deadline: 0, hold: 0, rung: false,
+    hints: {}, ending: null, deadline: 0, hold: 0, rung: false, bikes: bikes0.map(b => Object.assign({}, b)), engineT: 0,
     cars: cars0.map(c => Object.assign({}, c)), boats: boats0.map(b => Object.assign({}, b)) };
   document.getElementById('credit').textContent = MODE === 'real' ? `${CH.place}, Goa \u00B7 Map data \u00A9 OpenStreetMap contributors` : '';
   buildStatics();
@@ -1827,7 +1837,7 @@ function reveal(unmasked) {
 }
 function deliver() {
   const n = S.npc;
-  n.state = 'home';
+  n.state = 'home'; n.pillion = false;
   S.log.push({ name: n.role.name, result: 'saved' });
   S.dest.wait = 0;
   SFX.play('saved');
@@ -1896,6 +1906,7 @@ addEventListener('keydown', e => {
   if (k === ' ' && !e.repeat) callSpirit();
   if (k === 'e' && S && S.mode === 'talk') { e.preventDefault(); trust(); return; }
   if (k === 'q' && S && S.mode === 'talk') { e.preventDefault(); accuse(); return; }
+  if (k === 'b' && !e.repeat) toggleBike();
   if ((k === 'z' || k === 'x') && S && S.mode !== 'talk') turnView(k === 'z' ? -1 : 1);
   if (k === '=' || k === '+') zoomBy(1.1);
   if (k === '-' || k === '_') zoomBy(1 / 1.1);
@@ -1909,6 +1920,7 @@ cv.addEventListener('pointermove', e => { if (e.pointerId === joy.id) { joy.dx =
 const endJoy = e => { if (e.pointerId === joy.id) { joy.id = null; joy.dx = joy.dy = 0; } };
 cv.addEventListener('pointerup', endJoy); cv.addEventListener('pointercancel', endJoy);
 document.getElementById('callBtn').addEventListener('click', callSpirit);
+document.getElementById('rideBtn').addEventListener('click', e => { toggleBike(); e.currentTarget.blur(); });
 document.getElementById('btnTrust').addEventListener('click', trust);
 document.getElementById('btnBanish').addEventListener('click', accuse);
 
@@ -2001,9 +2013,20 @@ function update(dt) {
   if (player.moving) { const hm = hyp(ix, iy); player.hx = ix / hm; player.hy = iy / hm; }
   const pTile = at(Math.floor(player.x), Math.floor(player.y));
   // creeping (Shift, or a short drag) is slow but quiet enough to pass a sleeping dog
-  player.creep = keys.has('shift') || (joy.id !== null && mag < 0.55);
-  const sp = 4.3 * (pTile === PAD ? 0.6 : 1) * (player.creep ? 0.5 : 1) * (1 - 0.55 * flood[Math.floor(player.y) * W + Math.floor(player.x)]);
+  const ride = player.bike, wet = flood[Math.floor(player.y) * W + Math.floor(player.x)];
+  player.creep = !ride && (keys.has('shift') || (joy.id !== null && mag < 0.55));
+  let sp = 4.3 * (pTile === PAD ? 0.6 : 1) * (player.creep ? 0.5 : 1) * (1 - 0.55 * wet);
+  if (ride) {
+    const surf = [ROAD, LANE, PLAZA, COURT, JETTY].includes(pTile) ? 1 : pTile === PAD ? 0.3 : 0.55;
+    const target = player.moving && ride.fuel > 0 ? 9 * surf * mag * (1 - 0.6 * wet) : 0;
+    ride.v += (target - ride.v) * Math.min(1, dt * (target > ride.v ? 1.8 : 2.6));
+    if (!player.moving) { ix = player.hx; iy = player.hy; }
+    else { const k = hyp(ix, iy) || 1; ix /= k; iy /= k; }
+    sp = ride.v;
+    if (ride.v > 0.4) ride.fuel = Math.max(0, ride.fuel - dt);
+  }
   if (S.burnT < 0 && S.fallT <= 0) moveEnt(player, ix * sp * dt, iy * sp * dt);
+  if (ride) updateBike(dt);
 
   // traffic on the main road waits for a child standing in front of it
   for (const c of S.cars) {
@@ -2080,6 +2103,12 @@ function update(dt) {
       else steer(d, mx, my, dt);
     }
     if (goNpc && d.stun <= 0 && hyp(d.x - npc.x, d.y - npc.y) < 0.6) { captured(); break; }
+    if (player.bike && player.bike.v > 3 && d.stun <= 0 && hyp(d.x - player.x, d.y - player.y) < 0.75) {
+      if (!d.big) banish(d); else d.stun = 2;
+      dismount(true); hurt(d.x, d.y);
+      if (S.mode !== 'play') return;
+      continue;
+    }
     if (!safe && S.inv <= 0 && d.stun <= 0 && hyp(d.x - player.x, d.y - player.y) < 0.62) {
       d.stun = 1.4; hurt(d.x, d.y);
       if (S.mode !== 'play') return;
@@ -2134,6 +2163,7 @@ function updateNpc(n, dt) {
     if (n.alpha <= 0) S.npc = null;
     return;
   }
+  if (n.pillion) { n.x = player.x - player.hx * 0.45; n.y = player.y - player.hy * 0.45; n.panic = 0; n.moving = false; if (Math.abs(player.hx - player.hy) > 0.1) n.face = Math.sign(player.hx - player.hy); }
   const tx = Math.floor(n.x), ty = Math.floor(n.y);
   if (n.tile !== ty * W + tx) { n.tile = ty * W + tx; bfs(tx, ty, distN); }
   // fear builds when a demon is near and neither your lamp nor a holy light covers them
@@ -2143,7 +2173,8 @@ function updateNpc(n, dt) {
   n.panic = Math.max(0, Math.min(1, n.panic + (threat && td < 3.2 && !covered ? dt * 0.5 : -dt * 0.25)));
   if (n.panic >= 1 && n.flee <= 0) { n.flee = 2.5; whisper(`${n.role.name} panics and runs! Catch up with them.`); }
   let v = null, spd = 3.7;
-  if (n.flee > 0) {
+  if (n.pillion) {
+  } else if (n.flee > 0) {
     n.flee -= dt; spd = 4;
     if (threat) v = [n.x - threat.x, n.y - threat.y];
     if (n.flee <= 0) n.panic = 0.5;
@@ -2432,6 +2463,41 @@ function updateChapter(dt) {
     if (S.dawn >= 1) return endNight('dawn');
   }
 }
+/* ---------- motorbikes ---------- */
+const nearBike = () => S.bikes.find(b => hyp(b.x - player.x, b.y - player.y) < 1.3);
+function toggleBike() {
+  if (!S || S.mode !== 'play' || S.fallT > 0) return;
+  if (player.bike) return dismount(false);
+  const b = nearBike();
+  if (!b) return;
+  if (b.fuel <= 0) { whisper('That one’s tank is dry.'); return; }
+  S.bikes.splice(S.bikes.indexOf(b), 1);
+  player.bike = Object.assign(b, { v: 0 }); player.x = b.x; player.y = b.y;
+  const n = S.npc;
+  if (n && n.state === 'escort' && hyp(n.x - player.x, n.y - player.y) < 2) { n.pillion = true; n.flee = 0; }
+  SFX.play('kick');
+  hint('bike', n && n.pillion ? `${n.role.name} climbs on behind you. Quick, but the engine wakes the whole vaddo.` : 'The engine catches! Fast on the lanes, slow in the fields, and every shadow can hear you coming.');
+}
+function dismount(crash) {
+  const b = player.bike; if (!b) return;
+  player.bike = null;
+  b.x = player.x; b.y = player.y; b.v = 0;
+  S.bikes.push(b);
+  if (S.npc && S.npc.pillion) { S.npc.pillion = false; if (crash) S.npc.panic = 0.8; }
+  if (crash) { S.shake = 0.5; whisper('You come off the bike! Get up, get back on.'); }
+}
+function updateBike(dt) {
+  const b = player.bike;
+  b.hx = player.hx; b.hy = player.hy;
+  // the engine is loud: shadows nearby come looking, and dogs wake
+  S.engineT -= dt;
+  if (b.v > 1.5 && S.engineT <= 0) {
+    S.engineT = 2;
+    for (const d of demons) if (hyp(d.x - player.x, d.y - player.y) < 9) d.alert = Math.max(d.alert || 0, 3);
+    for (const g of S.dogs) if (g.state === 'sleep' && hyp(g.x - player.x, g.y - player.y) < 5) { g.state = 'bark'; g.t = 4; g.barkT = 0; }
+  }
+  if (b.fuel <= 0 && b.v < 0.3) { dismount(false); whisper('The engine coughs and dies. Out of petrol.'); }
+}
 function spawnGuard() {
   const court = [];
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (map[y * W + x] === COURT && hyp(x - player.x, y - player.y) > 4) court.push([x, y]);
@@ -2503,7 +2569,12 @@ function setObjective() {
   else if (S.dest.locked) t = lockText(S.dest);
   else if (S.dest.need && S.dest.wait > 0) t = `${S.dest.kind === 'bus' ? 'The pilot is coming' : 'The ferry is crossing'} · ${Math.ceil(S.dest.need - S.dest.wait)}s`;
   else t = `Walk ${n.role.name} to ${S.dest.label}`;
+  if (player.bike) t += ` · Petrol ${Math.round(player.bike.fuel / 0.6)}%`;
   t = `${clockText()} · ${t}`;
+  const rb = document.getElementById('rideBtn'), showRide = !!player.bike || !!nearBike();
+  const rideLabel = player.bike ? 'Get off ' : 'Ride ';
+  if (rb.hidden === showRide) rb.hidden = !showRide;
+  if (rb.firstChild && rb.firstChild.textContent !== rideLabel) rb.firstChild.textContent = rideLabel;
   if (t !== lastObj) { document.getElementById('objective').textContent = t; lastObj = t; }
 }
 
@@ -2542,7 +2613,26 @@ const mistSprite = (() => {
   return c;
 })();
 
+// a motorbike seen from the side along its heading; `lift` raises it for a jolt
+function drawBike(g, x, y, hx, hy, col) {
+  const [sx, sy] = iso(x, y), [ax, ay] = iso(x + hx, y + hy);
+  let dx = ax - sx, dy = ay - sy; const m = hyp(dx, dy) || 1; dx /= m; dy /= m;
+  if (Math.abs(dx) < 0.3) dx = dx < 0 ? -0.3 : 0.3;
+  const f = Math.sign(dx), w = (u, v) => [sx + dx * u, sy + dy * u * 0.5 + v];
+  g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(sx, sy, 17, 6, Math.atan2(dy * 0.5, dx), 0, 7); g.fill();
+  for (const u of [-11, 11]) { const [px, py] = w(u, -6); blob(g, px, py, 5.5, 5.5, '#151515', 1.2); blob(g, px, py, 2, 2, '#9a9a9a', 0.8); }
+  const [b0x, b0y] = w(-11, -8), [b1x, b1y] = w(9, -10), [s0x, s0y] = w(-8, -14), [s1x, s1y] = w(2, -14), [hbx, hby] = w(10, -20);
+  poly(g, [[b0x, b0y], [b1x, b1y], [b1x, b1y - 6], [s1x, s1y], [s0x, s0y]], col);
+  poly(g, [[s0x - f * 3, s0y], [s1x, s1y], [s1x, s1y - 3], [s0x - f * 3, s0y - 3]], '#222');
+  line(g, [b1x, b1y - 4], [hbx, hby], '#aaa', 2); line(g, [hbx - 4, hby], [hbx + 4, hby - 1], '#ccc', 2);
+  blob(g, hbx + f * 2, hby + 5, 2.4, 2, '#fff6d0', 0.8);
+}
 function drawChild(g, alpha) {
+  if (player.bike) {
+    const b = player.bike, jolt = b.v > 1 ? Math.sin(S.t * 30) * 0.6 : 0;
+    drawBike(g, player.x, player.y, player.hx, player.hy, b.col);
+    g.save(); g.translate(0, -7 + jolt);
+  }
   const [sx, sy] = iso(player.x, player.y), t = S.t, f = player.face;
   const step = player.moving ? Math.sin(t * 14) * 2.5 : 0, bob = player.moving ? Math.abs(Math.sin(t * 14)) * 1.5 : 0;
   g.globalAlpha = alpha;
@@ -2552,6 +2642,7 @@ function drawChild(g, alpha) {
   blob(g, sx, sy - 19 - bob, 8, 7, '#f2c230');
   cartoonHead(g, sx, sy - 33 - bob, 9.5, { skin: '#b8794a', hair: '#1a1410', face: f, scared: S.hearts <= 2 });
   g.globalAlpha = 1;
+  if (player.bike) g.restore();
 }
 function drawDemon(g, d) {
   const [sx, sy] = iso(d.x, d.y), t = S.t, w = Math.sin(t * 5 + d.ph) * 2, big = d.big ? 1.3 : 1;
@@ -2749,7 +2840,8 @@ function render() {
   list.push({ key: depth(player.x, player.y), draw: g => drawChild(g, 1) });
   for (const d of demons) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: depth(d.x, d.y), draw: g => drawDemon(g, d) }); }
   for (const c of S.cars) { const [sx, sy] = iso(c.x, c.y); if (inView(sx, sy)) list.push({ key: depth(c.x, c.y), draw: g => drawCar(g, c.x, c.y, c.dx, c.dy, c.col, true) }); }
-  if (S.npc) list.push({ key: depth(S.npc.x, S.npc.y), draw: g => drawPerson(g, S.npc) });
+  if (S.npc) list.push({ key: depth(S.npc.x, S.npc.y), draw: g => { if (S.npc.pillion) { g.save(); g.translate(0, -8); drawPerson(g, S.npc); g.restore(); } else drawPerson(g, S.npc); } });
+  for (const b of S.bikes) { const [sx, sy] = iso(b.x, b.y); if (inView(sx, sy)) list.push({ key: depth(b.x, b.y), draw: g => drawBike(g, b.x, b.y, b.hx, b.hy, b.col) }); }
   for (const d of S.dogs) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: depth(d.x, d.y), draw: g => drawDog(g, d) }); }
   if (sacr) list.push({ key: depth(sacr.x, sacr.y), draw: g => { drawPerson(g, sacr); if (!S.key) { const [sx, sy] = iso(sacr.x, sacr.y); g.strokeStyle = '#d9c27a'; g.lineWidth = 1.5; g.beginPath(); g.arc(sx + 9, sy - 18, 3, 0, 7); g.stroke(); line(g, [sx + 9, sy - 15], [sx + 9, sy - 8], '#d9c27a', 1.5); } } });
   if (BELL) list.push({ key: depth(BELL.x, BELL.y) - 0.5, draw: drawBell });
@@ -2799,6 +2891,7 @@ function render() {
     if (e.kind === 'bus' && e.wait > 0) { const k = 1.6 - (e.need - e.wait) * 4.2; hole(e.x + e.axis[0] * k, e.y + e.axis[1] * k, 2.8, 0.9); }
     if (e.kind === 'ferry' && !e.edge) { const [fx, fy] = ferryPos(e); hole(fx, fy, 2.4, 0.85); glows.push([{ x: fx, y: fy, lift: 10, color: '255,230,170' }, 2]); }
   }
+  if (player.bike) { hole(player.x + player.hx * 2.2, player.y + player.hy * 2.2, 2.2, 0.8, 2); glows.push([{ x: player.x + player.hx * 2.2, y: player.y + player.hy * 2.2, lift: 2, color: '255,240,190' }, 2]); }
   for (const c of S.cars) {
     hole(c.x + c.dx * 1.9, c.y + c.dy * 1.9, 2, 0.85, 2);
     glows.push([{ x: c.x + c.dx * 1.9, y: c.y + c.dy * 1.9, lift: 2, color: '255,240,190' }, 2]);
@@ -3140,6 +3233,7 @@ const SFX = (() => {
     layers.hum = bed('lowpass', 900, 1, 'sine', 330);
     layers.growl = bed('lowpass', 260, 2, 'sawtooth', 52);
     layers.rain = bed('highpass', 1800, 0.5, 'noise');
+    layers.engine = bed('lowpass', 900, 1.5, 'sawtooth', 50);
   }
   function bed(type, f, q, src, freq) {
     let s;
@@ -3148,6 +3242,7 @@ const SFX = (() => {
     const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
     const g = ac.createGain(); g.gain.value = 0;
     s.connect(fl); fl.connect(g); g.connect(master); s.start();
+    g.src = s;
     return g;
   }
   const set = (g, v) => g.gain.setTargetAtTime(v, ac.currentTime, 0.15);
@@ -3232,6 +3327,7 @@ const SFX = (() => {
     horn: s => { tone(440, 0.16, { type: 'square', lp: 1600, g: 0.05, v: s.v, pan: s.pan }); tone(466, 0.2, { type: 'square', lp: 1600, g: 0.05, v: s.v, pan: s.pan, at: ac.currentTime + 0.22 }); },
     ferryHorn: s => { for (const f of [110, 165]) tone(f, 1.4, { type: 'sawtooth', lp: 650, a: 0.1, g: 0.09, v: Math.max(0.3, s.v), pan: s.pan }); },
     bell: s => { for (const [k, g] of [[1, 1], [2.76, 0.45], [5.4, 0.2]]) tone(s.f * k, 2.6, { g: 0.07 * g, v: s.v, pan: s.pan }); },
+    kick: () => { for (let i = 0; i < 6; i++) tone(48 + i * 4, 0.12, { type: 'sawtooth', lp: 700, g: 0.12, at: ac.currentTime + i * 0.07 }); },
     bellNow: (s, f) => sounds.bell(Object.assign(s, { f: f || 520 })),
     bark: s => { for (const d of [0, 0.16]) { tone(380, 0.09, { to: 210, type: 'sawtooth', lp: 1400, g: 0.16, v: s.v, pan: s.pan, at: ac.currentTime + d }); noise(0.08, { f: 900, q: 1.5, g: 0.1, v: s.v, pan: s.pan, at: ac.currentTime + d }); } },
     splash: () => { noise(0.7, { type: 'lowpass', f: 1800, to: 300, a: 0.01, g: 0.35 }); tone(140, 0.4, { to: 60, g: 0.2 }); },
@@ -3268,6 +3364,9 @@ const SFX = (() => {
     set(layers.hum, live && S.beam ? 0.025 : 0);
     set(layers.fire, S.burnT >= 0 ? Math.min(0.3, 0.06 + S.burnT * 0.06) : 0);
     set(layers.rain, CH.monsoon ? 0.09 : 0);
+    const bk = live && player.bike;
+    set(layers.engine, bk ? 0.05 + player.bike.v * 0.006 : 0);
+    if (bk) layers.engine.src.frequency.setTargetAtTime(42 + player.bike.v * 11, ac.currentTime, 0.1);
 
     let ed = 99;
     for (const p of props) if ((p.kind === 'effigy' || p.kind === 'flag' || p.kind === 'samai') && !p.awake) ed = Math.min(ed, hyp(p.x - player.x, p.y - player.y));
@@ -3324,6 +3423,7 @@ const CONTROLS = `
       <b>Your lamp</b><span>It burns demons in front of you while it has oil. Refill it at lit diyas and holy places.</span>
       <b>Trust or banish</b><span>When you meet someone, decide. Look for a shadow, the way their feet point, and what they ask of you.</span>
       <b>Call Rakhondar</b><span>Space or the button. It lights footsteps toward your next goal and drives back nearby demons.</span>
+      <b>Motorbike</b><span>B or the Ride button next to a parked bike. Fast on lanes, slow in fields, loud enough to wake every dog, and it runs out of petrol. The person you're walking home can ride behind you.</span>
       <b>Turn the view</b><span>Drag with the right mouse button, press Z or X, or tap ⟲ ⟳ at the top right.</span>
     </div>`;
 // the title screen: your name and the four chapters
