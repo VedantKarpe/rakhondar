@@ -264,10 +264,42 @@ const lerp2 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 /* ---------- isometric drawing helpers ---------- */
 const iso = (x, y) => [(x - y) * HW + OX, (x + y) * HH];
 const P = (x, y, z) => [(x - y) * HW + OX, (x + y) * HH - z];
+const INK = '#1a1410';
 function poly(g, pts, fill) {
   g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
   for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
   g.closePath(); g.fillStyle = fill; g.fill();
+  if (!fill.startsWith('rgba(0,0,0')) { g.strokeStyle = INK; g.lineWidth = 1.3; g.lineJoin = 'round'; g.stroke(); }
+}
+// a filled, ink-outlined ellipse: the basic stroke of the cartoon characters
+function blob(g, x, y, rx, ry, fill, w = 1.5) {
+  g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, 7); g.fillStyle = fill; g.fill();
+  g.strokeStyle = INK; g.lineWidth = w; g.stroke();
+}
+// a big round cartoon head: wide eyes with small pupils, raised brows, and whatever the face is doing
+function cartoonHead(g, x, y, r, o) {
+  const f = o.face || 1;
+  blob(g, x, y, r, r * 1.02, o.skin || '#b8794a');
+  if (o.hair) {
+    g.beginPath(); g.arc(x, y - r * 0.05, r * 1.02, Math.PI * 1.02, Math.PI * 1.98); g.quadraticCurveTo(x, y - r * 0.55, x - r, y - r * 0.15);
+    g.fillStyle = o.hair; g.fill(); g.strokeStyle = INK; g.lineWidth = 1.3; g.stroke();
+    if (o.bun) blob(g, x - f * r * 0.85, y - r * 0.6, r * 0.38, r * 0.34, o.hair, 1.2);
+  }
+  for (const side of [-1, 1]) {
+    const ex = x + side * r * 0.36 + f * r * 0.08, ey = y + r * 0.02;
+    blob(g, ex, ey, r * 0.3, r * 0.36, '#fff', 1.1);
+    g.fillStyle = INK; g.beginPath(); g.arc(ex + f * r * 0.08, ey - (o.scared ? r * 0.08 : 0), r * 0.11, 0, 7); g.fill();
+    g.strokeStyle = INK; g.lineWidth = 1.2; g.beginPath(); g.arc(ex, ey - r * 0.42, r * 0.22, Math.PI * 1.2, Math.PI * 1.8); g.stroke();
+  }
+  if (o.bindi) { g.fillStyle = '#d0242a'; g.beginPath(); g.arc(x + f * r * 0.08, y - r * 0.42, r * 0.09, 0, 7); g.fill(); }
+  g.strokeStyle = INK; g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(x + f * r * 0.12, y + r * 0.2); g.quadraticCurveTo(x + f * r * 0.3, y + r * 0.38, x + f * r * 0.05, y + r * 0.42); g.stroke();
+  if (o.moustache) {
+    g.fillStyle = INK; g.beginPath(); g.moveTo(x - r * 0.42 + f * r * 0.08, y + r * 0.62);
+    g.quadraticCurveTo(x + f * r * 0.08, y + r * 0.38, x + r * 0.42 + f * r * 0.08, y + r * 0.62); g.quadraticCurveTo(x + f * r * 0.08, y + r * 0.5, x - r * 0.42 + f * r * 0.08, y + r * 0.62); g.fill();
+  }
+  if (o.scared) { blob(g, x + f * r * 0.08, y + r * 0.66, r * 0.12, r * 0.16, '#5a1a14', 1); }
+  else { g.beginPath(); g.arc(x + f * r * 0.08, y + r * 0.5, r * 0.3, 0.2, Math.PI - 0.2); g.stroke(); }
 }
 function line(g, a, b, color, w) { g.strokeStyle = color; g.lineWidth = w; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); }
 function shade(hex, f) {
@@ -567,7 +599,7 @@ function gen(seed) {
   }
 
   // houses: Indo-Portuguese, each near a lane, front porch facing +y; real footprints first
-  const walls6 = ['#d9a441', '#3f6fa8', '#8c2f3c', '#3f7f5a', '#c9733a', '#5a7fb0', '#b84a5a', '#e0c35a'];
+  const walls6 = ['#f2c230', '#2f6fd0', '#e8e0cc', '#2fa08a', '#e0763a', '#4a8fe0', '#d0344a', '#f4d84a'];
   const nearLane = (x0, y0, x1, y1, r) => { for (let y = y0 - r; y <= y1 + r; y++) for (let x = x0 - r; x <= x1 + r; x++) if (at(x, y) === LANE) return true; return false; };
   const known = L.connect ? VILLAGE.houses.slice() : [];
   // in a real village, houses also stand on the paddy's edge along a lane, as they do in Goa
@@ -1184,21 +1216,25 @@ function drawProp(g, p) {
 }
 // the papier-mache Narkasur; `walk` swings the arms and legs once he comes alive
 function effigyFigure(g, ex, ey, walk) {
+  // Narkasur as the vaddos build him: blue, moustached, tongue out, horns and a big sword
   const sw = Math.sin(walk) * 6;
-  line(g, [ex - 6, ey], [ex - 5 + sw * 0.4, ey - 26], '#8a6a3a', 3); line(g, [ex + 6, ey], [ex + 5 - sw * 0.4, ey - 26], '#8a6a3a', 3);
-  poly(g, [[ex - 16, ey - 24], [ex + 16, ey - 24], [ex + 11, ey - 58], [ex - 11, ey - 58]], '#2f4f2a');
-  g.fillStyle = '#c9a23a'; g.fillRect(ex - 13, ey - 42, 26, 4);
-  g.strokeStyle = '#3f6b3a'; g.lineWidth = 6; g.lineCap = 'round';
-  g.beginPath(); g.moveTo(ex - 9, ey - 54); g.lineTo(ex - 26, ey - 64 + sw); g.lineTo(ex - 30, ey - 82 + sw);
-  g.moveTo(ex + 9, ey - 54); g.lineTo(ex + 26, ey - 64 - sw); g.lineTo(ex + 30, ey - 82 - sw); g.stroke();
-  g.fillStyle = '#3f6b3a'; g.beginPath(); g.arc(ex, ey - 72, 15, 0, 7); g.fill();
-  g.fillStyle = '#e9e3d6';
-  g.beginPath(); g.moveTo(ex - 11, ey - 80); g.lineTo(ex - 21, ey - 101); g.lineTo(ex - 5, ey - 85); g.fill();
-  g.beginPath(); g.moveTo(ex + 11, ey - 80); g.lineTo(ex + 21, ey - 101); g.lineTo(ex + 5, ey - 85); g.fill();
-  g.fillStyle = '#fff'; g.fillRect(ex - 9, ey - 78, 7, 5); g.fillRect(ex + 2, ey - 78, 7, 5);
-  g.fillStyle = '#c0241b'; g.fillRect(ex - 7, ey - 77, 3, 3); g.fillRect(ex + 4, ey - 77, 3, 3);
-  g.fillRect(ex - 4, ey - 68, 8, 9);
-  g.fillStyle = '#e9e3d6'; g.fillRect(ex - 8, ey - 69, 3, 5); g.fillRect(ex + 5, ey - 69, 3, 5);
+  blob(g, ex - 5, ey - 10, 4, 11, '#3a68d0', 1.4); blob(g, ex + 5, ey - 10, 4, 11, '#3a68d0', 1.4);
+  poly(g, [[ex - 11, ey - 18], [ex + 11, ey - 18], [ex + 8, ey - 30], [ex - 8, ey - 30]], '#f2c230');
+  blob(g, ex, ey - 44, 14, 15, '#3a68d0');
+  g.strokeStyle = INK; g.lineWidth = 1; g.beginPath(); g.moveTo(ex, ey - 52); g.lineTo(ex, ey - 34); g.moveTo(ex - 8, ey - 44); g.quadraticCurveTo(ex - 3, ey - 41, ex, ey - 44); g.moveTo(ex + 8, ey - 44); g.quadraticCurveTo(ex + 3, ey - 41, ex, ey - 44); g.stroke();
+  g.strokeStyle = '#e0b030'; g.lineWidth = 3; g.beginPath(); g.arc(ex, ey - 56, 8, 0.3, Math.PI - 0.3); g.stroke();
+  blob(g, ex - 18, ey - 52 + sw * 0.5, 5, 9, '#3a68d0', 1.4);
+  blob(g, ex + 18, ey - 54 - sw * 0.5, 5, 9, '#3a68d0', 1.4);
+  poly(g, [[ex + 19, ey - 60 - sw * 0.5], [ex + 44, ey - 96 - sw], [ex + 41, ey - 99 - sw], [ex + 16, ey - 63 - sw * 0.5]], '#e8eef4');
+  const hx = ex, hy = ey - 74;
+  for (const side of [-1, 1]) poly(g, [[hx + side * 9, hy - 10], [hx + side * 20, hy - 26], [hx + side * 13, hy - 9]], '#f4ecd8');
+  for (let i = 0; i < 9; i++) blob(g, hx - 14 + i * 3.5, hy - 12 - Math.abs(4 - i) * -0.6, 4, 4, INK, 0.5);
+  blob(g, hx, hy, 14, 14, '#3a68d0');
+  g.fillStyle = '#d0242a'; g.fillRect(hx - 4, hy - 13, 8, 3);
+  for (const side of [-1, 1]) { blob(g, hx + side * 5.5, hy - 2, 4.5, 4.5, '#f8e080', 1.1); g.fillStyle = INK; g.beginPath(); g.arc(hx + side * 5.5, hy - 2, 1.8, 0, 7); g.fill(); }
+  g.fillStyle = INK; g.beginPath(); g.moveTo(hx - 12, hy + 6); g.quadraticCurveTo(hx, hy + 1, hx + 12, hy + 6); g.quadraticCurveTo(hx + 14, hy + 2, hx + 9, hy + 3); g.quadraticCurveTo(hx, hy + 4, hx - 9, hy + 3); g.quadraticCurveTo(hx - 14, hy + 2, hx - 12, hy + 6); g.fill();
+  blob(g, hx, hy + 11, 3.5, 5, '#e04a5a', 1);
+  for (const side of [-1, 1]) { g.fillStyle = '#fff'; g.beginPath(); g.moveTo(hx + side * 6, hy + 6); g.lineTo(hx + side * 7, hy + 10); g.lineTo(hx + side * 8, hy + 6); g.fill(); }
 }
 function drawNarkasur(g, b) {
   const [sx, sy] = iso(b.x, b.y);
@@ -1211,17 +1247,21 @@ function drawNarkasur(g, b) {
 function drawPerson(g, n) {
   const [sx, sy] = iso(n.x, n.y), o = n.role.look, s = o.h, t = S.t, f = n.face;
   const step = n.moving ? Math.sin(t * 12) * 2 : 0;
+  const woman = o.basket || o.legs === o.body;   // a sari or a long dress falls to the feet
   g.globalAlpha = Math.max(0, n.alpha);
-  if (!n.fake) { g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(sx, sy, 9 * s, 4.5 * s, 0, 0, 7); g.fill(); }
-  g.fillStyle = '#1a120c';
-  for (const side of [-1, 1]) { g.beginPath(); g.ellipse(sx + side * 3 * s + (n.fake ? -f : f) * 3, sy - 0.5, 3.2, 1.6, 0, 0, 7); g.fill(); }
-  g.fillStyle = o.legs; g.fillRect(sx - 5 * s, sy - 12 * s - step * 0.3, 4 * s, 12 * s); g.fillRect(sx + 1 * s, sy - 12 * s + step * 0.3, 4 * s, 12 * s);
-  g.fillStyle = o.body; g.beginPath(); g.ellipse(sx, sy - 20 * s, (o.belly ? 10 : 8) * s, 9 * s, 0, 0, 7); g.fill();
-  if (o.basket) { g.fillStyle = '#9a7a3a'; g.beginPath(); g.ellipse(sx + f * 9, sy - 18, 6, 4, 0, 0, 7); g.fill(); g.fillStyle = '#f29a2a'; g.beginPath(); g.arc(sx + f * 8, sy - 21, 2.2, 0, 7); g.arc(sx + f * 11, sy - 21, 2.2, 0, 7); g.fill(); }
-  if (o.net) { g.strokeStyle = 'rgba(220,210,180,.7)'; g.lineWidth = 1; for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(sx - f * 6, sy - 28); g.lineTo(sx - f * 12 + i * 2, sy - 10); g.stroke(); } }
+  if (!n.fake) { g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(sx, sy, 9 * s, 4.5 * s, 0, 0, 7); g.fill(); }
+  // feet: a disguised demon's point backwards
+  for (const side of [-1, 1]) blob(g, sx + side * 3 * s + (n.fake ? -f : f) * 3, sy - 0.5, 3.2, 1.6, INK, 0.8);
+  if (woman) poly(g, [[sx - 9 * s, sy - 2], [sx + 9 * s, sy - 2], [sx + 6 * s, sy - 24 * s], [sx - 6 * s, sy - 24 * s]], o.body);
+  else { blob(g, sx - 3 * s, sy - 6 * s - step * 0.3, 2.8 * s, 6.5 * s, o.legs, 1.2); blob(g, sx + 3 * s, sy - 6 * s + step * 0.3, 2.8 * s, 6.5 * s, o.legs, 1.2); }
+  blob(g, sx, sy - 21 * s, (o.belly ? 11 : 8.5) * s, 9.5 * s, woman ? shade(o.body, 1.15) : o.body);
+  if (woman) { g.strokeStyle = '#f2c230'; g.lineWidth = 2; g.beginPath(); g.moveTo(sx - f * 7 * s, sy - 28 * s); g.lineTo(sx + f * 6 * s, sy - 4); g.stroke(); }   // the sari's border over the shoulder
+  if (o.basket) { blob(g, sx + f * 10, sy - 18, 6, 4, '#c9963a', 1.2); g.fillStyle = '#f29a2a'; g.beginPath(); g.arc(sx + f * 8, sy - 21, 2.2, 0, 7); g.arc(sx + f * 11, sy - 21, 2.2, 0, 7); g.fill(); }
+  if (o.net) { g.strokeStyle = 'rgba(240,230,200,.8)'; g.lineWidth = 1; for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(sx - f * 6, sy - 28); g.lineTo(sx - f * 12 + i * 2, sy - 10); g.stroke(); } }
   if (o.pole) line(g, [sx + f * 7, sy - 18], [sx - f * 22, sy - 2], '#c9a86a', 2.5);
-  g.fillStyle = '#b07a50'; g.beginPath(); g.arc(sx, sy - 33 * s, 6.5 * s, 0, 7); g.fill();
-  g.fillStyle = o.hair; g.beginPath(); g.arc(sx - f * 1.5, sy - 35 * s, 6.5 * s, Math.PI * 0.95, Math.PI * 2.05); g.fill();
+  const grey = /^#[c-f]/i.test(o.hair);
+  cartoonHead(g, sx, sy - 37 * s, 9 * s, { skin: '#b07a50', hair: o.hair, face: f, bindi: o.basket, bun: woman, moustache: o.belly || o.net, scared: n.state === 'escort' && n.panic > 0.5 });
+  if (grey && o.basket) { g.strokeStyle = INK; g.lineWidth = 1; g.beginPath(); g.arc(sx + f * 2, sy - 37 * s, 9.5 * s, Math.PI * 1.1, Math.PI * 1.3); g.stroke(); }
   g.globalAlpha = 1;
 }
 // a roadside hoarding facing the street: the sponsor's picture if there is one, else its text
@@ -1283,11 +1323,10 @@ function drawDevli(g, p) {
 function drawKid(g, k) {
   const [sx, sy] = iso(k.x, k.y), b = Math.sin(S.t * 3 + k.ph) * 1.2;
   g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(sx, sy, 7, 3.5, 0, 0, 7); g.fill();
-  g.fillStyle = '#2b2118'; g.fillRect(sx - 4, sy - 8, 3, 8); g.fillRect(sx + 1, sy - 8, 3, 8);
-  g.fillStyle = k.shirt; g.beginPath(); g.ellipse(sx, sy - 14 + b * 0.3, 6, 6, 0, 0, 7); g.fill();
-  line(g, [sx + k.face * 4, sy - 15], [sx + k.face * 10, sy - 22 + b], '#a87850', 2.5);
-  g.fillStyle = '#a87850'; g.beginPath(); g.arc(sx, sy - 23 + b * 0.3, 5, 0, 7); g.fill();
-  g.fillStyle = '#1a100a'; g.beginPath(); g.arc(sx - k.face, sy - 25 + b * 0.3, 5, Math.PI * 0.95, Math.PI * 2.05); g.fill();
+  blob(g, sx - 2.5, sy - 4, 2, 4.5, '#b8794a', 1); blob(g, sx + 2.5, sy - 4, 2, 4.5, '#b8794a', 1);
+  blob(g, sx, sy - 13 + b * 0.3, 6, 6, k.shirt);
+  line(g, [sx + k.face * 4, sy - 15], [sx + k.face * 10, sy - 22 + b], '#b8794a', 2.5);
+  cartoonHead(g, sx, sy - 24 + b * 0.3, 7, { skin: '#b8794a', hair: '#1a1410', face: k.face });
   if (k.torch) {
     line(g, [sx + k.face * 10, sy - 22 + b], [sx + k.face * 12, sy - 40 + b], '#6b4a26', 2);
     const fl = 1 + Math.sin(S.t * 14 + k.ph) * 0.2;
@@ -2422,28 +2461,29 @@ const mistSprite = (() => {
 })();
 
 function drawChild(g, alpha) {
-  const [sx, sy] = iso(player.x, player.y), t = S.t;
-  const step = player.moving ? Math.sin(t * 14) * 2.5 : 0;
+  const [sx, sy] = iso(player.x, player.y), t = S.t, f = player.face;
+  const step = player.moving ? Math.sin(t * 14) * 2.5 : 0, bob = player.moving ? Math.abs(Math.sin(t * 14)) * 1.5 : 0;
   g.globalAlpha = alpha;
-  if (alpha === 1) { g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(sx, sy, 10, 5, 0, 0, 7); g.fill(); }
-  g.fillStyle = '#2b2118'; g.fillRect(sx - 5, sy - 10 - step * 0.3, 4, 10 + step * 0.3); g.fillRect(sx + 1, sy - 10 + step * 0.3, 4, 10 - step * 0.3);
-  g.fillStyle = '#3a4a6a'; g.fillRect(sx - 6, sy - 14, 12, 6);
-  g.fillStyle = '#d8553a'; g.beginPath(); g.ellipse(sx, sy - 19, 7.5, 7, 0, 0, 7); g.fill();
-  g.fillStyle = '#c08a5a'; g.beginPath(); g.arc(sx, sy - 30, 6.5, 0, 7); g.fill();
-  g.fillStyle = '#21140d'; g.beginPath(); g.arc(sx - player.face * 1.5, sy - 32, 6.5, Math.PI * 0.95, Math.PI * 2.05); g.fill();
+  if (alpha === 1) { g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(sx, sy, 10, 5, 0, 0, 7); g.fill(); }
+  blob(g, sx - 3.5, sy - 5 - step * 0.4, 2.6, 6, '#b8794a', 1.2); blob(g, sx + 3.5, sy - 5 + step * 0.4, 2.6, 6, '#b8794a', 1.2);
+  blob(g, sx, sy - 12 - bob, 7, 4.5, '#2f5fb0');
+  blob(g, sx, sy - 19 - bob, 8, 7, '#f2c230');
+  cartoonHead(g, sx, sy - 33 - bob, 9.5, { skin: '#b8794a', hair: '#1a1410', face: f, scared: S.hearts <= 2 });
   g.globalAlpha = 1;
 }
 function drawDemon(g, d) {
-  const [sx, sy] = iso(d.x, d.y), t = S.t;
-  g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(sx, sy, 13, 6, 0, 0, 7); g.fill();
-  g.fillStyle = '#1a0d1f';
-  for (let i = 0; i < 7; i++) {
-    const h = i * 5, r = 11 - i * 0.8, wob = Math.sin(t * 4 + d.ph + i) * 2.5;
-    g.beginPath(); g.ellipse(sx + wob, sy - 4 - h, r, r * 0.8, 0, 0, 7); g.fill();
-  }
-  g.fillStyle = '#2d1630';
-  g.beginPath(); g.moveTo(sx - 7, sy - 33); g.lineTo(sx - 12, sy - 47); g.lineTo(sx - 2, sy - 36); g.fill();
-  g.beginPath(); g.moveTo(sx + 7, sy - 33); g.lineTo(sx + 12, sy - 47); g.lineTo(sx + 2, sy - 36); g.fill();
+  const [sx, sy] = iso(d.x, d.y), t = S.t, w = Math.sin(t * 5 + d.ph) * 2, big = d.big ? 1.3 : 1;
+  g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(sx, sy, 13 * big, 6 * big, 0, 0, 7); g.fill();
+  g.save(); g.translate(sx, sy); g.scale(big, big);
+  // a cartoon bhoot: a wobbling violet body, cream horns, goggling eyes and a fanged grin
+  g.beginPath(); g.moveTo(-12, -2); g.quadraticCurveTo(-16 + w, -26, -9, -38); g.quadraticCurveTo(0, -46, 9, -38); g.quadraticCurveTo(16 - w, -26, 12, -2);
+  for (let i = 0; i < 4; i++) g.quadraticCurveTo(9 - i * 6, 3 + (i % 2) * 2, 6 - i * 6, -2);
+  g.closePath(); g.fillStyle = d.lit > 0 ? '#c25ad8' : '#5a2f8a'; g.fill(); g.strokeStyle = INK; g.lineWidth = 1.6; g.stroke();
+  for (const side of [-1, 1]) poly(g, [[side * 6, -38], [side * 13, -52], [side * 2, -42]], '#efe6d0');
+  for (const side of [-1, 1]) { blob(g, side * 5, -28, 4.6, 5.2, '#fff8d0', 1.2); g.fillStyle = '#d0242a'; g.beginPath(); g.arc(side * 5 + 1, -27, 2, 0, 7); g.fill(); }
+  g.beginPath(); g.moveTo(-7, -17); g.quadraticCurveTo(0, -11, 7, -17); g.fillStyle = '#2a0a14'; g.fill(); g.stroke();
+  g.fillStyle = '#fff'; for (const x of [-4, 3]) { g.beginPath(); g.moveTo(x, -16); g.lineTo(x + 1.5, -12); g.lineTo(x + 3, -16); g.fill(); }
+  g.restore();
 }
 
 // a village dog: curled up asleep, sitting up watching, or on its feet barking
@@ -2586,7 +2626,7 @@ function render() {
   dctx.setTransform(1, 0, 0, 1, 0, 0);
   dctx.globalCompositeOperation = 'source-over';
   dctx.clearRect(0, 0, dark.width, dark.height);
-  dctx.fillStyle = `rgba(6,11,30,${0.9 * (1 - 0.85 * S.dawn)})`; dctx.fillRect(0, 0, dark.width, dark.height);
+  dctx.fillStyle = `rgba(16,24,66,${0.66 * (1 - 0.85 * S.dawn)})`; dctx.fillRect(0, 0, dark.width, dark.height);
   dctx.globalCompositeOperation = 'destination-out';
   toWorld(dctx);
   const hole = (wx, wy, r, a, lift = 0) => {
