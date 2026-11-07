@@ -751,6 +751,21 @@ function gen(seed) {
   }
   const tav = houses.find(h => h.w === 4);
   if (tav) { tav.tavern = true; tav.wall = '#2f6e6a'; }
+  // shops: a few houses by the busier lanes and roads open their front room as a shop, with an awning and a sign
+  const SHOPS = [['KIRANA STORE', '#c8322a'], ['BAKERY · POEE', '#d9a63a'], ['PHARMACY', '#2f8a4a'], ['FISH MARKET', '#2f6fd0'], ['COLD DRINKS', '#e0763a'], ['TAILOR', '#6a3f8a'], ['CYCLE REPAIR', '#3a3a44'], ['BHAJI-PAO', '#b8562f']];
+  let si = Math.floor(rand() * SHOPS.length);
+  for (const h of houses.slice().sort(() => rand() - 0.5)) {
+    if (h.tavern || houses.filter(q => q.shop).length >= Math.min(6, Math.ceil(houses.length / 8))) continue;
+    const dx = h.x + Math.floor(h.w / 2), dy = h.y + h.h;
+    if (![ROAD, LANE].some(t => D4.concat([[0, 1], [0, 2]]).some(([a, b]) => at(dx + a, dy + b) === t))) continue;
+    const [name, col] = SHOPS[si++ % SHOPS.length];
+    h.shop = { name, col };
+  }
+  // candles at the crosses and a diya at each tulsi, lit from dusk
+  for (const pr of props) {
+    if (pr.kind === 'cross') lights.push({ kind: 'candle', x: pr.x + 0.5, y: pr.y + 0.7, r: 1.2, lift: 4, color: '255,200,110' });
+    if (pr.kind === 'tulsi') lights.push({ kind: 'candle', x: pr.x + 0.5, y: pr.y + 0.7, r: 1.2, lift: 6, color: '255,180,80' });
+  }
 
   const laneAdj = (x, y) => D4.some(([dx, dy]) => at(x + dx, y + dy) === LANE);
   const roadAdj = (x, y) => D4.some(([dx, dy]) => at(x + dx, y + dy) === ROAD);
@@ -804,6 +819,11 @@ function gen(seed) {
     set(x, y, PROP); set(x + 1, y, PROP);
     props.push({ kind: 'billboard', x, y, ad: ads[props.filter(p => p.kind === 'billboard').length % ads.length] });
     lights.push({ kind: 'billboard', x: x + 1, y: y + 1.3, r: 1.6, lift: 20, color: '240,240,220' });
+  }
+  // little roadside devlis: a laterite niche with a painted stone and a diya, where the lanes meet
+  for (const [x, y] of pick(Math.round(W * H / 900), (x, y) => D4.filter(([dx, dy]) => at(x + dx, y + dy) === LANE).length >= 2 && hyp(x - START.x, y - START.y) > 3, 8)) {
+    set(x, y, PROP); props.push({ kind: 'ghumti', x, y });
+    lights.push({ kind: 'candle', x: x + 0.5, y: y + 0.8, r: 1.6, lift: 8, color: '255,190,90' });
   }
   for (const [x, y] of pick(3, laneAdj, 10)) {
     set(x, y, PROP); props.push({ kind: 'khuris', x, y });
@@ -890,8 +910,17 @@ function gen(seed) {
   for (let i = 0; i < 3 && roadTiles.length; i++) {
     const [x, y] = roadTiles[Math.floor(rand() * roadTiles.length)];
     const d = D4.find(([dx, dy]) => at(x + dx, y + dy) === ROAD) || [1, 0];
-    cars0.push({ x: x + 0.5, y: y + 0.5, dx: d[0], dy: d[1], col: carCols[i % carCols.length], tile: -1 });
+    cars0.push({ x: x + 0.5, y: y + 0.5, dx: d[0], dy: d[1], col: carCols[i % carCols.length], tile: -1, type: 'car' });
   }
+  // Goa's own traffic: a Kadamba bus, racing private buses, black-and-yellow rickshaws and the yellow-mudguard pilots
+  const PRIVATE = [['SAO JOSE', '#d8302a'], ['SHREE DATTA', '#2f6fd0'], ['ROSARY', '#2fa08a'], ['LAXMI', '#e0a33a'], ['MILAGRES', '#6a3f8a']];
+  const extra = roadTiles.length > 80 ? ['ktc', 'private', 'private', 'rick', 'rick', 'pilot', 'pilot'] : roadTiles.length > 20 ? ['private', 'rick', 'pilot'] : [];
+  extra.forEach((type, i) => {
+    const [x, y] = roadTiles[Math.floor(rand() * roadTiles.length)];
+    const d = D4.find(([dx, dy]) => at(x + dx, y + dy) === ROAD) || [1, 0];
+    const pv = PRIVATE[Math.floor(rand() * PRIVATE.length)];
+    cars0.push({ x: x + 0.5, y: y + 0.5, dx: d[0], dy: d[1], tile: -1, type, col: type === 'private' ? pv[1] : '#e8e4dc', name: pv[0] });
+  });
   boats0 = [];
   for (let i = 0; i < 2 && waterT.length; i++) {
     const [x, y] = waterT[Math.floor(rand() * waterT.length)];
@@ -1183,6 +1212,18 @@ function drawHouse(g, h) {
     poly(g, [P(xm - 0.24, yb, 4), P(xm + 0.24, yb, 4), P(xm + 0.24, yb, 20), P(xm, yb, 23), P(xm - 0.24, yb, 20)], white);
     poly(g, [P(xm - 0.17, yb, 4), P(xm + 0.17, yb, 4), P(xm + 0.17, yb, 18), P(xm - 0.17, yb, 18)], h.tavern ? '#2e5f9a' : '#4a2a18');
   }
+  if (h.shop && facing(0, 1)) {
+    // a striped awning over the front and a painted signboard above it
+    for (let i = 0; i < 6; i++) {
+      const u0 = x0 + 0.15 + i * (x1 - x0 - 0.3) / 6, u1 = u0 + (x1 - x0 - 0.3) / 6;
+      poly(g, [P(u0, yb, 17), P(u1, yb, 17), P(u1, yb + 0.45, 12), P(u0, yb + 0.45, 12)], i % 2 ? '#f4efe4' : h.shop.col);
+    }
+    poly(g, [P(x0 + 0.2, yb + 0.01, 25), P(x1 - 0.2, yb + 0.01, 25), P(x1 - 0.2, yb + 0.01, 19), P(x0 + 0.2, yb + 0.01, 19)], '#f4efe4');
+    const [a0, a1] = P(x0 + 0.25, yb, 20.5), [b0, b1] = P(x1 - 0.25, yb, 20.5);
+    g.save(); g.translate(a0, a1); g.rotate(Math.atan2(b1 - a1, b0 - a0));
+    g.fillStyle = h.shop.col; g.font = '700 6px Mukta, sans-serif'; g.textBaseline = 'middle'; g.fillText(h.shop.name, 1, 0, hyp(b0 - a0, b1 - a1) - 2);
+    g.restore();
+  }
   if (h.tavern && facing(1, 0)) {
     poly(g, [P(x1 + 0.02, yb - 0.6, 22), P(x1 + 0.55, yb - 0.6, 22), P(x1 + 0.55, yb - 0.6, 13), P(x1 + 0.02, yb - 0.6, 13)], '#1d3b2a');
     const [tx, ty] = P(x1 + 0.3, yb - 0.6, 15);
@@ -1366,11 +1407,25 @@ function drawProp(g, p) {
     box(g, cx - 0.24, cy - 0.24, cx + 0.24, cy + 0.24, 18, 21, '#c9733a', '#b8452a', '#8f3420');
     const [tx, ty] = P(cx, cy, 21);
     g.fillStyle = '#2f6a2a'; for (let i = 0; i < 9; i++) { g.beginPath(); g.arc(tx + Math.cos(i * 2.4) * 5, ty - 4 - (i % 3) * 3, 2.6, 0, 7); g.fill(); }
+    if (streetOn()) { const [dx, dy] = P(cx, cy + 0.26, 7), f = 1 + Math.sin(S.t * 13 + p.x) * 0.15; g.fillStyle = '#7d4524'; g.fillRect(dx - 3, dy - 1, 6, 2); g.fillStyle = '#ffd36b'; g.beginPath(); g.ellipse(dx, dy - 4, 1.6 * f, 3.2 * f, 0, 0, 7); g.fill(); }
+  } else if (p.kind === 'ghumti') {
+    // a tiny devli: a laterite niche with a tiled cap, a red-painted stone and a diya in front
+    box(g, cx - 0.26, cy - 0.22, cx + 0.26, cy + 0.22, 0, 16, '#b45d38', '#9c4a2c', '#7a3820');
+    hipRoof(g, cx - 0.32, cy - 0.28, cx + 0.32, cy + 0.28, 16, 7, false);
+    const [nx, ny] = P(cx, cy + 0.23, 4); g.fillStyle = '#2a1a14'; g.fillRect(nx - 5, ny - 10, 10, 10);
+    g.fillStyle = '#e2571e'; g.beginPath(); g.ellipse(nx, ny - 4, 3, 4, 0, 0, 7); g.fill();
+    const [fx, fy] = P(cx, cy + 0.36, 1); g.fillStyle = '#7d4524'; g.beginPath(); g.ellipse(fx, fy, 4, 2, 0, 0, 7); g.fill();
+    if (streetOn()) { const f = 1 + Math.sin(S.t * 13 + p.x) * 0.15; g.fillStyle = '#ffd36b'; g.beginPath(); g.ellipse(fx + 1, fy - 4, 1.8 * f, 3.6 * f, 0.2, 0, 7); g.fill(); }
   } else if (p.kind === 'cross' || p.kind === 'khuris') {
     const big = p.kind === 'khuris', r = big ? 0.26 : 0.18, ph = big ? 12 : 8;
     box(g, cx - r, cy - r, cx + r, cy + r, 0, ph, '#f1ece2', '#e2dccf', '#bcb5a6');
     const [bx, by] = P(cx, cy, ph), hgt = big ? 36 : 22;
     g.fillStyle = '#f4efe5'; g.fillRect(bx - 2, by - hgt, 4, hgt); g.fillRect(bx - (big ? 9 : 6), by - hgt * 0.78, big ? 18 : 12, 4);
+    if (streetOn()) for (const u of big ? [-6, -2, 2, 6] : [-3, 3]) {
+      const f = 1 + Math.sin(S.t * 12 + u + p.x) * 0.18;
+      g.fillStyle = '#f4efe5'; g.fillRect(bx + u - 1, by - 5, 2, 5);
+      g.fillStyle = '#ffd36b'; g.beginPath(); g.ellipse(bx + u, by - 7, 1.3 * f, 2.6 * f, 0, 0, 7); g.fill();
+    }
     if (big) {
       g.fillStyle = '#f29a2a'; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(bx - 8 + i * 3.2, by + 2 + (i % 2), 2.2, 0, 7); g.fill(); }
       g.fillStyle = '#f1ead8'; g.fillRect(bx + 8, by - 4, 2, 6);
@@ -1555,6 +1610,41 @@ function drawBillboard(g, p) {
   const [lx, ly] = P(p.x + 1, yp + 0.35, z1 + 6);
   line(g, P(p.x + 1, yp, z1 + 2), [lx, ly], '#5a5f66', 1.5);
   g.fillStyle = '#f4f0dc'; g.beginPath(); g.arc(lx, ly, 2, 0, 7); g.fill();
+}
+// every kind of road traffic, pointed along its smooth heading
+function drawVehicle(g, c) {
+  const [hx, hy] = carDir(c), along = Math.abs(hx) >= Math.abs(hy), dx = along ? Math.sign(hx) : 0, dy = along ? 0 : Math.sign(hy);
+  if (c.type === 'ktc' || c.type === 'private') return drawBus(g, c, dx, dy);
+  if (c.type === 'pilot') { drawBike(g, c.x, c.y, hx, hy, '#f2c230'); const [sx, sy] = iso(c.x, c.y); blob(g, sx, sy - 22, 5, 6, '#3a3a44', 1.2); cartoonHead(g, sx, sy - 32, 5.5, { skin: '#9a6a44', hair: '#1a100a', face: hx - hy >= 0 ? 1 : -1, moustache: true }); return; }
+  if (c.type === 'rick') {
+    const hl = along ? 0.5 : 0.3, hw = along ? 0.3 : 0.5;
+    const [sx, sy] = iso(c.x, c.y); g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(sx + 2, sy + 2, 20, 9, 0, 0, 7); g.fill();
+    box(g, c.x - hl, c.y - hw, c.x + hl, c.y + hw, 3, 12, '#1d1d22', '#2a2a30', '#18181c');
+    box(g, c.x - hl + 0.05, c.y - hw + 0.05, c.x + hl - 0.05, c.y + hw - 0.05, 12, 24, '#f2c230', '#e0b020', '#c0960e');
+    return;
+  }
+  drawCar(g, c.x, c.y, dx, dy, c.col, true);
+}
+function drawBus(g, c, dx, dy) {
+  const along = dx !== 0, hl = along ? 1.3 : 0.42, hw = along ? 0.42 : 1.3, ktc = c.type === 'ktc';
+  const [sx, sy] = iso(c.x, c.y);
+  g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(sx + 3, sy + 3, 56, 24, 0, 0, 7); g.fill();
+  const body = ktc ? '#f2efe6' : c.col, band = ktc ? '#2f6e3a' : '#f4efe4';
+  box(g, c.x - hl, c.y - hw, c.x + hl, c.y + hw, 4, 30, body, shade(body, 0.86), shade(body, 0.7));
+  // windows in a dark band, and a stripe below them
+  for (const [nx, ny, sd] of [[0, 1, 'y1'], [1, 0, 'x1'], [0, -1, 'y0'], [-1, 0, 'x0']]) {
+    if (!facing(nx, ny)) continue;
+    wallFace(g, c.x - hl, c.y - hw, c.x + hl, c.y + hw, sd, 18, 27, '#2a3440', '#222a34');
+    wallFace(g, c.x - hl, c.y - hw, c.x + hl, c.y + hw, sd, 11, 15, band, shade(band, 0.85));
+  }
+  // its name on the side that faces you
+  const side = facing(0, 1) && along ? [P(c.x - hl + 0.15, c.y + hw, 8), P(c.x + hl - 0.15, c.y + hw, 8)] : facing(1, 0) && !along ? [P(c.x + hw * 0 + (along ? 0 : 0.42), c.y + hl - 0.15, 8), P(c.x + 0.42, c.y - hl + 0.15, 8)] : null;
+  if (side) {
+    const [[a0, a1], [b0, b1]] = side;
+    g.save(); g.translate(a0, a1); g.rotate(Math.atan2(b1 - a1, b0 - a0));
+    g.fillStyle = ktc ? '#2f6e3a' : '#fff'; g.font = '700 7px Mukta, sans-serif'; g.textBaseline = 'bottom'; g.fillText(ktc ? 'KADAMBA' : c.name, 2, 0, hyp(b0 - a0, b1 - a1) - 4);
+    g.restore();
+  }
 }
 // a small hatchback heading along (dx, dy), one of the four map directions
 function drawCar(g, x, y, dx, dy, col, lit) {
@@ -1746,7 +1836,8 @@ function driveCar(c, dt, go) {
   let dh = want - c.h; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
   const turn = Math.max(-1, Math.min(1, dh / 0.5));
   c.h += Math.sign(dh) * Math.min(Math.abs(dh), dt * (Math.abs(dh) > 2.5 ? 6 : 3.2));
-  const target = go ? 3.2 * (1 - 0.55 * Math.abs(turn)) : 0;
+  const top = { ktc: 2.6, private: 4.6, rick: 2.4, pilot: 3.8 }[c.type] || 3.2;
+  const target = go ? top * (1 - 0.55 * Math.abs(turn)) : 0;
   c.v += (target - c.v) * Math.min(1, dt * (target > c.v ? 1.6 : 4));
   c.x += Math.cos(c.h) * c.v * dt; c.y += Math.sin(c.h) * c.v * dt;
 }
@@ -2298,10 +2389,15 @@ function update(dt) {
   if (S.burnT < 0 && S.fallT <= 0) moveEnt(player, ix * sp * dt, iy * sp * dt);
   if (ride) updateBike(dt);
 
+  updateWalkers(dt);
   // traffic on the main road waits for a child standing in front of it
   for (const c of S.cars) {
     const ax = player.x - c.x, ay = player.y - c.y, ahead = ax * c.dx + ay * c.dy, side = Math.abs(ax * c.dy - ay * c.dx);
-    driveCar(c, dt, !(side < 0.9 && ahead > 0 && ahead < 2.4));
+    const busStop = exits.find(e => e.kind === 'bus');
+    if ((c.type === 'ktc' || c.type === 'private') && busStop && hyp(c.x - busStop.x, c.y - busStop.y) < 1.6 && !(c.stopT < 0)) { c.stopT = (c.stopT || 3) - dt; if (c.stopT <= 0) c.stopT = -6; }
+    else if (c.stopT < 0) c.stopT = Math.min(0, c.stopT + dt);
+    driveCar(c, dt, !(side < 0.9 && ahead > 0 && ahead < (c.type === 'ktc' || c.type === 'private' ? 3.2 : 2.4)) && !(c.stopT > 0));
+    if (c.type === 'private' && Math.random() < dt * 0.15 && hyp(c.x - player.x, c.y - player.y) < 10) SFX.play('horn', c.x, c.y, 18);
   }
   for (const b of S.boats) wander(b, WATER, 0.7, dt, 0.7);
 
@@ -2903,16 +2999,41 @@ const QUESTS = {
     ask: 'Plastic everywhere after last night! Collect the bags along the lanes and put them in the bin by the road, baba.', thanks: 'Look how clean the vaddo is! The Rakhondar likes a clean village.', reward: 150 },
   poee: { giver: 'Mai', who: 'the baker, with a basket of hot poee', look: { body: '#c9733a', legs: '#c9733a', hair: '#1a100a', h: 0.95, basket: true },
     ask: 'Take these hot poee to three houses before they go cold. I have marked the doors.', thanks: 'All delivered, and still warm! Here, one poee for you.', reward: 120 },
+  letters: { giver: 'Anton the postman', who: 'with a bag of letters', look: { body: '#c9b07a', legs: '#5a4a3a', hair: '#1a100a', h: 1 },
+    ask: 'Three letters, and no house numbers on any of them! Read me the descriptions, find each house and hand the letter in at its door.', thanks: 'Every letter at the right door! You know this vaddo better than I do.', reward: 160 },
   hen: { giver: 'Tia Rosa', who: 'looking everywhere for her hen', look: { body: '#2f4f7a', legs: '#2f4f7a', hair: '#e0dcd2', h: 0.92 },
     ask: 'My hen Pinky ran off again! She is somewhere in the fields. Catch her and bring her home, please.', thanks: 'Pinky! Naughty girl. Thank you, child, come for sorpotel on Sunday.', reward: 130 }
 };
 // quests come one after another all day: when one is done, someone else in the vaddo asks for help.
 // The order is the same for everyone on a given date; the first one each day builds the streak.
+// a house in words: its colour, its size, what stands in its yard, and which way it lies from the nearest landmark
+const WALL_NAMES = { '#f2c230': 'yellow', '#2f6fd0': 'blue', '#e8e0cc': 'white', '#2fa08a': 'green', '#e0763a': 'orange', '#4a8fe0': 'sky-blue', '#d0344a': 'red', '#f4d84a': 'lemon-yellow', '#2f6e6a': 'teal' };
+function describeHouse(h) {
+  const cx = h.x + h.w / 2, cy = h.y + h.h;
+  const marks = exits.map(e => ({ x: e.x, y: e.y, what: PLACE_NAMES[e.kind] })).filter(m => m.what).concat(sights.map(sg => ({ x: sg.x + 0.5, y: sg.y + 0.5, what: sg.name })));
+  const m = marks.sort((a, b) => hyp(a.x - cx, a.y - cy) - hyp(b.x - cx, b.y - cy))[0];
+  const bits = [`the ${h.w >= 4 ? 'long' : 'small'} ${WALL_NAMES[h.wall] || 'painted'} house`];
+  bits.push(h.shop ? `with the ${h.shop.name.toLowerCase()}` : h.tavern ? 'with the bar' : h.faith === 'cross' ? 'with a cross in the yard' : 'with a tulsi in the yard');
+  if (h.kandil) bits.push('and a paper lantern on the balcão');
+  let where = '';
+  if (m) {
+    const ang = Math.atan2(-(cy - m.y), cx - m.x) * 180 / Math.PI, dirs = ['east', 'north-east', 'north', 'north-west', 'west', 'south-west', 'south', 'south-east'];
+    const d = Math.round(hyp(cx - m.x, cy - m.y) * 12 / 10) * 10;
+    where = d < 25 ? `, right by ${m.what}` : `, about ${d} m ${dirs[(Math.round(ang / 45) + 8) % 8]} of ${m.what}`;
+  }
+  // which way its lane runs
+  const dx = h.x + Math.floor(h.w / 2), dy = h.y + h.h;
+  let ew = 0, ns = 0;
+  for (let k = -3; k <= 3; k++) { if ([LANE, ROAD].includes(at(dx + k, dy)) || [LANE, ROAD].includes(at(dx + k, dy + 1))) ew++; if ([LANE, ROAD].includes(at(dx, dy + k)) || [LANE, ROAD].includes(at(dx + 1, dy + k))) ns++; }
+  const lane = ew >= 4 && ew > ns ? ', on a lane running east to west' : ns >= 4 ? ', on a lane running north to south' : '';
+  const out = bits.join(' ') + where + lane;
+  return out;
+}
 function setupQuest(n = 0) {
   const d = goaDay(S.dayIdx), key = dayKey(d);
   let h = 0; for (const c of key) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  const order = ['garbage', 'poee', 'hen'], rot = h % 3;
-  const kind = order[(rot + n) % 3], Q = QUESTS[kind], r = rng(h + n * 7919);
+  const order = ['garbage', 'letters', 'poee', 'hen'], rot = h % 4;
+  const kind = order[(rot + n) % 4], Q = QUESTS[kind], r = rng(h + n * 7919);
   const from = n ? { x: Math.floor(player.x), y: Math.floor(player.y) } : START;
   const near = lanes.filter(([x, y]) => { const dd = hyp(x - from.x, y - from.y); return dd > (n ? 4 : 1.5) && dd < (n ? 9 : 4); });
   const gs = near[Math.floor(r() * near.length)] || [START.x + 1, START.y];
@@ -2927,6 +3048,16 @@ function setupQuest(n = 0) {
     road.sort((a, b) => hyp(a[0] - START.x, a[1] - START.y) - hyp(b[0] - START.x, b[1] - START.y));
     const b = road[Math.min(road.length - 1, 3)] || [gs[0] + 1, gs[1]];
     q.bin = { x: b[0] + 0.5, y: b[1] + 0.5 };
+  } else if (kind === 'letters') {
+    // three houses, each described well enough to tell it from its neighbours
+    const ok = houses.filter(hh => { const dx = hh.x + Math.floor(hh.w / 2), dy = hh.y + hh.h; return dist[dy * W + dx] > 5 && dist[dy * W + dx] < 70; });
+    for (let t = 0; t < 300 && q.items.length < 3 && ok.length; t++) {
+      const hh = ok[Math.floor(r() * ok.length)];
+      if (q.items.some(o => o.house === hh)) continue;
+      const cx = hh.x + hh.w / 2, cy = hh.y + hh.h;
+      const near = exits.map(e => ({ x: e.x, y: e.y, what: PLACE_NAMES[e.kind] })).filter(m => m.what).concat(sights.map(sg => ({ x: sg.x + 0.5, y: sg.y + 0.5, what: sg.name }))).sort((a, b) => hyp(a.x - cx, a.y - cy) - hyp(b.x - cx, b.y - cy))[0] || { x: cx, y: cy, what: 'the house' };
+      q.items.push({ x: hh.x + Math.floor(hh.w / 2) + 0.5, y: hh.y + hh.h + 0.5, got: false, house: hh, desc: describeHouse(hh), near });
+    }
   } else if (kind === 'poee') {
     const doors = houses.map(hh => [hh.x + Math.floor(hh.w / 2), hh.y + hh.h]).filter(([x, y]) => !solid(at(x, y)) && dist[y * W + x] > 6 && dist[y * W + x] < 40);
     for (let t = 0; t < 200 && q.items.length < 3 && doors.length; t++) { const [x, y] = doors[Math.floor(r() * doors.length)]; if (q.items.every(o => hyp(o.x - x, o.y - y) > 5)) q.items.push({ x: x + 0.5, y: y + 0.5, got: false }); }
@@ -2946,6 +3077,7 @@ function newLifeDay() {
   const qn = store.get('rk-quest-n', {});
   setupQuest(qn.day === key ? qn.n : 0);
   scatterLitter();
+  setupWalkers();
 }
 // litter lies about the lanes every day: pick it up whenever you pass, quest or no quest
 function scatterLitter() {
@@ -3022,6 +3154,15 @@ function updateLife(dt) {
   if (q.kind === 'garbage') {
     for (const it of q.items) if (!it.got && hyp(it.x - px, it.y - py) < 0.75) { it.got = true; q.got++; SFX.play('chime', it.x, it.y); addPoints(10, 'bag'); }
     if (q.got === q.items.length && hyp(q.bin.x - px, q.bin.y - py) < 1.4) { q.state = 'return'; SFX.play('saved'); whisper('All the bags in the bin. Go and tell Shantabai.'); }
+  } else if (q.kind === 'letters') {
+    const cur = q.items.find(i => !i.got);
+    for (const hh of houses) {
+      const dx = hh.x + Math.floor(hh.w / 2) + 0.5, dy = hh.y + hh.h + 0.5;
+      if (hyp(dx - px, dy - py) > 0.9) continue;
+      const it = q.items.find(i => i.house === hh && !i.got);
+      if (it) { it.got = true; q.got++; SFX.play('chime', dx, dy); addPoints(15, 'letter'); const nx = q.items.find(i => !i.got); whisper(nx ? `The right door! Next letter: ${nx.desc}.` : 'All three letters delivered. Back to Anton.'); if (!nx) q.state = 'return'; }
+      else if (cur && q.wrongAt !== hh) { q.wrongAt = hh; SFX.play('wrong'); whisper(`Not this one. You want ${cur.desc}.`); }
+    }
   } else if (q.kind === 'poee') {
     for (const it of q.items) if (!it.got && hyp(it.x - px, it.y - py) < 1.1) { it.got = true; q.got++; SFX.play('chime', it.x, it.y); addPoints(10, 'poee'); }
     if (q.got === q.items.length) { q.state = 'return'; whisper('Every basket delivered. Back to Mai at the bakery.'); }
@@ -3061,6 +3202,7 @@ function lifeObjective() {
   if (!q || q.done && q.state !== 'return') return null;
   if (q.state === 'offer' || q.state === 'return' || (q.kind === 'hen' && q.hen.caught)) return spot(q.giver.x, q.giver.y, q.giver.role.name);
   if (q.kind === 'hen') return spot(q.hen.x, q.hen.y, 'Pinky the hen');
+  if (q.kind === 'letters') { const it = q.items.find(i => !i.got); if (it) return spot(it.near.x, it.near.y, it.near.what); return spot(q.giver.x, q.giver.y, q.giver.role.name); }
   const left = q.items.filter(i => !i.got).sort((a, b) => hyp(a.x - player.x, a.y - player.y) - hyp(b.x - player.x, b.y - player.y));
   if (left.length) return spot(left[0].x, left[0].y, q.kind === 'garbage' ? 'a garbage bag' : 'a marked door');
   return q.kind === 'garbage' ? spot(q.bin.x, q.bin.y, 'the bin') : spot(q.giver.x, q.giver.y, q.giver.role.name);
@@ -3077,6 +3219,7 @@ function lifeObjectiveText() {
   else if (q.state === 'return') t = `Go back to ${q.giver.role.name}`;
   else if (q.kind === 'garbage') t = q.got < q.items.length ? `Collect the garbage ${q.got}/${q.items.length}` : 'Put the bags in the bin';
   else if (q.kind === 'poee') t = `Deliver the poee ${q.got}/${q.items.length}`;
+  else if (q.kind === 'letters') { const it = q.items.find(i => !i.got); t = it ? `Letter ${q.got + 1}/${q.items.length}: ${it.desc}` : 'Go back to Anton'; }
   else t = q.hen.caught ? 'Take Pinky home to Tia Rosa' : 'Catch Pinky the hen';
   return `${wx} · ${t}`;
 }
@@ -3518,7 +3661,8 @@ function render() {
   for (const s of statics) if (inView(s.sx, s.sy)) list.push(s);
   list.push({ key: depth(player.x, player.y), draw: g => drawChild(g, 1) });
   for (const d of demons) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: depth(d.x, d.y), draw: g => drawDemon(g, d) }); }
-  for (const c of S.cars) { const [sx, sy] = iso(c.x, c.y); if (inView(sx, sy)) list.push({ key: depth(c.x, c.y), draw: g => { const [hx, hy] = carDir(c), along = Math.abs(hx) >= Math.abs(hy); drawCar(g, c.x, c.y, along ? Math.sign(hx) : 0, along ? 0 : Math.sign(hy), c.col, true); } }); }
+  for (const c of S.cars) { const [sx, sy] = iso(c.x, c.y); if (inView(sx, sy)) list.push({ key: depth(c.x, c.y), draw: g => drawVehicle(g, c) }); }
+  for (const wk of S.walkers || []) { if (wk.alpha <= 0.02) continue; const [sx, sy] = iso(wk.x, wk.y); if (inView(sx, sy)) list.push({ key: depth(wk.x, wk.y), draw: g => drawPerson(g, wk) }); }
   if (S.npc) list.push({ key: depth(S.npc.x, S.npc.y), draw: g => { if (S.npc.pillion) { g.save(); g.translate(0, -8); drawPerson(g, S.npc); g.restore(); } else drawPerson(g, S.npc); } });
   for (const b of S.bikes) { const [sx, sy] = iso(b.x, b.y); if (inView(sx, sy)) list.push({ key: depth(b.x, b.y), draw: g => drawBike(g, b.x, b.y, b.hx, b.hy, b.col) }); }
   for (const d of S.dogs) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: depth(d.x, d.y), draw: g => drawDog(g, d) }); }
@@ -3569,6 +3713,7 @@ function render() {
     if (l.kind === 'effigy') r *= 1 + Math.sin(t * 7 + l.x) * 0.05;
     if (l.off) on = false;
     if (l.kind === 'seal') on = l.seal.lit;
+    if (l.kind === 'candle') { on = streetOn(); r *= 1 + Math.sin(t * 11 + l.x * 3) * 0.06; }
     if (l.kind === 'tube') { on = streetOn() && tubeOn(l); if (on && l.flick) r *= 0.85 + 0.15 * Math.abs(Math.sin(t * 40 + l.ph)); }
     if (on) { hole(l.x, l.y, r, 0.95, l.lift || 4); glows.push([l, r]); }
   }
@@ -3782,7 +3927,7 @@ function render() {
   }
   // headlight beams on the main road
   ctx.fillStyle = 'rgba(255,240,190,.22)';
-  for (const c of S.cars) { const [hx, hy] = carDir(c); onGround(ctx, c.x + hx * 0.75, c.y + hy * 0.75, g => { g.rotate(Math.atan2(hy, hx)); g.beginPath(); g.moveTo(0, -6); g.lineTo(90, -24); g.lineTo(90, 24); g.lineTo(0, 6); g.fill(); }); }
+  if (streetOn()) for (const c of S.cars) { const [hx, hy] = carDir(c); onGround(ctx, c.x + hx * 0.75, c.y + hy * 0.75, g => { g.rotate(Math.atan2(hy, hx)); g.beginPath(); g.moveTo(0, -6); g.lineTo(90, -24); g.lineTo(90, 24); g.lineTo(0, 6); g.fill(); }); }
   // fishing canoes drifting on the river with their lanterns
   for (const b of S.boats) {
     const bx = b.x, by = b.y, [sx, sy] = iso(bx, by);
@@ -4267,6 +4412,47 @@ function endNight(kind) {
   (nb || document.getElementById('startBtn')).focus();
 }
 
+/* ---------- villagers: out on the lanes by day, home by dark; shopkeepers at their doors ---------- */
+const WALKER_LOOKS = [
+  { body: '#d0344a', legs: '#d0344a', hair: '#1a100a', h: 0.92, basket: true }, { body: '#3f6fa8', legs: '#3a3a44', hair: '#2a2018', h: 1 },
+  { body: '#e8e0cc', legs: '#5a4a3a', hair: '#cfcac0', h: 0.95, belly: true }, { body: '#2fa08a', legs: '#2fa08a', hair: '#1a100a', h: 0.9 },
+  { body: '#e0a33a', legs: '#c08a5a', hair: '#1a100a', h: 0.78 }, { body: '#5aa05a', legs: '#3a4a6a', hair: '#1a100a', h: 0.8 },
+  { body: '#8a2f5a', legs: '#8a2f5a', hair: '#e0dcd2', h: 0.9, basket: true }, { body: '#c9733a', legs: '#5a4a3a', hair: '#1a100a', h: 1, net: true }
+];
+function setupWalkers() {
+  const out = [], r = rng(S.dayIdx * 31 + 7);
+  if (!CH.life || !lanes.length) { S.walkers = out; return; }
+  const n = Math.min(16, Math.round(lanes.length / 45));
+  for (let i = 0; i < n; i++) {
+    const [x, y] = lanes[Math.floor(r() * lanes.length)];
+    out.push({ x: x + 0.5, y: y + 0.5, r: 0.25, tile: -1, dx: 1, dy: 0, face: 1, moving: true, alpha: 0, state: 'walk', role: { look: WALKER_LOOKS[i % WALKER_LOOKS.length] }, spd: 0.9 + r() * 0.5, pause: 0 });
+  }
+  // a shopkeeper stands at each shop's door by day
+  for (const h of houses) if (h.shop) out.push({ x: h.x + Math.floor(h.w / 2) + 0.5, y: h.y + h.h + 0.35, r: 0.25, face: 1, moving: false, alpha: 0, state: 'shop', role: { look: WALKER_LOOKS[(h.x + h.y) % WALKER_LOOKS.length] } });
+  S.walkers = out;
+}
+function updateWalkers(dt) {
+  if (!S.walkers) return;
+  const day = CH.life && !isNight() && sunLight(S.dayMin) > 0.4;
+  for (const w of S.walkers) {
+    w.alpha = Math.max(0, Math.min(1, w.alpha + (day ? dt : -dt) * 0.6));
+    if (w.state !== 'walk' || w.alpha <= 0) continue;
+    if (w.pause > 0) { w.pause -= dt; w.moving = false; continue; }
+    // stroll tile to tile along the lanes, now and then stopping for a chat
+    const tx = Math.floor(w.x), ty = Math.floor(w.y), ti = ty * W + tx;
+    if (ti !== w.tile && hyp(w.x - tx - 0.5, w.y - ty - 0.5) < 0.12) {
+      w.tile = ti; w.x = tx + 0.5; w.y = ty + 0.5;
+      const opts = D4.filter(([ax, ay]) => [LANE, PLAZA, COURT].includes(at(tx + ax, ty + ay)) && !(ax === -w.dx && ay === -w.dy));
+      const straight = opts.find(([ax, ay]) => ax === w.dx && ay === w.dy);
+      const nx = straight && Math.random() < 0.7 ? straight : opts[Math.floor(Math.random() * opts.length)];
+      if (nx) { w.dx = nx[0]; w.dy = nx[1]; } else { w.dx = -w.dx; w.dy = -w.dy; }
+      if (Math.random() < 0.04) w.pause = 2 + Math.random() * 4;
+    }
+    w.x += w.dx * w.spd * dt; w.y += w.dy * w.spd * dt; w.moving = true;
+    const sd = w.dx - w.dy; if (Math.abs(sd) > 0.1) w.face = Math.sign(sd);
+  }
+}
+
 /* ---------- exploring: the village starts in shadow and opens as you walk it ---------- */
 // fog[i] is how well tile i is known, 0 (never seen) to 255 (seen); kept per village in this browser
 const FOG_R = 9;
@@ -4382,6 +4568,12 @@ function drawMini() {
   const [px, py] = at2(player.x, player.y), [hx, hy] = at2(player.x + player.hx * 3, player.y + player.hy * 3);
   mctx.strokeStyle = '#f2b441'; mctx.lineWidth = 1.5 * r2; mctx.beginPath(); mctx.moveTo(px, py); mctx.lineTo(hx, hy); mctx.stroke();
   dot(player.x, player.y, 3.2, '#f2b441', '#0a1020');
+  // north: which way map north points in this view
+  const [nx0, ny0] = at2(W / 2, H / 2), [nx1, ny1] = at2(W / 2, H / 2 - 10), nl = hyp(nx1 - nx0, ny1 - ny0) || 1;
+  const ux = (nx1 - nx0) / nl, uy = (ny1 - ny0) / nl, cxm = mini.width - 14 * r2, cym = 14 * r2;
+  mctx.strokeStyle = '#ece4cf'; mctx.lineWidth = 1.5 * r2; mctx.beginPath(); mctx.moveTo(cxm - ux * 7 * r2, cym - uy * 7 * r2); mctx.lineTo(cxm + ux * 7 * r2, cym + uy * 7 * r2); mctx.stroke();
+  mctx.fillStyle = '#ece4cf'; mctx.font = `700 ${9 * r2}px Mukta, sans-serif`; mctx.textAlign = 'center'; mctx.textBaseline = 'middle';
+  mctx.fillText('N', cxm + ux * 11 * r2, cym + uy * 11 * r2); mctx.textAlign = 'start';
 }
 mini.addEventListener('click', () => showPlaces());
 mini.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); showPlaces(); } });
@@ -4396,13 +4588,14 @@ function placesList() {
     out.push({ x: e.x, y: e.y, tx: e.tx, ty: e.ty, what: nm.replace(/^the /, ''), type: e.kind });
   }
   for (const sg of sights) out.push({ x: sg.x + 0.5, y: sg.y + 0.5, tx: sg.x, ty: sg.y, what: sg.name, type: 'sight', visited: visitedSight(sg) });
+  for (const h of houses) if (h.shop) { const dx = h.x + Math.floor(h.w / 2), dy = h.y + h.h; out.push({ x: dx + 0.5, y: dy + 0.5, tx: dx, ty: dy, what: h.shop.name.toLowerCase().replace(/^./, c => c.toUpperCase()), type: 'shop' }); }
   if (CH.life && S.quest && !isNight() && !(S.quest.done && S.quest.state !== 'return')) out.push({ x: S.quest.giver.x, y: S.quest.giver.y, tx: Math.floor(S.quest.giver.x), ty: Math.floor(S.quest.giver.y), what: S.quest.giver.role.name, type: 'quest' });
   const left = (S.litter || []).filter(l => !l.got);
   if (left.length) { const l = left.sort((a, b) => hyp(a.x - player.x, a.y - player.y) - hyp(b.x - player.x, b.y - player.y))[0]; out.push({ x: l.x, y: l.y, tx: Math.floor(l.x), ty: Math.floor(l.y), what: `the nearest litter (${left.length} left)`, type: 'litter' }); }
   for (const p of out) p.d = Math.round(hyp(p.x - player.x, p.y - player.y) * 12);
   return out.sort((a, b) => a.d - b.d);
 }
-const PLACE_ICON = { temple: '#f0c86a', chapel: '#ffffff', bus: '#8fd0ff', ferry: '#8fd0ff', devli: '#9fe8d6', sight: '#ffe1a0', quest: '#f2b441', litter: '#e8e4dc' };
+const PLACE_ICON = { shop: '#e0763a', temple: '#f0c86a', chapel: '#ffffff', bus: '#8fd0ff', ferry: '#8fd0ff', devli: '#9fe8d6', sight: '#ffe1a0', quest: '#f2b441', litter: '#e8e4dc' };
 function showPlaces() {
   if (!S || !player) return;
   const paused = S.mode === 'play';

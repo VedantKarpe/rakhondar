@@ -48,6 +48,10 @@ Demons differ by where they rise. The names come from Goan and Konkan folklore a
 
 **The beach.** Calangute, in Bardez, has the sea, a strip of sand with surf, shacks with strings of bulbs and beach umbrellas. The importer paints the sea from OpenStreetMap's coastline (land on its left, sea on its right) and a band of sand along it.
 
+**Village life.** By day villagers stroll the lanes and stop to chat, and shopkeepers stand at the doors of the village shops (kirana store, bakery, pharmacy, fish market and others), each with a striped awning and a painted sign. The roads carry cars, a Kadamba bus, racing private buses with their names on the side and horns going, black-and-yellow rickshaws and the yellow-mudguard motorcycle pilots; the buses pull in at the bus stop. From dusk, candles burn at every cross, a diya at every tulsi, and diyas at the little roadside devlis where lanes meet.
+
+**The postman.** One of the day's quests: Anton has three letters and no house numbers. Each house is described by its colour and size, what stands in its yard, how far and which way it lies from the nearest landmark, and which way its lane runs. The mini map has a north marker so the directions read on screen. Take each letter to the right door; a wrong door tells you so.
+
 **Finding places.** Tap the mini map or press P for the village map: every temple, church, stop, ferry, devli and sight, the day's quest giver and the nearest litter, numbered on the map with their distances. Guide me puts an arrow on the way and the distance in the objective line until you arrive.
 
 To add a village, import it with `tools/osm_import.py` (below) and add it to `VILLAGE_TALUKA` and `VILLAGE_TITLES` in `rakhondar.html`. The importer's `--size` must match `W` and `H` in the game.
