@@ -2595,6 +2595,49 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 };
+/* ---------- the shared board and each vaddo's quest progress, kept in the artifact's database ---------- */
+// board/<player> holds each player's best entry; vquest/<player> the last daily quest they finished.
+// Each player writes only their own documents; everyone reads them all.
+const VADDO_GOAL = 5;   // neighbours who finish the day's quest before the vaddo's quest counts as done
+const SHARED = { ok: false, db: null, uid: null, board: [], vq: {} };
+(async () => {
+  try {
+    if (!window.claude || !window.claude.use) return;
+    const [db, user] = await Promise.all([claude.use('db'), claude.use('user')]);
+    if (!db || !user) return;
+    const uid = await user.id();
+    if (!uid) return;
+    Object.assign(SHARED, { ok: true, db, uid });
+    db.collection('board').orderBy('pts', 'desc').limit(10).onSnapshot(s => {
+      SHARED.board = s.docs.map(d => Object.assign({ id: d.id }, d.data())); refreshShared();
+    }, () => {});
+    db.collection('vquest').onSnapshot(s => {
+      const vq = {};
+      for (const d of s.docs) { const x = d.data() || {}; if (typeof x.village !== 'string' || typeof x.day !== 'string') continue; const v = vq[x.village] || (vq[x.village] = {}); v[x.day] = (v[x.day] || 0) + 1; }
+      SHARED.vq = vq; refreshShared();
+    }, () => {});
+  } catch (e) {}
+})();
+const vaddoCount = (village, day) => (SHARED.vq[village] || {})[day] || 0;
+async function pushShared(q) {
+  if (!SHARED.ok) return;
+  const pts = store.get('rk-points', 0), streak = store.get('rk-streak', 0);
+  try { await SHARED.db.doc('board/' + SHARED.uid).set({ name: NAME, pts, streak, village: CH.village, place: CH.place, day: q.key }); } catch (e) {}
+  try { await SHARED.db.doc('vquest/' + SHARED.uid).set({ village: CH.village, day: q.key, kind: q.kind }); } catch (e) {}
+}
+function boardHtml() {
+  const today = dayKey(goaDay());
+  if (!SHARED.ok) {
+    const board = store.get('rk-board', []);
+    return board.length ? `<div class="board">${board.slice(0, 5).map((b, i) => `<span>${i + 1}</span><span>${esc(b.name)} · ${esc(b.place)} · ${b.day}</span><b>${b.pts}</b>`).join('')}</div>`
+      : '<p style="font-size:13px;color:var(--muted)">Finish a daily quest to get on the board. Open the game on claude.ai to share the board with everyone.</p>';
+  }
+  const vaddos = ['tonca', 'panjim'].map(v => { const n = vaddoCount(v, today); return `<span>${n >= VADDO_GOAL ? '✓' : ''}</span><span>${VILLAGE_TITLES[v]} · ${n >= VADDO_GOAL ? 'the vaddo finished today’s quest' : `today’s quest: ${n} of ${VADDO_GOAL} neighbours`}</span><b>${n}</b>`; }).join('');
+  const rows = SHARED.board.slice(0, 8).map((b, i) => `<span>${i + 1}</span><span>${esc(b.name || 'Someone')}${b.id === SHARED.uid ? ' (you)' : ''} · ${esc(b.place || '')}</span><b>${Math.round(+b.pts || 0)}</b>`).join('');
+  return `<span class="eyebrow">Vaddos today</span><div class="board">${vaddos}</div>
+    <span class="eyebrow">Everyone’s board</span>${rows ? `<div class="board">${rows}</div>` : '<p style="font-size:13px;color:var(--muted)">Nobody is on the shared board yet. Finish a daily quest to be first.</p>'}`;
+}
+function refreshShared() { const el = document.getElementById('boardBox'); if (el) el.innerHTML = boardHtml(); }
 function addPoints(n, why) {
   if (!S || !n) return;
   S.points = (S.points || 0) + n;
@@ -2710,6 +2753,11 @@ function finishQuest() {
   const best = store.get('rk-board', []);
   best.push({ name: NAME, pts: S.points, day: q.key, place: CH.place });
   best.sort((a, b) => b.pts - a.pts); store.set('rk-board', best.slice(0, 8));
+  pushShared(q).then(() => {
+    if (!SHARED.ok) return;
+    const n = Math.max(1, vaddoCount(CH.village, q.key));
+    setTimeout(() => whisper(n >= VADDO_GOAL ? `${CH.place} has done today’s quest together: ${n} neighbours helped out!` : `${n} of ${VADDO_GOAL} neighbours in ${CH.place} have done today’s quest.`), 4500);
+  });
 }
 // where the daytime quest sends you; undefined at night, so the rescue objective takes over
 function lifeObjective() {
@@ -3807,7 +3855,7 @@ function showIntro() {
     </div>
     <label class="check"><input type="checkbox" id="randomIn" ${MODE === 'random' ? 'checked' : ''}> Play the festival nights in a randomly generated village instead</label>
     <span class="eyebrow">Your points · ${store.get('rk-points', 0)} · streak ${store.get('rk-streak', 0)} day${store.get('rk-streak', 0) === 1 ? '' : 's'}</span>
-    ${board.length ? `<div class="board">${board.slice(0, 5).map((b, i) => `<span>${i + 1}</span><span>${esc(b.name)} · ${esc(b.place)} · ${b.day}</span><b>${b.pts}</b>`).join('')}</div>` : '<p style="font-size:13px;color:var(--muted)">Finish a daily quest to get on the board. The board is on this device for now.</p>'}`;
+    <div id="boardBox" style="display:flex;flex-direction:column;gap:10px">${boardHtml()}</div>`;
   screen.hidden = false;
   const saveName = () => { NAME = document.getElementById('nameIn').value.trim().slice(0, 16) || 'Baba'; try { localStorage.setItem('rk-name', NAME); } catch (e) {} };
   document.getElementById('randomIn').onchange = e => { MODE = e.target.checked ? 'random' : 'real'; try { localStorage.setItem('rk-mode', MODE); } catch (e) {} };
