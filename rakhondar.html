@@ -281,6 +281,7 @@ for (const a of ADS) if (a.img) { a.image = new Image(); a.image.src = a.img; }
 const cv = document.getElementById('game'), ctx = cv.getContext('2d');
 const dark = document.createElement('canvas'), dctx = dark.getContext('2d');
 let dpr = 1, vw = 0, vh = 0, sc = 1, BAKE = 1;
+let L_CONNECTED = false;   // true in a real village: its roads are not the random village's straight main road
 let forest = new Uint8Array(W * H), sights = [], sandProps = new Set();   // sandProps: tiles of beach props, painted as sand   // woodland tiles from the map; named monuments and the like
 let map, rand, riverC, houses, lights, props, kids, walls, treeKind, exits, ground, statics, waterTiles, fireflies, mists, lanes, cars0, boats0;
 let demons, player, spirit, S, bikes0 = [];
@@ -633,6 +634,7 @@ function gen(seed) {
   const block = (x0, y0, x1, y1) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (x >= 0 && y >= 0 && x < W && y < H) noCarve[y * W + x] = 1; };
   const noise = valueNoise(7);
   const L = MODE === 'real' ? layoutReal(VILLAGE, noCarve) : layoutRandom(noCarve, block, noise);
+  L_CONNECTED = !!L.connect;
   if (L.connect && CH.names) Object.assign(PLACE_NAMES, CH.names);
   if (L.bus) OFF.s = [L.bus[0] - 51, L.bus[1] - RY];
   const [tx, ty] = OFF.t, [cx, cy] = OFF.c, [bx, by] = OFF.s;
@@ -677,11 +679,16 @@ function gen(seed) {
   // in a real village, houses also stand on the paddy's edge along a lane, as they do in Goa
   const buildable = t => t === GR || (L.connect && t === PAD);
   for (let tries = 0; tries < (L.connect ? 4000 : 500) && houses.length < (L.connect ? Math.max(50, Math.min(140, VILLAGE.houses.length)) : 48); tries++) {
-    let x, y, w, h = 3;
-    if (known.length) [x, y, w] = known.shift();
+    let x, y, w, h = 3, real = false;
+    if (known.length) { [x, y, w] = known.shift(); real = true; }
     else { w = 3 + Math.floor(rand() * 2); x = 2 + Math.floor(rand() * (W - (L.connect ? 7 : 16))); y = 2 + Math.floor(rand() * (H - (L.connect ? 6 : 12))); }
     let ok = true;
-    for (let yy = y - 1; yy <= y + h && ok; yy++) for (let xx = x - 1; xx <= x + w; xx++) if (!buildable(at(xx, yy))) { ok = false; break; }
+    // a real building may stand right on a road or lane, as town houses do; it still needs open ground under it
+    const edgeOk = t => buildable(t) || (real && (t === LANE || t === ROAD));
+    for (let yy = y - 1; yy <= y + h && ok; yy++) for (let xx = x - 1; xx <= x + w; xx++) {
+      const inside = xx >= x && xx < x + w && yy >= y && yy < y + h;
+      if (!(inside ? buildable(at(xx, yy)) : edgeOk(at(xx, yy)))) { ok = false; break; }
+    }
     if (!ok || !nearLane(x, y, x + w - 1, y + h - 1, 3)) continue;
     if (hyp(x - START.x, y - START.y) < 3) continue;
     fill(x, y, x + w - 1, y + h - 1, HOUSE);
@@ -703,6 +710,28 @@ function gen(seed) {
     props.push(sg); sights.push(sg);
     lights.push({ kind: 'sight', x: best[0] + 0.5, y: best[1] + 0.5, r: 2, lift: 16, color: '255,225,160' });
   }
+  // every house joins the lanes: a path from its front door to the nearest lane or road
+  for (const h of houses) for (let yy = h.y - 1; yy <= h.y + h.h - 1; yy++) for (let xx = h.x - 1; xx <= h.x + h.w; xx++) if (xx >= 0 && yy >= 0 && xx < W && yy < H) noCarve[yy * W + xx] = 1;
+  for (const pr of props) noCarve[pr.y * W + pr.x] = 1;
+  for (const h of houses) {
+    const dx = h.x + Math.floor(h.w / 2), dy = h.y + h.h;
+    if (dy >= H - 1 || [WATER, MANG, HOUSE].includes(at(dx, dy))) continue;
+    if (D4.concat([[0, 0]]).some(([ax, ay]) => [LANE, ROAD, PLAZA, COURT].includes(at(dx + ax, dy + ay)))) continue;
+    const from = nearestLane(dx, dy);
+    if (from[0] !== dx || from[1] !== dy) carvePath(from, [dx, dy], noCarve, noise);
+    if (at(dx, dy) === GR || at(dx, dy) === PAD) set(dx, dy, LANE);
+  }
+  // and every door joins the whole village: a lane cut off from the rest (by a field or a creek) is carved through to it
+  bfs(START.x, START.y, distT);
+  for (const h of houses) {
+    const dx = h.x + Math.floor(h.w / 2), dy = h.y + h.h;
+    if (dy >= H - 1 || distT[dy * W + dx] >= 0 || solid(at(dx, dy))) continue;
+    let best = null, bd = 1e9;
+    for (let i = 0; i < W * H; i++) if (distT[i] >= 0 && (map[i] === LANE || map[i] === ROAD)) { const d = hyp(i % W - dx, ((i / W) | 0) - dy); if (d < bd) { bd = d; best = [i % W, (i / W) | 0]; } }
+    if (best) { carvePath(best, [dx, dy], noCarve, noise); bfs(START.x, START.y, distT); }
+  }
+  // a doorstep in front of every house, so no wall, car or pole is put across a door later
+  for (const h of houses) { const dx = h.x + Math.floor(h.w / 2), dy = h.y + h.h; if (at(dx, dy) === GR || at(dx, dy) === PAD) set(dx, dy, MUD); }
   // a beach: shacks along the back of the sand, umbrellas towards the sea
   if (L.connect) {
     const sand = [];
@@ -792,6 +821,10 @@ function gen(seed) {
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
     const i = y * W + x;
     if (map[i] === GR && laneAdj(x, y) && wn[i] > 0.55 && hyp(x - START.x, y - START.y) > 2) { map[i] = WALL; if (rand() < 0.2) walls.add(i); }
+  }
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const i = y * W + x;
+    if (map[i] === WALL && !D4.some(([dx, dy]) => at(x + dx, y + dy) === WALL)) { map[i] = GR; walls.delete(i); }
   }
   // trees: coconut everywhere, mango and banana near houses, cashew on the open ground
   const nearHouse = (x, y) => { for (let yy = y - 2; yy <= y + 2; yy++) for (let xx = x - 2; xx <= x + 2; xx++) if (at(xx, yy) === HOUSE) return true; return false; };
@@ -1000,12 +1033,13 @@ function drawGround() {
     [HOUSE]: '#2a2a22', [SHELTER]: '#3b3a33', [TREE]: '#1f3b26', [WALL]: '#1f3b26', [MANG]: '#2b2a1e', [JETTY]: '#0e2738', [PROP]: '#1f3b26', [PLAZA]: '#82533b', [MUD]: '#3a3022', [CHAPEL]: '#82533b', [PIT]: '#7a432b', [SEAL]: '#3a3022', [SAND]: '#c9ae74' };
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const t = map[y * W + x];
-    const bc = sandProps.has(y * W + x) ? base[SAND] : forest[y * W + x] && (t === GR || t === TREE) ? '#183020' : base[t];
+    const path = t === LANE || t === ROAD || t === PIT;   // painted as smooth strokes below; grass under them here
+    const bc = sandProps.has(y * W + x) ? base[SAND] : forest[y * W + x] && (t === GR || t === TREE || path) ? '#183020' : path ? base[GR] : base[t];
     diamond(g, x, y); g.fillStyle = bc; g.strokeStyle = bc; g.lineWidth = 1; g.fill(); g.stroke();
-    if (t === GR || t === TREE || t === WALL || t === PROP || t === LANE || t === MUD) {
+    if (t === GR || t === TREE || t === WALL || t === PROP || t === MUD) {
       for (let i = 0; i < 7; i++) {
         const [sx, sy] = iso(x + rand(), y + rand());
-        g.fillStyle = t === LANE ? (rand() < 0.5 ? 'rgba(40,15,5,.3)' : 'rgba(230,160,110,.12)') : (rand() < 0.5 ? 'rgba(0,0,0,.16)' : 'rgba(255,255,255,.05)');
+        g.fillStyle = rand() < 0.5 ? 'rgba(0,0,0,.16)' : 'rgba(255,255,255,.05)';
         g.fillRect(sx, sy, 2 + rand() * 3, 1 + rand() * 2);
       }
     }
@@ -1028,6 +1062,46 @@ function drawGround() {
       for (const f of [0.33, 0.66]) { const a = iso(x, y + f), b = iso(x + 1, y + f); g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); }
       const a = iso(x + 0.5, y), b = iso(x + 0.5, y + 0.33); g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
     }
+    if (t === JETTY) {
+      onGround(g, x, y, c => {
+        c.fillStyle = '#5a3e26'; c.fillRect(0, 2, 32, 30);
+        c.strokeStyle = '#3a2716'; c.lineWidth = 1.2;
+        for (let u = 4; u < 32; u += 5) { c.beginPath(); c.moveTo(u, 2); c.lineTo(u, 32); c.stroke(); }
+      });
+    }
+  }
+  // lanes and roads as smooth strokes laid on the ground: each tile joins its neighbours, diagonals included,
+  // with round joins, so a stepped run of tiles reads as a winding path
+  {
+    const o = iso(0, 0), ex = iso(1, 0), ey = iso(0, 1);
+    g.save(); g.setTransform(ex[0] - o[0], ex[1] - o[1], ey[0] - o[0], ey[1] - o[1], o[0], o[1]);
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    const kinds = [[t => t === LANE || t === PIT, 0.9, '#7a432b', '#5c3020'], [t => t === ROAD, 1.05, '#2a2b30', '#1a1b1f']];
+    for (const [is, w, col, edge] of kinds) for (const [lw, c] of [[w + 0.16, edge], [w, col]]) {
+      g.beginPath();
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        if (!is(map[y * W + x])) continue;
+        const cx = x + 0.5, cy = y + 0.5;
+        g.moveTo(cx, cy); g.lineTo(cx + 0.001, cy);
+        for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [1, -1]]) if (is(at(x + dx, y + dy))) { g.moveTo(cx, cy); g.lineTo(cx + dx, cy + dy); }
+      }
+      g.lineWidth = lw; g.strokeStyle = c; g.stroke();
+    }
+    g.restore();
+    // dust and gravel on the paths
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const t = map[y * W + x];
+      if (t !== LANE && t !== ROAD) continue;
+      for (let i = 0; i < 5; i++) {
+        const [sx, sy] = iso(x + 0.2 + rand() * 0.6, y + 0.2 + rand() * 0.6);
+        g.fillStyle = t === LANE ? (rand() < 0.5 ? 'rgba(40,15,5,.3)' : 'rgba(230,160,110,.12)') : 'rgba(255,255,255,.05)';
+        g.fillRect(sx, sy, 2 + rand() * 3, 1 + rand() * 2);
+      }
+    }
+  }
+  // wells and the road's centre line go on top of the paths
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const t = map[y * W + x];
     if (t === PIT) {
       // an open well: a low laterite ring round black water; in the monsoon it brims over and looks like a puddle
       onGround(g, x, y, c => {
@@ -1036,14 +1110,7 @@ function drawGround() {
         c.fillStyle = '#071018'; c.beginPath(); c.arc(16, 16, 10, 0, 7); c.fill();
       });
     }
-    if (t === JETTY) {
-      onGround(g, x, y, c => {
-        c.fillStyle = '#5a3e26'; c.fillRect(0, 2, 32, 30);
-        c.strokeStyle = '#3a2716'; c.lineWidth = 1.2;
-        for (let u = 4; u < 32; u += 5) { c.beginPath(); c.moveTo(u, 2); c.lineTo(u, 32); c.stroke(); }
-      });
-    }
-    if (t === ROAD && y === RY + 1 && x % 3 === 0) {
+    if (t === ROAD && y === RY + 1 && x % 3 === 0 && !L_CONNECTED) {
       const a = iso(x + 0.15, RY + 1), b = iso(x + 0.85, RY + 1);
       g.strokeStyle = '#c9b46a'; g.lineWidth = 2; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
     }
