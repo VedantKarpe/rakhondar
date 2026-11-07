@@ -26,7 +26,7 @@ Every village map is 96 x 80 tiles at 12 m a tile, about 1.15 km by 0.96 km. The
 
 | Taluka | Villages mapped |
 |---|---|
-| Bardez | Siolim |
+| Bardez | Siolim, Calangute (the beach) |
 | Tiswadi | Panjim, Divar island, Chorão island |
 | Ponda | Tonca |
 | Pernem, Bicholim, Sattari, Mormugao, Dharbandora, Salcete, Sanguem, Quepem, Canacona | not mapped yet |
@@ -35,7 +35,20 @@ Every village map is 96 x 80 tiles at 12 m a tile, about 1.15 km by 0.96 km. The
 
 **Quests all day.** In live mode one quest follows another: when you finish, someone else in the vaddo waves you over a few seconds later. The day's first quest moves your streak. Litter lies about the lanes every day; pick it up any time for 5 points a piece.
 
-**Light and shade.** Street tubelights stand along the roads and lanes; they come on at dusk, and about one in three flickers, going dark in stutters and the odd long gap. Demons keep out of every light that is on: lit diyas, holy ground, a tubelight, the beam ahead of a car, and by day the sun. In daytime a quest that leads you into the shade of the forest wakes demons there; step back into the sunlight to lose them. Cars ease through their turns and slow for a child in the road.
+**Light, night and monsters.** Monsters and the Rakhondar belong to the night: by day there are no demons and the Rakhondar rests in its stone. On a sped-up clock the daytime hours run 2.5 times faster, so more of the playing time is night (real time stays true). Street tubelights stand along the roads and lanes, lit from dusk; about one in three flickers. Demons keep out of every light that is on: lit diyas, holy ground, a tubelight and the beam ahead of a car.
+
+Demons differ by where they rise. The names come from Goan and Konkan folklore and are kept simple; check them with people from the villages before writing more about any of them.
+
+| Where | Demon | How it plays |
+|---|---|---|
+| Lanes, roads, crossroads | Devchar, in a wide black hat | quick |
+| Forest and big trees | Brahmarakshas, pale, with a sacred thread | slow, takes twice the burning |
+| Paddy fields | Chedvan, hair over her face | ordinary |
+| Water, mangroves, the beach | Jalpari, sea-green with fins | a little quick and tough |
+
+**The beach.** Calangute, in Bardez, has the sea, a strip of sand with surf, shacks with strings of bulbs and beach umbrellas. The importer paints the sea from OpenStreetMap's coastline (land on its left, sea on its right) and a band of sand along it.
+
+**Finding places.** Tap the mini map or press P for the village map: every temple, church, stop, ferry, devli and sight, the day's quest giver and the nearest litter, numbered on the map with their distances. Guide me puts an arrow on the way and the distance in the objective line until you arrive.
 
 To add a village, import it with `tools/osm_import.py` (below) and add it to `VILLAGE_TALUKA` and `VILLAGE_TITLES` in `rakhondar.html`. The importer's `--size` must match `W` and `H` in the game.
 

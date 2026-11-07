@@ -179,6 +179,31 @@ def build(name, lat, lon, tile, inline, pins=()):
         if t.get('waterway') in ('river', 'canal', 'stream', 'drain', 'ditch', 'tidal_channel') and e['type'] == 'way':
             w = {'river': float(t.get('width', 40)), 'canal': 12, 'stream': 5, 'tidal_channel': 8}.get(t['waterway'], 3) / tile
             paint_line(geo(e), max(1.2, w), 'W')
+    # beaches, then the sea: OSM draws the coastline with land on the left, so the sea starts on its right
+    for e in els:
+        if tagged(e).get('natural') == 'beach':
+            area(e, 'B')
+    coast = [geo(e) for e in els if tagged(e).get('natural') == 'coastline' and e['type'] == 'way']
+    for pts in coast:
+        paint_line(pts, 1.4, 'C')
+    seeds = []
+    for pts in coast:
+        for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+            L = math.hypot(x2 - x1, y2 - y1) or 1
+            seeds.append((int((x1 + x2) / 2 - (y2 - y1) / L * 2.5), int((y1 + y2) / 2 + (x2 - x1) / L * 2.5)))
+    stack = [s_ for s_ in seeds if 0 <= s_[0] < W and 0 <= s_[1] < H]
+    while stack:
+        x, y = stack.pop()
+        if not (0 <= x < W and 0 <= y < H) or grid[y][x] not in 'GPFMB':
+            continue
+        grid[y][x] = 'S'
+        stack += [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    # a strip of sand along the sea, where the coastline ran
+    for y in range(H):
+        for x in range(W):
+            if grid[y][x] == 'C' or (grid[y][x] in 'GF' and any(0 <= x + dx < W and 0 <= y + dy < H and grid[y + dy][x + dx] == 'S'
+                                                                for dx in range(-3, 4) for dy in range(-3, 4))):
+                grid[y][x] = 'B'
     ROADS = {'trunk': 2.4, 'primary': 2.4, 'secondary': 2.2, 'tertiary': 2.0}
     LANES = {'unclassified': 1.6, 'residential': 1.6, 'living_street': 1.6, 'service': 1.3, 'track': 1.3, 'path': 1.1, 'footway': 1.1}
     for e in els:
