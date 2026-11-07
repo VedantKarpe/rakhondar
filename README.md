@@ -4,7 +4,9 @@ An isometric browser game set in Goan villages on festival nights.
 
 The Rakhondar, the guardian spirit who walks the village at night, has blessed a child's clay lamp so its light burns demons. Through the night, villagers get stranded in the lanes. The child finds each one and walks them to safety, but some of them are demons wearing a familiar face.
 
-**Play:** https://claude.ai/artifact/5TzkxY3xHZSJuVBJ9FTsXE
+**Play:** https://vedantkarpe.github.io/rakhondar/ (the shared leaderboard works only in the claude.ai version: https://claude.ai/artifact/5TzkxY3xHZSJuVBJ9FTsXE)
+
+**Feedback:** open an issue at https://github.com/VedantKarpe/rakhondar/issues
 
 ## Live in a village (Goa time)
 
