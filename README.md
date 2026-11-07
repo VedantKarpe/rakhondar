@@ -20,6 +20,19 @@ The Rakhondar, the guardian spirit who walks the village at night, has blessed a
 
 Points, the streak and the top-scores board are kept in this browser for now. A shared board and shared village progress need the artifact's shared storage, which is the next step.
 
+## Goa by taluka, and the mini map
+
+Every village map is 96 x 80 tiles at 12 m a tile, about 1.15 km by 0.96 km. The **mini map** in the bottom-left corner shows the whole village turned the same way as the view: you are the yellow dot, your next goal pulses green, and landmarks are marked. Tap it or press **G** for the **map of Goa**, laid out by its twelve talukas. Pick another village there to take the bus or ferry; in live mode the clock, points and streak come with you.
+
+| Taluka | Villages mapped |
+|---|---|
+| Bardez | Siolim |
+| Tiswadi | Panjim, Divar island, Chorão island |
+| Ponda | Tonca |
+| Pernem, Bicholim, Sattari, Mormugao, Dharbandora, Salcete, Sanguem, Quepem, Canacona | not mapped yet |
+
+To add a village, import it with `tools/osm_import.py` (below) and add it to `VILLAGE_TALUKA` and `VILLAGE_TITLES` in `rakhondar.html`. The importer's `--size` must match `W` and `H` in the game.
+
 ## Chapters
 
 Each chapter is one night in a real village, mapped from OpenStreetMap, with its own traps, puzzles and ending. All four are open from the title screen; the game remembers which ones you have seen through to dawn.

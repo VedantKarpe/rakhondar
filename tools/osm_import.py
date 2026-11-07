@@ -2,11 +2,11 @@
 
     python tools/osm_import.py fetch NAME LAT LON [--radius 0.007]
     python tools/osm_import.py survey NAME
-    python tools/osm_import.py build NAME LAT LON [--tile 9] [--inline rakhondar.html] [--anchor kind=lat,lon[,name]]
+    python tools/osm_import.py build NAME LAT LON [--tile 12] [--size 96x80] [--inline rakhondar.html] [--anchor kind=lat,lon[,name]]
 
 `fetch` downloads everything around the point once and caches it in data/NAME.osm.json.
 `survey` lists the places of worship, ferry points and bus stops in the cache, to pick a centre.
-`build` rasterises the cache onto the game's 72 x 56 tile grid (x east, y south) and writes
+`build` rasterises the cache onto the game's tile grid (--size, default 96x80) (x east, y south) and writes
 data/NAME.map.json; with --inline it also replaces the VILLAGE block inside the game file.
 
 Map data (c) OpenStreetMap contributors, available under the Open Database License (ODbL).
@@ -15,7 +15,7 @@ import argparse, json, math, pathlib, re, subprocess, sys, time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DATA = ROOT / 'data'
-W, H = 72, 56
+W, H = 96, 80   # must match W and H in rakhondar.html
 ENDPOINTS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter',
              'https://overpass.private.coffee/api/interpreter']
 
@@ -239,9 +239,11 @@ if __name__ == '__main__':
     ap.add_argument('lon', type=float, nargs='?')
     ap.add_argument('--radius', type=float, default=0.007)
     ap.add_argument('--tile', type=float, default=9)
+    ap.add_argument('--size', default=f'{W}x{H}', help='grid width x height in tiles; must match the game')
     ap.add_argument('--inline')
     ap.add_argument('--anchor', action='append', default=[], help='kind=lat,lon[,name], e.g. ferry=15.5277,73.9046,Piedade Ferry')
     a = ap.parse_args()
+    W, H = (int(v) for v in a.size.split('x'))
     if a.cmd == 'fetch':
         fetch(a.name, a.lat, a.lon, a.radius)
     elif a.cmd == 'survey':
