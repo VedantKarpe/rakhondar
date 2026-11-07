@@ -6,6 +6,20 @@ The Rakhondar, the guardian spirit who walks the village at night, has blessed a
 
 **Play:** https://claude.ai/artifact/5TzkxY3xHZSJuVBJ9FTsXE
 
+## Live in a village (Goa time)
+
+"Live in Tonca" and "Live in Panjim" on the title screen start a village that runs on real Goa time (IST). The clock speed is a setting: real time, ×10, ×60 (a full day in 24 minutes, the default) or ×240.
+
+- **Day:** no demons. A villager with a **!** has the **daily quest**, the same for everyone on a given date: clear the garbage into the bin (Shantabai), deliver hot poee to three doors (Mai the baker), or catch Pinky the hen (Tia Rosa). Quests and good deeds earn **points**; finishing the quest on consecutive days builds a **streak**.
+- **Dusk and night:** the light turns gold, then dark; the Rakhondar wakes, demons come out (more on a moonless night), and stranded villagers need walking home. Lose all your courage and you wake at home at dawn, 50 points poorer.
+- **The moon** in the corner is the real one, and the darkness follows its phase.
+- **Weather** follows the real season, chosen by date so everyone shares it: monsoon rain from June to September, mist in the cool months, haze and the odd pre-monsoon storm in spring.
+- **The calendar:** the tithi and lunar month (amanta) are worked out from the moon and sun. Festivals arrive on their days: Narkasur night, Diwali, Ganesh Chaturthi, Shigmo, Gudi Padwa, Tulsi Vivah, Nag Panchami, São João, Bonderam, the Feast of St Francis Xavier, Christmas and Carnival. A festival brings its decorations (effigies, lamps, flags, crackers) and marks its chapter "Tonight". The approximation can land a day off a printed panchang near a tithi boundary; known cases are pinned in `CAL.festivals`.
+- **Potholes** on every map's roads throw you off a fast motorbike; in the rain they look like puddles.
+- **Panjim** is mapped from OpenStreetMap around the Immaculate Conception church, the Panaji ferry terminal and the Mandovi, with its real building outlines.
+
+Points, the streak and the top-scores board are kept in this browser for now. A shared board and shared village progress need the artifact's shared storage, which is the next step.
+
 ## Chapters
 
 Each chapter is one night in a real village, mapped from OpenStreetMap, with its own traps, puzzles and ending. All four are open from the title screen; the game remembers which ones you have seen through to dawn.
@@ -55,6 +69,9 @@ A locked place sends the objective, the screen-edge arrow and the Rakhondar's fo
 | Trust / banish | E / Q | Buttons on the card |
 | Call the Rakhondar | Space | Button, bottom right |
 | Zoom | Mouse wheel or + / − | |
+| Turn the view | Right-drag, or Z / X | ⟲ ⟳ buttons |
+| Motorbike | B beside a parked bike | Ride button |
+| Pause, back to the title | Esc | |
 
 The lamp burns the nearest demon in front of the child (about 55° either side of where you last walked, or anything touching you) while it has oil, so turn to face what's coming. Refill it at lit diyas (walk over one to light it) and at holy places. Calling the Rakhondar lights footsteps toward your next goal and drives back nearby demons; diyas and unmasked demons recharge it.
 

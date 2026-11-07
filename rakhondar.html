@@ -110,6 +110,11 @@ button:focus-visible { outline: 2px solid var(--lamp); outline-offset: 3px; }
   pointer-events: auto; font: 600 12px var(--body); color: var(--muted); background: rgba(9, 12, 26, 0.5);
   border: 1px solid rgba(236, 228, 207, 0.25); border-radius: 999px; padding: 4px 11px; cursor: pointer; margin-top: 4px;
 }
+.pts { font: 700 16px var(--body); color: var(--lamp); }
+.today { display: grid; gap: 6px; padding: 12px 14px; border-radius: 6px; background: rgba(242, 180, 65, 0.08); border: 1px solid rgba(242, 180, 65, 0.3); }
+.today b { color: var(--lamp); }
+.badge { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--night); background: var(--lamp); border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
+.board { font-size: 13px; color: var(--muted); display: grid; grid-template-columns: auto 1fr auto; gap: 2px 12px; }
 .turn { display: flex; gap: 6px; pointer-events: auto; }
 .credit {
   position: absolute; bottom: 8px; left: max(16px, env(safe-area-inset-left, 0px)); max-width: 55%;
@@ -148,7 +153,7 @@ button:focus-visible { outline: 2px solid var(--lamp); outline-offset: 3px; }
   <canvas id="game"></canvas>
   <div class="hud">
     <div class="stat"><span class="lbl">Courage</span><div class="pips" id="hearts"></div><span class="lbl">Lamp oil</span><div class="oil"><span id="oilFill"></span></div></div>
-    <div class="stat right"><span class="lbl">Rakhondar calls</span><div class="pips" id="charges"></div><button class="sound" id="soundBtn" type="button">Sound on <kbd>M</kbd></button><div class="turn"><button class="sound" id="turnL" type="button" aria-label="Turn the view left">⟲</button><button class="sound" id="turnR" type="button" aria-label="Turn the view right">⟳</button></div></div>
+    <div class="stat right"><span class="lbl">Rakhondar calls</span><div class="pips" id="charges"></div><span class="lbl">Points</span><b class="pts" id="points">0</b><button class="sound" id="soundBtn" type="button">Sound on <kbd>M</kbd></button><div class="turn"><button class="sound" id="turnL" type="button" aria-label="Turn the view left">⟲</button><button class="sound" id="turnR" type="button" aria-label="Turn the view right">⟳</button></div></div>
   </div>
   <div id="objective"></div>
   <div id="whisper" aria-live="polite"></div>
@@ -194,6 +199,7 @@ const VILLAGES = {};
 /* VILLAGE-DATA divar */VILLAGES.divar = {"name":"Divar","centre":[15.5235,73.8985],"tile":12.0,"W":72,"H":56,"credit":"Map data © OpenStreetMap contributors (ODbL)","rows":["MMMMMMMMMPPPPPPPPPPPPPPPPGGGGLLGGGGGGGLGGLLGGGGGLLGGGGGGLLGLLLLLGGGGGGGG","MMMMMMMMPPPPPPPPPPPPPPPPPGGGGLLGGGGGGGLGGLLGGGGLLGGGGGGGGLLLLGGGGGGGGGGG","MMMMMMMMPPPPPPPPPPPPPPPPGGGGGLGGGGGGGGGGLLGGGGLLLGGGGGGGGLLLGGGGGGGGGGGG","MMMMMMMMPPPPPPPPPPPPPPPGGGGGGLGGGGGGGGGGLLGGGGLLGGGGGGGGLLLLLGGGGGGGGGGG","MMMMMMMPPPPPPPPPPPPPPGGGGLLGGLLGGGGGGGGGLLLGGLLGGGGGGGGLLLGLLLLLLLLLLLGG","MMMMMMMPPPPPPPPPPPPPGGGGGGLLGLLGGGGGGGGGLGLLLLGGGGGGGLLLGGGGGLLLLLLLLLLL","MMMMMMMPPPPPPPPPPPPGGGGGGGLLGLLGGGGGGGGGLGLLLGGGGGGGLLLGGGGGGGGGGGGLLGGG","MMMMMMMPPPPPPPPPPPPPGGGGGGGLLLLGGGGGGGGGLLGGGGGGGGLLLGGGGGGGGGGGGGGLLGGG","MMMMMMPPPPPPPPPGPPPPPGGGGGGGLLLGGGGGGGGGLLGGGGGGGLLLGGGGGGGGGGGGGGGGLLGG","MMMMMPPPPPPPPPGGGPPPPPGGGGGGGLLGGGGGGGGGLGGGGGGGGLLGGGGGGGGGGGGGGGGGGLLG","MMMMPPPPPPPPPPGGLGPPGGGGGGGGGGLLGGGGGGGLLGGGGGGGGLGGGGGGGGGGGGGGGGGGGGLL","MMMPPPPPPPPPPPPGLLGGGGGGGGGGGGLLGGGGGGGLLGGGGGGGGLGGGGGGGGGGGGGGGGGGGGGG","MMMPPPPPPPPPPPPGLLGGGGGGGGGGGGGLLGGGGGLLGGGGGGGGGLGGGGGGGGGGGGGGGGGGGGGG","MMPPPPPPPPPPPPPGGLLGGGGGGGGGGGGGLGGGGGLLGGGGGGGGLLGGGGGGGGGGGGGGGGGGGGGR","MPPPPPPPPPPPPPGGGGLLGGGGGGGGGGGGLLGGGLLGGGGGGGGGLLGGGGGGGGGGGGGGGGGGGGGR","PPPPPPPPPPPPPGGGGGGLLGGGGGGLGGGGGLLGGLLGGGGGGGGLLGGGGGGGGGGGGGGGGGGGGGRR","PPPPPPPPPPPPPPGGGGGGLLGGGGGLLGGGGGLLLLGGGGGGGGLLGGGGGGGGGGGGGGGGGGGGGGRR","PPPPPPPPPPPPPPGGGGGGGLLGGGGGLLGGGGLLLGGGGGGGGLLGGGGGGGGGGGGGGGGGGGGGGGRR","PPPPPPPPPPPPPGGGGGGGGGLGGGGGGLLGGGGLLGGGGGGGLLGGGGGGGGGGGGGGGGGGGGGGGRRL","PPPPPPPPPPGGGGGGGGGGGGLGGGGGGGLLGGLLGGGGGGGGLLGGGGGGGGGGGGGGGGGGGGGGGRRL","PPPPPPPPPPGGGGGGGGGGGGLLGGGGGGGLLGLLGGGGGGGGLLGGGGGGGGGGGGGGGGGGGGGGRRGG","PPPPPPPPPPGGGGGGGGGGGGGLLGGGGGGGLLLGGGGGGGGGLLGGGGGGGGGGGGGGGGGGGGGRRLLG","PPPPPPPPPGGGGGGGGGGGGGGGLLGGGGGGLLLLGGGGGGGGGLLLGGGGGGGGGGGGGGGGGGRRGLLG","PPPPPPPPGGGGGGGGGGGGGGGGGLLGGGGGGLLLGGGGGGGGLLLLLGGGGGGGLLGGGGGGRRRGGGLL","PPPPPPPPPGGGGGGGGGGGGGGGGLLGGGGGLLGLLGGGGGGLLGGLLGGGGGGGGLLGGGGRRRLGGGGL","PPPPPPPPGGGGGGGGGGGGGGGGGGLLGGGLLGGLLGGLLLLLLGGGLLGGGGGGGLLGGRRRRGLLGGGG","PPPPPPPPGGGGGGGGGGGGGGGGGGGLLGLLGGGGLLLLLGLLLGGGLLGGGGGGGGLRRRRRGGGLGGGG","PPPPPPPGGGGLLLGGGGGGGGGGGGGGLLLGGGLLLLGGGGLLLGGGGLLGGGGGGRRRRRGGGGGLLGGG","PPPPPPGGGGGGLLLLGGGGGGGGGGGGLLGGLLLGGLGGGLLLLGGGGLLGGGRRRRRGGGGGGGGGLLGG","PPPPLGGGGGGGGGLLLLGGGGGGGGGGLLGLLLGGGLLGLLGLLGGGGGLLRRRRRGGGGGGGGGGGLLGG","GPPPLLLGGGGGGGGGLLLGGGGGGGGGLLLLGGGGGLLGLLGLLGGRRRRRRRRGGGGGGGGGLLGGGLLG","GGPLLGLLLGGGGGGGGGLLGGGGGGGGLLGGGGGGGGRRRRRRRRRRRRRRGGGGGGGGGGGGGLLGGLLG","GGLLGGGLLLLGGGGGGGGLLGGGLLGLLGGGGGGGGGRRRRRRRRRRGGGGGGGGGGGGGGGGGLLGGGLL","GLLGGGGGGLLLGGGGGGGGLLLLLLLLGGGGGGGGGGRRGGGGGGGLLGGGGGGGGGGGGGGGGGLLGGGL","LLGGGGGGGGLLLLGGGGGGGGLLGGLLGGGGGGGGGRRGGGGGGGGGLLGGGGGGGGGGGGGGGGLLGGGL","LLGGGGGGGLLGLLLGGGGGGGLLGGLLGGGGGGGGGRRGGGGGGGGGLLGGGGGGGGGGGGGGGGGLLGGG","LGGGGGGGGLLGGLLGGGGGGGGLLGLLGGGGGGGGRRRGGGGGGGGGGLLGGGGGGGLLLGGGGGGGLLGG","PGGGGGGGLLGGGLGGGGGGGGGGLLLLGGGGGGGGRRGGGGGGGGGGGGLGGGGLLLLLGGGGGGGGLLGG","PPPPPGGGLLGGLLGGGGGGGGGGGLLLGGGGGGGRRRGGGGGGGGGGGGLGGGLLLGGGGGGGGGGGGLLL","PPPPPPPGGGGGLLGGGGGGGGGGGGLLGGGGRRRRLGGGGGGGGGGGGGGGLLLGGGGGGGGGGGGGGLLL","PPPPPPPGGGGGLLGGGGGGGGGGGGLLRRRRRRRGLGGGGGGGGGGGGLLLLLGGGGGGGGGGGGGGGPPP","PPPPPPPGGGGGLGGGGGGGGGGGGGRRRRRRRGGGLGGGGGGGGGGLLLLGGGGGGGGGGGGGGGGGPPPP","PPPPPPPGGGGGLGGGGGGGGGGGGGRRRGGGGGGGLGGGGGGLLLLLLGGGGGGGGGGGGGGGGGGPPPPP","PPPPPPPGGGGGLLGGGGGGGGGGGRRLGGGGGGGGLGGGLLLLLLGGGGGGGGGGGGGGGGGGGGPPPPPP","LLPPPGGGGGGGLLGGGGGGGGGGRRRLGGGGGGGGLLLLLLGGGGGGGGGGGGGGGGGPGGGGGPPPPPPP","LLGGGGGGGGGGGLLGGGGGGGGGRRGLLGGGGGGGLLGGGGGGGGGGGGGGGGGGGPPPPGGGGLLPPPPP","PLLGGGGGGGGGGGLLGGGGGGGRRGGLLGGGGGGGLGGGGGGGGGGGGGGGGGGPPPPPPGGGLLPPPPPP","PLLGGGGGGGGGGGGLLGGGGGRRRGGGLLGGGGGGLLGGGGGGGGGGGGGGGPPPPPPPPPLLLPPPPPPP","PPLLLGGGGGGGGGGGLLLGGRRRGGGGLLGGGGGGLLGGGGGGGGGGGGGGPPPPPPPPPLLPPPPPPPPP","PPPLLLGGGGGGGGGGGLLLRRRGGGGGGLGGGGGGLLGGGGGGGGGGGGPPPPPPPPPLLLPPPPPPPPPP","PPPPPLLGGGGGGGGGGGGGRRGGGGGGGLLGGGGGGLGGGGGGGGGGPPPPPPPPPLLLPPPPPPPPPPPP","PPPPPPLLLGGGGGGGGGGGRRGGGGGGGLLGGGGGGLGGGGGGGGGPPPPPPPPLLLPPPPPPPPPPPPPP","PPPPPPPLLLGGGGGGGGGRRGGGGGGGGLLGGGGGGLLGGGGGGGGPPPPPPLLLPPPPPPPPPPPPPPPP","PPPPPPPPPLLGGGGGGGGRRGGGGGGGGGLGGGGGGLLGGGGGGGGPPPPLLLPPPPPPPPPPPPPPPPPP","PPPPPPPPPPLLLGGGGGRRGGGGGGGGGGLGGGGGGGLGGGGGGGGGLLLLPPPPPPPPPPPGGPPPPPPP","PPPPPPPPPPPPLLGGGGRRGGGGGGGGGGLGGGGGGGLLGGGGGGLLLPPPPPPPPPPPPGGGGGPPPPGG"],"houses":[[49,9,4,3],[58,4,4,3],[17,14,3,3],[18,17,3,3],[15,32,4,3],[17,31,3,3],[1,32,3,3],[13,32,3,3],[18,27,3,3],[17,26,3,3],[13,23,3,3],[12,25,3,3],[10,32,3,3],[16,17,3,3],[18,19,3,3],[17,17,3,3],[16,25,3,3],[9,25,3,3],[8,33,3,3],[11,35,3,3],[39,38,4,3],[28,50,3,3],[28,51,3,3],[28,43,4,3],[23,37,3,3],[24,39,3,3],[43,45,3,3],[42,45,3,3],[43,48,3,3],[6,45,3,3],[12,47,3,3],[59,23,3,3],[56,25,3,3],[58,22,3,3],[56,23,3,3],[51,28,3,3],[57,29,3,3],[61,31,4,3],[63,31,3,3],[59,32,3,3],[64,29,3,3],[67,29,3,3],[66,27,3,3],[65,27,3,3],[67,22,3,3],[67,25,3,3],[66,23,3,3],[65,24,3,3],[56,34,3,3],[55,31,3,3],[52,31,3,3],[53,31,3,3],[51,36,3,3],[47,36,3,3],[47,36,3,3],[52,36,3,3],[51,33,3,3],[46,30,3,3],[47,29,3,3],[49,29,3,3],[49,30,3,3],[48,26,3,3],[47,26,3,3],[55,27,3,3],[64,19,3,3],[60,17,3,3],[60,17,3,3],[61,17,3,3],[66,18,3,3],[67,19,3,3],[67,18,3,3],[62,14,3,3],[61,14,3,3]],"anchors":{"temple":[45.5,3.6],"chapel":[52.9,10.9],"ferry":[-87.3,145.0]},"names":{"temple":"Shakti Vinayak Temple","chapel":"Our Lady of Piety","ferry":"Divar ferry"}};/* END VILLAGE-DATA divar */
 /* VILLAGE-DATA siolim */VILLAGES.siolim = {"name":"Siolim","centre":[15.6215,73.7545],"tile":12.0,"W":72,"H":56,"credit":"Map data © OpenStreetMap contributors (ODbL)","rows":["GGGGPPPPPPPPPPPPPWPPPLLGGPPGGGRRGGGGGPPPPPPPPPPPPPPPPPPPPPWWWPPPPPPPMMMM","GGGGPPPPPPPPPPPPPPPPPPLLPPPPGGGRRGGGGPPPPPPPPPPPPPPPPPPPPPWWWPPPPPPPMMMM","GGGGGPPPPPPPPPPPPPPPPPPLLPPPPGGRRRGGGGPPPPPPPPPPPPPPPPPPPPPWWWPPPPPPMMMM","GGGGGGPPPPPPPPPPPPWPPPPPLPPPPPGGRRRGGGGPPPPPPPPPPPPPPPPPPPPPWWPPPPPPPMMM","GGGGGGPPPPPPPPPPPPWPPPPPPLPPPPPGGRRRGGGGPPPPPPPPPPPPPPPPPPPPWWGPPPPGGMMM","GGGGGGGPPPPPPPPPPPWPPPPPPLLPPPPWGGRRRGGGGPPPPPPPPPPPPPPPPPPPWWWGGWWWGMMM","GGGGGGGGPPPPPPPPPPWPPPPPPPLLPPPPWGLRRRGGGGPPPPPPPPPPPPPPPPPPWWWWWWWGPMMM","GGGGGGGGGPPPPPPPPPPPPPPPPPPLPPPPWLLGRRGGGGGPPPPPPPPPPPPPPPPPWWWWWGPPPGGG","GGGGGGGGGWPPPPPPPPPPPPPPPPPLLPWLLLGGGRRGGGGGGPPPPPPPPPPPPPPPWWWWWPPPPGGG","GGGGGGGGGGPPPPPPPPPPPPPPPPPWLLLLLPPGGGRRGGGGGGPPPPPPPPPPPPPPWWWWGPPPPGGG","GGGGGGGGGGWPPPPPPPPWPPPPLLLLLPGLLPPPPGGRRGGGGGGPPPPPPPPPPPPWWWWWWPPPLLLL","GGGGGGGGGGGPPPPPPPPPLLLLLPPPPPGGLLPPPPGGRRGGGGGGPPPPPPPPPPPWWWWWWPPPPPPP","GGGGGGGGGGGWPPPPPLLLLLPPPPPPPPPGLLPPPPPGRRRGGGGGGPPPPPPPPPWWWGGPPPPPPPPP","GGGGGGGGGGGGPLLLLLPPPPPPPPPPPPPGGLLPPPPGGRRRGGGGGPPPPPPPPPWGPPPPPPPPPPPP","GGGGGGGGGGLLLLLGGGPPPPPPPPPPPPPPGLLGPPPWGGRRGGGGGGGGGGPPPWWPPPPPPPPPPPPP","GGGGGGGWGLLGGGGGGGPPPPPPPPPPPPPGGGLLPPPPGGGRRGGGGGGGGGGPPWGPPPPPPPPPPPPP","GGGGWGGGGGGGGGGGGGPPPPPPPPPPPPGGGGLLGPPPPGGRRRGGGGGGGGGGPWPPPPPPGGGGGGPP","WWGGGGGGGGGGGGGGGGPPPPPPPPPPPPPPPPGLLPPPPWGGRRGGGGGGGGGGGWGGGGGWWWWWWGGP","WGGGGGGGGGGGGGGPPPPPPPPPPPPPPPPPPPGLLPPPPPGGGRRGGGGGGGGGGWWWWWWWWWWPWWGG","WGGGGGGGGGPPPPPPPPPPPPPPPPPPPPPPPPGGLLPPPPWGGRRRGGGGGGGGGPPWWWWWPPPPWWGG","WGGGGGGGGGWPPPPPPPPPPPPPPPPPPPPPPPPGGLPPPPWWGGRRRGGGGGGGGPPPPPPPPPPPWWGP","GGGGGGGGGGWPPPPPPPPPPPPPPPPPPPPPPPPGGLLPPPPPPGGRRGGGGGGGGPPPPPPPPPPWWGPP","GWGGGGGGGGWPPPPPWPPPPPPPPPPPPPPPPPPGGGLPPPPPPGGGRRGGGGGGGGPPPPPPPWWWWGPP","GWWWGGGGGGWWPPPPPPPPPPPPPPPPPPPPPPPPGGLLPPPPPPGGRRGGGGGGGGPPPPPPWWWWGPPP","GWPPPPPPPPWPPPPPPPPPPPPPPPPPPPPPPPPPGGLLPPPPPPWGGRRGGGGGGGPPPPWWWWWWGPPP","GGPPPPPPPPWPPPPPPPPPPPPPPPPPPPPPPPPPGGGLLPPPWWPGGRRGGGGGGGPPPPPWWWWGPPPP","GGWPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGLLPPPPPPGGGRRGGGGGGPPPPPWWWWGPPPP","GGGPPPPPPPPPPPPPPPPPWPPPPPPPPPPPPPPPGGGGLGPPWPPPGGRRGGGGGGPPPPPWWWWWPPPP","GGGWPPPPPPPPPPPPPPPPWPPPPPPPPPPPPPPPGGGGLLPPGWGPPGRRRGGGGGPPPPPWWWWWGPPP","GGGGWPPPPPPPPPPPPPPPWPPPPPPPPPPPPPPPGGGGLLGPPPWGPGGRRGGGGGPPPPPPWWWWGPPP","GGGGWPPWWPPPPPPPPPPPWPPPPPPPPPPPPPPPGGGGLLGPPPGWGGGGRRGGGGPPPPPPWWWWGPPP","GGGGGWPPPPPPPPPPPPPPWPPPPPPPPPPPPPPPGGGGGLGPGGGWGLLLRRRGGGPPPPPPWWWWWPPP","GGGGGWPPPPPPPPPPPPPPWPPPPPPPPPPPPPPPGGGGGLGGGGGLLLLGGRRGGGPPPPPPWWWWWPPP","GGGGGGPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGLLGGLLLLGGGGGRRGGPPPPPPWWWWWPPP","GGGGGGWPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGLLLLLGWGGPPGGRRGGPPPPPPWWWWWWPP","LGGGGGGWPPPPPWPPPPPPPPPPPPPPPPPPPPPPGGGGGGLLGGGGWPPPGGGRRGPPPPPPWWWWWWPP","LLGGGGGPPPPPPPPPPPPPPWPPPPPPPPPPPPPPGGGGGLLLLGGGGWPPPGGRRRGPPPPPWWWWWWWW","GLLGGGGGPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGLLGLLGGGGGPPPPGGRRGPPPPPWWWWWWGG","MGLLGGGGGGPPPPPPPPWPPPPPPPPPPPPPPGGGGGGLLLGGLLGGPPPPPPPGGRRPPPPWWWWWWGGG","MMGLLGGGGGGPPPPPPPPPPPWPPPPPPPPPPGGGGGGLLGGGLLGPPPPWPPPGGRRRPPPPPWWWWGGG","MMGGLLGGGGGGPPPPPPPPPPPWPPPPPPPPPGGGGGLLGGGGGLLPPPPPPPPPGGRRRGPPPPWGGGGG","MMMGGLLGGGGGGPPPPPPPPPPPPWWPPPPPPGGGGLLLGGGGGLLPPPPPPPPPPGGRRRRPPPWGGGGG","MMMMMGLLGGGGPPPPPPPPPPPPPPPPPPPPPGGGLLLGGGGGGGLLPPPPPPPPPPPPPRRRPPWWGGGG","MMMMMMGLLGGGGPPPPPPPPPPPPPPPPPPPPLLLLLGGGGGGGGGLPPPPPPWPPPPPPPRRRRPWGGGG","MMMMMMMLLLGGGGGPPPPPPPPPGGPPPPLLLLLLGPPGGGGGGGGLLPPPPPPPWPPPPPPPRRRWWGGG","MMMMMMMGLLLGGGGGPPPPPGGGLLLLLLLLGPPPPPPWGGWGGGGGLLLPPPPPPPPPPPWPPRRPWGGG","MMMMMMMMGLLLGGGGGPPPGGGLLLLLLLPPPPPPPPPGGGWGGGGGGLLLPPPPPPPPPPPWPPRRWWGG","MMMMMMMMMGLLLGGGGGGGGLLLGGGPPPPPPPPPPPPGGGWGGGGGGGLLLPPPPPPPPPPPPPRRRWGG","MMMMMMMMMMGLLLGGGGGGLLLLGPPPPPPPPPPPPPPPGWWGWWGGGGLLLLPPPPPPPPPPWGGRRRWG","MMMMMMMMMMMGLLLGGGGLLPPPLPPPPPPPPPPPPPPPGGLLLLLLLLGGGLLLLPPPPPPPWWGGRRRR","MMMMMMMMMMMMGLLLGLLLGGPPPLPPPPPPPPPPPLLLLLWPPPPWGGGGGGLLLPPPPPPPPWGGRRRR","MMMMMMMMMMMMMGLLLLLLLGPPPPLLPPPPPLLLLLPPPPPPPPPWGGGGGLLLLPGPPPPPPWGGLLLW","MMMMMMMMMMMMMMMGGGGLLGPPPPPLLLLLLPPPPPPPPPPPPPPWGGGGGGLGLLGPPPPPPPGGLWWW","MMMMMMMMMMMMMMMMGGGGLLPPPPPPPPPPPPPPPPPPPPPPPPPPWGGGGGGPGLLGPPPPPPGLLWWW","MMMMMMMMMMMMMMMMMGGGGLLLPPPPPPPPPPPPPPPPPPPPPPPPWWWWGPPPGGLLPPLLLLLLLWWW","MMMMMMMMMMMMMMMMMMGGGGLLLPPPPPPPPPPPPPPPPPPPPPPPPPPPWWPPPGGLLLLLLLLLLWWW"],"houses":[[53,50,4,3],[52,49,3,3]],"anchors":{"bus":[69.5,50.6],"temple":[40.6,14.2]},"names":{"bus":"Dando","temple":"Zagreshwar Temple"}};/* END VILLAGE-DATA siolim */
 /* VILLAGE-DATA chorao */VILLAGES.chorao = {"name":"Chorao","centre":[15.5313,73.8575],"tile":12.0,"W":72,"H":56,"credit":"Map data © OpenStreetMap contributors (ODbL)","rows":["WGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGLLLLLLGGGGGGGGGGG","WGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGLLLRRRRLGGGGGGGGGG","WWGGGRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGRRRRRRRRRRRRGGGGGGG","GWWGGRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGRRRRRRRRRRRRRRRRRRGGG","GGWWGGRRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGRRRRRGGGGLGGGGGRRRRRRRR","GGGWWGGGRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGRRRRGGGGGGLLGGGGGLGGRRRR","GGGGWWGGGRRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGRRRGGGGGGGGGLGGGGGLGGGGGG","GGGGGWWGGGGRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGRRRGGGGGGGGGGLLLGGGGGGGGGG","PPPGGGGWWGGGRRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGRRRGGGGGGGGGGGGGLGGGGGGGGGG","PPPPPGPPWWGGGGRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGRRRGGGGGGGGGGGGGGLLGGGGGGGGG","PPPPPPPPPPWWGGGRRRRGGGGGGGGGGGGGGGGGGGGGGGGGRRGGGGGGGGGGGGGGGGLGGGGGGGGG","PPPPPPPPPPPWWWGGGRRRRRGGGGGGGGGGGGGGGGGGGGGRRRLGGGGGGGGGGGGGGGLGGGGGGGGG","PPPPPPPPPPPPPWWGGGGRRRRRRRRRRRRRRRRRRRRRRRRRRLLGGGGGGGGGGGGGGGLGGGGGGGGG","MPPPPPPPPPPPPPPWWGGGGGRRRRRRRRRRRRRRRRRRRRRRGGLGGGGGGGGGGGGGGLLLGGGGGGGG","MMMMPPPPPPPPPPPPWWGGGGGGGGGGGGGGGGGGGGGGGRRRGGLLGGGGGGGGGGGGGLGLGGGGGPPP","MMMPPPPPPPPPPPPPMMWWGGGGGGGGGGGGGGGGGGGGGRRGGPLLGGGGGGGGGGGGGGGLLGPPPPPP","MMMPPPPPPPPPPPPMMMMMWWGGGGGGGGGGGGGGGGGGRRRPPPPPGGGGGGGGGGGGGGPPPPPPPPPP","MMMPPPPPPPPPPPPMMMMMMWWWGGGGGGGGGGGGWWWWRRPPPPPPPGGGGGGGGGGPPPPPPPPPPWWW","WMMMPPPPMMMMPPMMMMMMMMMWWWWWWGGGGWWWWGGGRRPPPPPPPPPGGGPPPPPPPPPPPPPWWWPP","WMMMMPPMMMMMMMMMMMMMMMMGGGGWWWWWWWGGGGGRRRGPPPPPPPPPPPPWWPPPPPPPPWWPPPPP","MMMMPPPMMWMMMMMMMMMMMMMGGGGGGGGGGGGGGGGRRLLPPPPPPPPPPPPPWWPPPPPWWWPPPPPP","MMMPPPMMWWMMMMMMMMMMMMMGGGGGGGGGGGGGGLGRRWLPPPPPPPPPPPPPPWWPWWWWPPPPPPPP","MMMMPMMWWMMMMMMMMMMMMMMGGGGGGGGGGGGGGLGRRGWLPPPPPPPPPPPPPPWWWPPPPPPPPPPP","MMMMMMWWMMMMMMMMMMMMMMMGGGGGGGGGGGGGGLGRRGWLPPPPPPPPPPPPPPPPPPPPPPPPPPPP","MMMMMWWMMMMWWMWMMMMMMMMGGGGGGGGGGGGGGLRRRGGLLPPPPPPPPPPPPPPPPPPPPPPPPPPP","WMMMWWMMMMMWWMWMMWMMMMGGGGGGGGGGGGGGGLRRGGGWLPPPPPPPPPPPPPPPPPPPPPPPPPPP","WWMMWMMMMMMWMMWMWWMMMMGGGGGGGGGGGGGGGLRRGGGGWLLLPPPPPPPPPPPPPPPPPPPPPPPP","PWWWMMMMMMMWMMWMWWMWMMGGGGGGGGGGGLLGGLRRGGGGWWWLLPPPPPPPPPPPPPPPPPPPPPPP","PPWWMWWMMMMWMMWMWWMWMWGGGGGGGGGGGLLLLLRRPPPPPWWWLLPPPPPPPPPPPPPPPPPPPPPP","PPPWWWMMMMMWMMWMWWMWMWGGGGGGGGGGGGGGGRRRPPPPPPWWWLLPPPPPPPPPPPPPPPPPPPPP","PPPPWWMMMMMWMMWMWWMWMWWMWMMMMMMMMMMMMRRPPPPPPPPPWWLLPPPPPPPPPPPPPPPPPPPP","PPPPPWWMMMWWMWWMWWMWMWWMWMMWWMMMMMMMMRRPPPPPPPPPPWWLPPPPPPPPPPPPPPPPPPPP","PPPPPPPWWMWWMWWMWMWWMWMMWMWWWMMMMWWWWRRPPPPPPPPPPPWWLPPPPPPPPPPPPPPPPPPP","PPPPPPPPPWWWWWWWWWWWMWMWWMWWWMMWWWWWWRRPPPPPPPPPPPPWLLPPPPPPPPPPPPPPPPPP","PPPPPPPPPPPPWWWWWWWWWWMWWMWWWWWWPPPPPRRPPPPPPPPPPPPPWLLPPPPPPPPPPPPPPPPP","PPPPPPPPPPPPPPPPPPPPWWWWWMMWWWWPPPPPPRRPPPPPPPPPPPPPPWLLPPPPPPPPPPPPPWWW","PPPPPPPPPPPPPPPPPPPPPPWWWWWWWPPPPPPPPRRPPPPPPPPPPPPPPWWLWPPPPPPPPWWWWWWW","PPPPPPPPPPPPPPPPPPPPPPPWWWWPPPPPPPPPPRRPPPPPPPPPPPPPPGWLLWPPWPPWWWWWWWWW","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRPPPPPPPPPPPPPPWWLLPPPPWWWWWWWWWWW","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRPPPPPPPPPPPPPPWGWLPPPPPWWWWWWWMMM","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRPPPPPPPPPPPPPPWGWLPPPPPPWWWWWMMMM","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRPPPPPPPPPPPPPPWGWLPPPPPPPPPPPWMMM","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRPPPPPPPPPPPPPPWWWLPPPPPPPPPPPWMMM","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRPPPPPPPPPPPPPPPWGLPPWWLLLWWWWWMMM","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRPPPPPPPPPPPPPPPWGLLLLLLLLLLLLLLLL","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRPPPPPPPPPPPPPPPWGWWWLLLLLLLLLWWWW","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRPPPPPPPPPPPPPPPWGLLLLWWWWWLLLLLLL","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRPPPPPPPPPPPPPWWLLLWWWWWPWWWWWWWWW","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRLWWWWWWWWWWWLLLLWWWPPPPPPPPPWWWPW","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRLLLLLLLLLLLLLPWPPPPPPPPPPPPPPPPPW","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPW","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRWWPPPPPPPPPPPPPPPPPPPPPPPPPPPPPWWW","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRRWWPPPPPPPPPPPPPPPPPPPPPPPPPPPWWWWP","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRRRWWWWPPPPPPPPPPPPPPPPPPPPPPPWWWWWPPP","PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPRRRRRWWWWWPPPPPPPPPPPPPPPPPPPPPWWWWWWPPPW","PPPPPPPPPPPPPPPPPPPPPPPPPPPPRRRRRRWWWWWWWWPPPPPPPPPPPPPPPPPWWWWWWWPPPWWW"],"houses":[[34,21,3,3],[33,14,4,3],[32,13,4,3],[41,10,3,3],[28,28,3,3],[41,27,3,3],[40,23,3,3],[41,21,3,3],[39,18,3,3]],"anchors":{"chapel":[34.8,14.7]},"names":{"chapel":"Salvador do Mundo Church"}};/* END VILLAGE-DATA chorao */
+/* VILLAGE-DATA panjim */VILLAGES.panjim = {"name":"Panjim","centre":[15.4993,73.8285],"tile":12.0,"W":72,"H":56,"credit":"Map data © OpenStreetMap contributors (ODbL)","rows":["WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW","WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW","WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW","WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW","WWWWWWWWWWWWWWWWWWWWWWWWWWLWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW","WWWWWWWWWWLLWWWWWGWGWGGGWLLWWWLWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW","WWWWWWWWLLLLGGGGGGGGGGGGGLLGGLLLWWWWWWWWWLLWWWWWWWWWWWWWWWWWWWWWWWWWWWWW","WWWWWWWWGLLLGGGGGGGGGGGGGLLGGLGLWWWWWWWWWWLLWWWWWWWWWWWWWWWWWWWWWWWWWWWW","WWWWWWWWGLGLGGGGGGGGGGGGRRRRRRRLGGGWWWWWWWWLWWWWWWWWWWWWWWWWWWWWWWWWWWWW","WWWWWWWWGLLLGGGRRRRRRRRRRRRRRRRRRRRRRRRGGLWLWWWWWWWWWWWWWWWWWWWWWWWWWWWW","WWWWWLRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRWWWWWWWWWWWWWWWWWWWWWWWWWW","RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRWWWWWWWWWWWWWWWWWWWW","RRRRRRRRRRRRRRRRGGGGRRGGGGGGGGGLLGGGGRRRRRRRRRRRRRRRRRWWWWWWWWWWWWWWWWWW","RRRRRRRRGLLLGGLLGGGGGRRRRRRRRGGLLGGGGGGGGGRRRRRRRRRRRRRRWWWWWWWWWWWWWWWW","RGGGLLRRRLGGGGLLGGGGGRRRRRRRRRRRRRRRGGGGGGGLRRGGGGGRRRRRRRWWWWWWWWWWWWWW","GLLLLGGRRRGGGGLLLGGGGRRRGGRRRRRRRRRRRRRRRRRRRRRGGGGGGRRRRRRRWWWWWWWWWWWW","LLGGGGLGRRGGLLLGLLGGGGRRRRRRRRGLLRRRRRRRRRRRRRRRGGGGGGRRRRRRRRWWWWWWWWWW","GGGLLLLLRRRLLLGGGLLGGGRRRRRLGGGLLGGGGGLLGLLGGGRRRRRRRRRRRRRRRRRRWWWWWWWW","GGGLGGGLGRRLGGGGGLLLGRRRGGGLGGGRGGGGGGLGGLLGGGRRRRRRRRRRRRRRRRRRRRRWWWWW","GGGGGGGLLRRRLLGGGGLLRRRGGGLLGGGRRLLLLLLGGLGGGGGRRRGGGGGGRRRRRRRRRRRRRWWW","GGGGGGGGLLRRRLGGGGGRRRGGGLLLLLRRGLLLLLLGGLGGGGRRRLLLLGGGGGRRRRRGRRRRRRRR","GGGGGGGGLLGRRLLGGGRRRRGGLLLLLLRRLGLLLGLGGLGGGRRRGGLLLLLLGGGGRRRRRGRRRRRR","GGGGGLLLLGGRRRGGGRRRGRRLLGLLGGRRLGLGGLLGLLGGRRRGGGGGGGGLLGGGGGGRRRRGGRRR","GGLLLLGGGGGGRRGGRRRGGRRRGGLGGGRRLLLGLLLGLLGRRRGGGGGGGGGGLLGGGGGLLRRRRRGG","LLLGGGGGGGGGGRRRRRGGGGRRRLLGGGRRLLLLLLLLLLGRRGGGGGGGGGGGGLLGGGGLLGLRRRRR","GGGGGGGGGGGGGRRRRGGGGGGRRRLGGGRRGGLGLLLLLLRRRGGGGGGGGGGGGLLGGGLLLLLLGLRR","GGGGGGGGGGGGGRRRGGGGGGGGRRLGGGRRGLLGLLGGGGRRGGGGGGGGGGGGGGLGGGLLGGLLLLLR","GGGGGGGGGGGGRRRLLGGGGGLLLRRLGGRRGLLGLLGGGRRRGGGGGGGGGGGGGGLGGGLLGGLLLLGG","RGGGGGGGGGGRRRGLLGGGGLLLGRRRGGRRLLLLLLGGGRRGGLGGGGGGGGGGGGLGGGLGGGLGGLLG","RGGGGRGGGRRRRGGGLLGLLLGGGGRRGGRRLLLLLLGGRRRGLLLGGGGGGGGGGGLGGGLGLLLGGLLL","RRRRRRRRRRRRGGGGGLLLLGGGGGGRRRRRGLLLLLGGRRGGLGLGGGGGGGGGGLLLLLLLLLLLLLLL","RRRRRGRRRRGGGGGGLLLGGGGGGGGRRRRGGGGGLLGGRRGGLGLGGGGGGGGGGLLLLLLGLLLLLLLL","RRGGGGRRRGGGGGGLLLLLGGGGGGGRRRRRRRRRRRRRRLLLLLLGGGGGGGGGGGGGGGLGGLLGLLLL","RRGGGRRRGGGGGLLLGGLLGGGGGRRRRRRRRRRRRRRRRGGGLLGGGGGGGGGGGGGGGGLGGLLGLLGL","RRRRRRRRGGGLLLLGGGGLLGGGRRRRGRRRRRRRRRRRRGGGGGGGGGGGGGGGGGGGGGLLLLLGLLGG","GRRRRRGRRGLLLLLGGGGGLGRRRRGGGRRGGGGGGGRRRGGGGGGGGGGGGGGGGGGGGGLGLLLGLLLL","GRRRGGGRRRLGGGLLGLGGRRRRGGGGGRRGGGGGGRRRRRRGGGGGGGGGGGGGGGGGGGLLLLGGLLLG","RRRGGGLLRRGGGGLLGLRRRRRGGGLLGRRGGGGGGRRRRRRRRRGGGGGGGGGGGGGGGGLLLLLGLLGG","RRRRLLLLRRRGGGGLRRRRRLLGGGLLRRGGGGGGRRGRRGRRRRRRGGGGGGGGGGGGGLLGLLLLLGGR","RGRRLLGGGRRGGGGRRRRGGGLLGGLLRRLLLGGRRRLRRGGGGRRRRRGGGGGGGGGGGLLGLLGGLRRR","GGRRGGGGGRRRGRRRRLGGGGGLLLLRRRLLLGGRRGGRRGGGGGGRRRRRRGGGGGGGGLGGLGGGGRRR","GGRRGGGGGGRRRRRRGLGGGGGLLGRRRRGGGGRRGGGRRGGGGGGGGRRRRRRRRGGGGLLLLGGGGRRL","GGGRRGGGGGRRRRGGGLLGGGGGRRRRGGGGGRRRGGGRRGGGGGGGLGGGRRRRRRRRRRLLLLGGRRRL","GGGRRGGGRRRRRGGGGGGGGGRRRRGGGGGGRRRGGGGRRGGGGGGLLGGGGGGGRRRRRRRLLLLLRRLW","GGGRRGRRRRRGRRGGGGGGRRRRGLLGGGGRRRGGGGRRRGGGGGGLLGGLGGGGLGGGGRRRRLLGRRWW","GGGRRRRRRGGGRRGGGGRRRRRLLLLGGGRRRGGGGGRRGGGGGGGLLLLLGGLLGGLLLGRRRRRRRRWW","GGGRRRRGGGGGGRRGGRRRRGGGLGLLGRRRGGGGGRRRGGGGGGLLGLGGLLLGGGLGGGLLRRRRRLWW","GRRRRRGGGGGGGRRRRRRLGGGGLLGRRRRGGGGGGRRGGGGGGGLGLLGGLGGGLLLLLLLLGGGRRWLL","RRRRRRGGGGGGGRRRRGGLGGGGGGRRRRLGGGGGRRRLGGGGGGLLLGGGLGGGGLLLLLLLLLRRWWWL","RRGGRRRGGGGRRRRRRGGLLGGGGRRRGGLGGGGRRRLLGGGGGLLLLGGGGGGGGLLLLGLLLLRRWWWL","RGGGGRRGGGRRRRGRRGGGLLGGRRRGGGLLGGGRRGLGGGGGLLGGLLGGGGGGGLLLLLLLGGRRWWLL","GGGGGRRGRRRRGGGRRRGGLLGRRRGGGGGLLGRRRGGGGGGLLGGGGLLGGGLGGLLLLLLLGGRRWWLG","GGGGGRRRRRLGGGGGRRGGGRRRRLGGGGGLLRRRGGGGGLLLGGGGGLLGGGLGLLGGGGLGGGRRWWLL","GGGGRRRRGGLLGGGGRRRGRRRRGLLGGGGGGRRGGGGGLLLGGGGGGLLGGGGGLLLLLLLGGRRWWWLW","GGRRRRRRGGGLGGGGGRRRRRGGGGLLGGGGRRRGGGGLLGGGGGGGGLLGGLLGLLGLLLLLLRRWWWLW","GRRRRGRRGGGLLGGGGGRRRLLGGGLLGGGRRRGGGGLLGGGGGGGGGLLGGGLGLLGLGGLGGRRWWWLW"],"houses":[[48,46,3,3],[48,43,4,3],[45,49,4,3],[43,42,4,3],[43,51,3,3],[20,33,4,3],[19,29,4,3],[23,28,4,3],[25,30,4,3],[23,32,4,3],[24,39,4,3],[47,30,3,3],[27,33,3,3],[2,14,4,3],[46,30,3,3],[49,30,3,3],[1,28,3,3],[23,37,3,3],[1,23,4,3],[8,13,4,3],[37,25,4,3],[46,13,4,3],[58,20,4,3],[56,19,4,3],[9,15,4,3],[21,10,4,3],[32,11,4,3],[5,36,3,3],[25,6,4,3],[35,13,4,3],[3,35,3,3],[12,15,3,3],[4,34,4,3],[29,7,3,3],[23,14,4,3],[27,19,4,3],[35,11,4,3],[13,14,3,3],[27,16,4,3],[11,13,3,3],[12,27,4,3],[16,27,4,3],[31,34,3,3],[33,34,3,3],[35,34,4,3],[40,29,3,3],[45,34,4,3],[28,26,3,3],[28,21,4,3],[26,24,3,3],[23,22,3,3],[16,23,4,3],[32,41,3,3],[5,47,3,3],[13,43,3,3],[64,35,3,3],[65,35,3,3],[67,41,3,3],[30,47,4,3],[10,43,4,3],[62,30,4,3],[12,39,3,3],[63,49,4,3],[65,47,3,3],[44,22,3,3],[66,21,3,3],[60,21,4,3],[64,23,3,3],[63,22,3,3],[63,23,3,3],[65,23,3,3],[63,24,3,3],[63,25,4,3],[8,7,3,3],[6,23,3,3],[4,23,3,3],[4,22,3,3],[1,23,4,3],[13,19,3,3],[37,50,3,3],[38,47,4,3],[49,49,3,3],[20,48,4,3],[67,24,3,3],[27,34,3,3],[22,33,4,3],[26,35,3,3],[8,9,3,3],[22,4,4,3],[24,6,3,3],[40,9,3,3],[31,8,4,3],[14,44,4,3],[50,18,4,3],[46,20,3,3],[48,22,3,3],[64,20,3,3],[35,6,4,3],[11,5,3,3],[18,12,3,3],[17,11,4,3],[52,41,3,3],[54,45,3,3],[55,45,3,3],[57,44,3,3],[58,46,3,3],[58,42,4,3],[60,45,3,3],[59,46,3,3],[60,44,3,3],[61,46,3,3],[54,46,3,3],[56,46,3,3],[56,44,3,3],[56,43,3,3],[57,42,3,3],[52,43,3,3],[53,44,3,3],[53,42,3,3],[55,42,3,3],[26,27,3,3],[24,21,3,3],[26,26,3,3],[55,43,3,3],[9,36,4,3],[11,35,3,3],[12,34,3,3],[13,37,3,3],[10,38,4,3],[15,32,4,3],[17,33,3,3],[16,33,3,3],[18,34,3,3],[17,35,3,3],[15,35,4,3],[17,35,4,3],[14,33,3,3],[14,35,3,3],[17,15,4,3],[18,16,3,3],[20,15,3,3],[17,14,3,3],[16,13,3,3],[14,11,4,3],[14,11,3,3],[16,11,3,3],[18,26,4,3],[24,10,4,3],[28,10,3,3],[28,12,3,3],[30,12,3,3],[37,29,3,3],[37,31,4,3],[39,27,3,3],[40,25,3,3],[38,19,3,3],[38,20,3,3],[38,22,3,3],[33,18,3,3],[32,17,3,3],[34,16,3,3],[32,16,3,3],[32,17,3,3],[30,10,3,3],[66,43,3,3],[64,43,3,3],[62,43,4,3],[30,34,3,3],[33,35,3,3],[37,37,3,3],[40,39,3,3],[40,40,3,3],[42,37,3,3],[46,40,3,3],[44,38,3,3]],"anchors":{"ferry":[10.9,5.4],"bus":[40.5,38.2],"temple":[27.5,27.8],"chapel":[46.9,34.6]},"names":{"ferry":"Panaji Ferry Terminal","bus":"Church Square G1","temple":"Sti Sai Seva Mandir Sansthan","chapel":"Our Lady of the Immaculate Conception"}};/* END VILLAGE-DATA panjim */
 /* VILLAGES-END */
 let MODE = 'real';
 try { if (localStorage.getItem('rk-mode') === 'random') MODE = 'random'; } catch (e) {}
@@ -643,7 +649,7 @@ function gen(seed) {
   const known = L.connect ? VILLAGE.houses.slice() : [];
   // in a real village, houses also stand on the paddy's edge along a lane, as they do in Goa
   const buildable = t => t === GR || (L.connect && t === PAD);
-  for (let tries = 0; tries < (L.connect ? 4000 : 500) && houses.length < 36; tries++) {
+  for (let tries = 0; tries < (L.connect ? 4000 : 500) && houses.length < (L.connect ? Math.max(36, Math.min(80, VILLAGE.houses.length)) : 36); tries++) {
     let x, y, w, h = 3;
     if (known.length) [x, y, w] = known.shift();
     else { w = 3 + Math.floor(rand() * 2); x = 2 + Math.floor(rand() * (W - (L.connect ? 7 : 16))); y = 2 + Math.floor(rand() * (H - (L.connect ? 6 : 12))); }
@@ -1563,11 +1569,11 @@ function inSafe(x, y) {
 }
 
 /* ---------- the chapter's traps and puzzles, laid out with the village ---------- */
-let pits, dogs0, crackers0, gates, seals, sacr, BELL;
+let pits, dogs0, crackers0, gates, seals, sacr, BELL, potholes = [];
 const flood = new Float32Array(W * H);        // how deep the water over each tile is, 0 to 1
 const floodOf = new Int8Array(W * H);         // which sluice gate lets the river onto a tile (gate index + 1)
 function placeChapterThings(devli) {
-  pits = []; dogs0 = []; crackers0 = []; gates = []; seals = []; sacr = null; BELL = null;
+  pits = []; dogs0 = []; crackers0 = []; gates = []; seals = []; sacr = null; BELL = null; potholes = [];
   flood.fill(0); floodOf.fill(0);
   const tile = (x, y) => at(x, y), far = (x, y, d) => hyp(x - START.x, y - START.y) >= d;
   const spaced = (list, x, y, d) => list.every(o => hyp(o.x - x, o.y - y) >= d);
@@ -1578,6 +1584,10 @@ function placeChapterThings(devli) {
   for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) all.push([x, y]);
   shuffled(all);
 
+  for (const [x, y] of all) {
+    if (potholes.length >= 14) break;
+    if (tile(x, y) === ROAD && far(x, y, 4) && spaced(potholes, x, y, 5)) potholes.push({ x: x + 0.2 + rand() * 0.6, y: y + 0.2 + rand() * 0.6, s: 0.7 + rand() * 0.6 });
+  }
   // open wells: on a lane at least two tiles wide, so there is always a way round
   if (has('traps', 'well')) {
     const wide = (x, y) => tile(x, y) === LANE && (
@@ -1698,8 +1708,14 @@ function newGame() {
   buildStatics();
   lastPT = -1;
   bfs(START.x, START.y);
-  for (let i = 0; i < 5 + CH.extra; i++) spawnDemon();
+  if (!CH.life) for (let i = 0; i < 5 + CH.extra; i++) spawnDemon();
   setupRescues();
+  if (CH.life) {
+    const t = CAL.ist();
+    S.dayMin = t.getUTCHours() * 60 + t.getUTCMinutes(); S.dayIdx = 0; S.points = 0; S.lifeT = 10;
+    newLifeDay();
+    if (isNight()) for (let i = 0; i < 6; i++) spawnDemon();
+  }
   renderHud();
 }
 
@@ -1745,6 +1761,7 @@ const PLACE_DEFAULTS = { temple: 'the temple', chapel: 'the chapel', devli: 'the
 const PLACE_NAMES = Object.assign({}, PLACE_DEFAULTS);
 
 function setupRescues() {
+  if (CH.life) { S.roster = []; return; }
   // this chapter's version of each role, and only the ones whose destination exists in this village
   const pool = ROLES.map(r => Object.assign({}, r, (ROLE_LINES[CH.id] || {})[r.id])).filter(r => r.dest === 'home' || exits.some(e => e.kind === r.dest));
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
@@ -1823,7 +1840,7 @@ function reveal(unmasked) {
   S.npc = null;
   if (S.dest) { S.dest.wait = 0; }
   if (unmasked) {
-    S.log.push({ name, result: 'unmasked' });
+    S.log.push({ name, result: 'unmasked' }); addPoints(150, 'unmasked');
     S.charges = Math.min(3, S.charges + 1); S.oil = OIL_MAX;
     whisper(`That was never ${name}. Burn it with your lamp!`);
   } else {
@@ -1838,7 +1855,7 @@ function reveal(unmasked) {
 function deliver() {
   const n = S.npc;
   n.state = 'home'; n.pillion = false;
-  S.log.push({ name: n.role.name, result: 'saved' });
+  S.log.push({ name: n.role.name, result: 'saved' }); addPoints(100, 'rescue');
   S.dest.wait = 0;
   SFX.play('saved');
   if (S.dest.kind === 'bus') SFX.play('horn', S.dest.x, S.dest.y);
@@ -1858,6 +1875,7 @@ function captured() {
   S.nextT = 3.5;
 }
 function nextRescue() {
+  if (CH.life) { S.lifeT = 25 + rand() * 20; return; }
   S.ri++; S.clock += 45;
   if (S.ri >= S.roster.length) startFinale(); else startRescue();
 }
@@ -1885,12 +1903,12 @@ function hurt(fx, fy) {
   const d = hyp(player.x - fx, player.y - fy) || 1, kx = (player.x - fx) / d, ky = (player.y - fy) / d;
   for (let i = 0; i < 8; i++) moveEnt(player, kx * 0.1, ky * 0.1);
   renderHud();
-  if (S.hearts <= 0) return endNight('fell');
+  if (S.hearts <= 0) return CH.life ? wakeHome() : endNight('fell');
   whisper(S.hearts === 1 ? 'Get up. One more and they have you.' : 'Get up! Keep the lamp burning.');
 }
 function banish(d) {
   demons.splice(demons.indexOf(d), 1);
-  S.banished++;
+  S.banished++; if (CH.life) addPoints(5);
   S.puffs.push({ x: d.x, y: d.y, born: S.t, big: d.big });
   SFX.play('banish', d.x, d.y);
   if (d.big) whisper('The disguised demon burns away into smoke.');
@@ -1907,6 +1925,7 @@ addEventListener('keydown', e => {
   if (k === 'e' && S && S.mode === 'talk') { e.preventDefault(); trust(); return; }
   if (k === 'q' && S && S.mode === 'talk') { e.preventDefault(); accuse(); return; }
   if (k === 'b' && !e.repeat) toggleBike();
+  if (k === 'escape' && S && S.mode === 'play') { showIntro(); return; }
   if ((k === 'z' || k === 'x') && S && S.mode !== 'talk') turnView(k === 'z' ? -1 : 1);
   if (k === '=' || k === '+') zoomBy(1.1);
   if (k === '-' || k === '_') zoomBy(1 / 1.1);
@@ -1928,6 +1947,7 @@ document.getElementById('btnBanish').addEventListener('click', accuse);
 const spot = (x, y, what) => ({ x, y, tx: Math.floor(x), ty: Math.floor(y), what });
 // where the child needs to go next; a locked place sends you to its puzzle first
 function objective() {
+  if (CH.life) { const q = lifeObjective(); if (q !== undefined) return q; }
   if (S.phase === 'boss') return spot(PYRE.x, PYRE.y, 'the pyre');
   if (S.phase === 'done') return null;
   let e = null;
@@ -1999,7 +2019,8 @@ function update(dt) {
   updateFx(dt);
   S.shake = Math.max(0, S.shake - dt);
   if (S.mode !== 'play') return;
-  S.clock = Math.min(S.phase === 'boss' ? 8 * 60 : 6.9 * 60, S.clock + dt * 0.6);
+  if (!CH.life) S.clock = Math.min(S.phase === 'boss' ? 8 * 60 : 6.9 * 60, S.clock + dt * 0.6);
+  if (S.pop) { S.pop.t -= dt; if (S.pop.t <= 0) S.pop = null; }
 
   let sx = (keys.has('arrowright') || keys.has('d') ? 1 : 0) - (keys.has('arrowleft') || keys.has('a') ? 1 : 0);
   let sy = (keys.has('arrowdown') || keys.has('s') ? 1 : 0) - (keys.has('arrowup') || keys.has('w') ? 1 : 0);
@@ -2054,6 +2075,7 @@ function update(dt) {
   if (refuel) S.oil = Math.min(OIL_MAX, S.oil + dt * 35);
   updateChapter(dt);
   if (S.mode !== 'play') return;
+  if (CH.life) updateLife(dt);
   const safe = inSafe(player.x, player.y);
 
   // the person you are walking home
@@ -2135,7 +2157,7 @@ function update(dt) {
 
   // the night thickens as it goes on
   S.spawnT -= dt;
-  const want = S.burnT >= 0 || S.ending ? 0 : 5 + CH.extra + S.ri + (S.boss ? 2 : 0) + (['ferry', 'zagor', 'flood'].includes(S.phase) ? 3 : 0);
+  const want = CH.life ? (isNight() ? 6 + (S.moon && S.moon.illum < 0.15 ? 3 : 0) : 0) : S.burnT >= 0 || S.ending ? 0 : 5 + CH.extra + S.ri + (S.boss ? 2 : 0) + (['ferry', 'zagor', 'flood'].includes(S.phase) ? 3 : 0);
   if (S.spawnT <= 0) { if (demons.length < want) spawnDemon(); S.spawnT = 3; }
 
   if (spirit.path) {
@@ -2250,6 +2272,7 @@ function updateBoss(b, dt) {
 /* ---------- traps, puzzles and the chapter's ending, every frame ---------- */
 // a noise that every demon within r hears: they come looking, and one more crawls out of the dark nearby
 function alarm(x, y, r) {
+  if (CH.life && !isNight()) return;   // by day a bark or a splash is only a bark or a splash
   for (const d of demons) if (hyp(d.x - x, d.y - y) < r) d.alert = 7;
   const d = spawnDemon({ x, y });
   if (d) d.alert = 7;
@@ -2286,10 +2309,16 @@ function updateChapter(dt) {
     S.hearts--; S.flash = 0.6; S.ringT = 0; renderHud();
     SFX.play('splash');
     alarm(px, py, 10);
-    if (S.hearts <= 0) return endNight('fell');
+    if (S.hearts <= 0) return CH.life ? wakeHome() : endNight('fell');
     whisper(CH.monsoon ? 'That was no puddle, it was a well full to the brim! Climb out, quick, they heard the splash.' : 'An open well! You splash down into the cold water. Climb out, quick, they heard you.');
   }
 
+  // potholes: hit one fast on a bike and it throws you
+  if (player.bike && player.bike.v > 4) for (const ph of potholes) if (hyp(ph.x - px, ph.y - py) < 0.35 * ph.s + 0.15) {
+    dismount(false); S.shake = 0.4; SFX.play('slam', px, py, 10);
+    whisper(rainAmt() > 0.3 ? 'That puddle was a pothole! You go flying off the bike.' : 'Pothole! You go flying off the bike. Slow down on these roads.');
+    break;
+  }
   // dogs: walk past at full speed and they wake up barking; creep and they sleep on
   for (const g of S.dogs) {
     const d = hyp(g.x - px, g.y - py);
@@ -2404,7 +2433,7 @@ function updateChapter(dt) {
   }
 
   // the voice in the dark: it calls your name and leads you away from the lanes
-  if (has('traps', 'voice') && S.phase === 'rescue') {
+  if (has('traps', 'voice') && S.phase === 'rescue' && (!CH.life || isNight())) {
     if (!S.voice) {
       S.voiceT -= dt;
       if (S.voiceT <= 0) {
@@ -2463,6 +2492,292 @@ function updateChapter(dt) {
     if (S.dawn >= 1) return endNight('dawn');
   }
 }
+/* ---------- the calendar: Goa time, the tithi and the moon, the festivals ---------- */
+// Approximate astronomy, worked out offline: good to a few hours, so a tithi near its boundary can be a day off a printed panchang.
+const CAL = (() => {
+  const DAY = 864e5, J2000 = Date.UTC(2000, 0, 1, 12), rad = Math.PI / 180;
+  const norm = a => ((a % 360) + 360) % 360;
+  function sunLon(ms) {
+    const d = (ms - J2000) / DAY, g = (357.529 + 0.98560028 * d) * rad;
+    return norm(280.459 + 0.98564736 * d + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g));
+  }
+  function moonLon(ms) {
+    const d = (ms - J2000) / DAY, Mp = (134.963 + 13.064993 * d) * rad, D = (297.85 + 12.190749 * d) * rad, M = (357.529 + 0.98560028 * d) * rad;
+    return norm(218.316 + 13.176396 * d + 6.289 * Math.sin(Mp) + 1.274 * Math.sin(2 * D - Mp) + 0.658 * Math.sin(2 * D) - 0.186 * Math.sin(M));
+  }
+  const elong = ms => norm(moonLon(ms) - sunLon(ms));
+  // lunar months (amanta, as in Goa) named by the sun's sidereal sign at the new moon that begins them
+  const MONTHS = ['Vaishakha', 'Jyeshtha', 'Ashadha', 'Shravana', 'Bhadrapada', 'Ashvin', 'Kartika', 'Margashirsha', 'Pausha', 'Magha', 'Phalguna', 'Chaitra'];
+  const TITHIS = ['Pratipada', 'Dwitiya', 'Tritiya', 'Chaturthi', 'Panchami', 'Shashthi', 'Saptami', 'Ashtami', 'Navami', 'Dashami', 'Ekadashi', 'Dwadashi', 'Trayodashi', 'Chaturdashi', 'Purnima'];
+  function panchang(ms) {
+    const e = elong(ms), tithi = Math.floor(e / 12) + 1;
+    const nm = ms - e / 360 * 29.530588 * DAY;
+    const ayan = 23.85 + (ms - J2000) / DAY / 365.25 * 0.01397;
+    const month = MONTHS[Math.floor(norm(sunLon(nm) - ayan) / 30)];
+    const pt = tithi <= 15 ? tithi : tithi - 15;
+    return { tithi, month, paksha: tithi <= 15 ? 'Shukla' : 'Krishna', name: tithi === 30 ? 'Amavasya' : TITHIS[pt - 1], illum: (1 - Math.cos(e * rad)) / 2, waxing: e < 180 };
+  }
+  // the time and date in Goa, whatever the viewer's own time zone
+  const ist = () => new Date(Date.now() + 5.5 * 3600e3);
+  function easter(y) {
+    const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+    return Date.UTC(y, Math.floor((h + l - 7 * m + 114) / 31) - 1, ((h + l - 7 * m + 114) % 31) + 1);
+  }
+  // festivals on the Goan date `d` (a Date whose UTC fields are the Goa calendar date): Hindu by tithi at sunrise, Catholic by the church calendar
+  function festivals(d) {
+    const y = d.getUTCFullYear(), mo = d.getUTCMonth(), day = d.getUTCDate(), noon = Date.UTC(y, mo, day);
+    const p = panchang(noon - 5.5 * 3600e3 + 6.3 * 3600e3);   // about sunrise in Goa
+    const out = [];
+    // dates checked against printed calendars, where the tithi turns too close to sunrise for this approximation
+    const key = `${y}-${mo + 1}-${day}`, PIN = { '2026-9-14': 'chovoth', '2026-3-19': 'padvo' }, SKIP = { '2026-9-15': 'chovoth' };
+    const hindu = (m, t, id, name, extra) => { if (SKIP[key] !== id && ((p.month === m && p.tithi === t) || PIN[key] === id)) out.push(Object.assign({ id, name }, extra)); };
+    hindu('Ashvin', 29, 'narkasur', 'Naraka Chaturdashi, Narkasur night', { chapter: 'narkasur', fest: 'effigy', crackers: true });
+    hindu('Ashvin', 30, 'diwali', 'Diwali', { fest: 'samai', crackers: true });
+    hindu('Kartika', 1, 'padwa', 'Diwali Padwa', { fest: 'samai' });
+    hindu('Kartika', 12, 'tulsi', 'Tulsi Vivah', { fest: 'samai' });
+    hindu('Bhadrapada', 4, 'chovoth', 'Ganesh Chaturthi (Chovoth)', { fest: 'samai', crackers: true });
+    hindu('Phalguna', 15, 'shigmo', 'Shigmo (Phalguna Purnima)', { fest: 'flag' });
+    hindu('Chaitra', 1, 'padvo', 'Gudi Padwa (Sanvsar Padvo)', { fest: 'flag' });
+    hindu('Shravana', 5, 'nagpanchami', 'Nag Panchami', {});
+    if (mo === 5 && day === 24) out.push({ id: 'saojoao', name: 'São João', chapter: 'saojoao' });
+    if (mo === 5 && day === 23) out.push({ id: 'saojoao-eve', name: 'the eve of São João', chapter: 'saojoao' });
+    if (mo === 7 && d.getUTCDay() === 6 && day > 21) out.push({ id: 'bonderam', name: 'Bonderam', chapter: 'bonderam', fest: 'flag' });
+    if (mo === 11 && day === 3) out.push({ id: 'xavier', name: 'Feast of St Francis Xavier', fest: 'flag' });
+    if (mo === 11 && (day === 24 || day === 25)) out.push({ id: 'christmas', name: day === 24 ? 'Christmas Eve' : 'Christmas', fest: 'flag' });
+    const ash = easter(y) - 46 * 864e5, dd = (noon - ash) / 864e5;
+    if (dd >= -4 && dd < 0) out.push({ id: 'carnival', name: 'Carnival', fest: 'flag' });
+    return { p, list: out };
+  }
+  return { panchang, festivals, ist };
+})();
+
+/* ---------- the weather: from the real season, the same for everyone on a given day ---------- */
+function weatherFor(d) {
+  const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+  let h = 2166136261;
+  for (const c of key) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  const r = rng(h >>> 0), m = d.getUTCMonth(), x = r();
+  if (m >= 5 && m <= 8) return x < 0.65 ? { kind: 'Heavy rain', rain: 0.8 + r() * 0.2, cloud: 1, mist: 0.3 } : x < 0.9 ? { kind: 'Drizzle', rain: 0.35, cloud: 0.8, mist: 0.4 } : { kind: 'Cloudy', rain: 0, cloud: 0.8, mist: 0.2 };
+  if (m === 9) return x < 0.3 ? { kind: 'Passing showers', rain: 0.4, cloud: 0.6, mist: 0.2 } : { kind: 'Clear', rain: 0, cloud: 0.1, mist: 0.2 };
+  if (m >= 10 || m <= 1) return x < 0.55 ? { kind: 'Clear', rain: 0, cloud: 0, mist: 0.2 } : x < 0.9 ? { kind: 'Morning mist', rain: 0, cloud: 0.1, mist: 0.9 } : { kind: 'Hazy', rain: 0, cloud: 0.4, mist: 0.4 };
+  if (m === 4 && x < 0.25) return { kind: 'Pre-monsoon storm', rain: 0.7, cloud: 1, mist: 0.1, lightning: true };
+  return x < 0.7 ? { kind: 'Hot and hazy', rain: 0, cloud: 0.3, mist: 0.1 } : { kind: 'Clear', rain: 0, cloud: 0, mist: 0 };
+}
+let WX = { kind: 'Clear', rain: 0, cloud: 0, mist: 0 };
+const rainAmt = () => CH.monsoon && !CH.life ? 1 : (CH.life ? WX.rain : 0);
+// daylight from the clock: 0 at night, 1 by day, with dawn and dusk between
+function sunLight(min) {
+  const ramp = (a, b, t) => Math.max(0, Math.min(1, (t - a) / (b - a)));
+  return Math.min(ramp(5.9 * 60, 7 * 60, min), 1 - ramp(18.3 * 60, 19.3 * 60, min));
+}
+function darkAlpha() {
+  if (!CH.life) return 0.66 * (1 - 0.85 * S.dawn);
+  const L = sunLight(S.dayMin), moon = S.moon ? S.moon.illum : 0.5;
+  return (1 - L) * (0.56 + 0.16 * (1 - moon) + 0.06 * WX.cloud) + L * (0.05 * WX.cloud + 0.08 * WX.rain);
+}
+
+/* ---------- live village: Goa time, day and night by themselves, a daily quest ---------- */
+const VILLAGE_TITLES = { tonca: 'Tonca', divar: 'Divar island', siolim: 'Siolim', chorao: 'Chorão island', panjim: 'Panjim' };
+let SPEED = 60;   // game minutes per real minute
+try { SPEED = +localStorage.getItem('rk-speed') || 60; } catch (e) {}
+const goaDay = (off = 0) => { const d = CAL.ist(); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + off)); };
+const dayKey = d => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+function todayInGoa() { const d = goaDay(); return Object.assign(CAL.festivals(d), { date: d, wx: weatherFor(d) }); }
+function lifeChapter(village) {
+  const t = todayInGoa(), f = t.list.find(x => x.fest) || {};
+  WX = t.wx;
+  return { id: 'life', life: true, village, place: VILLAGE_TITLES[village], title: 'Today in Goa', fest: f.fest || null, finale: null, extra: 0,
+    monsoon: WX.rain > 0.5, traps: ['well', 'dogs', 'voice', ...(t.list.some(x => x.crackers) ? ['crackers'] : []), ...(WX.rain > 0.5 ? ['sluice'] : [])], puzzles: [],
+    names: village === 'panjim' ? { chapel: 'the Immaculate Conception church', ferry: 'the Panjim ferry' } : undefined };
+}
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+function addPoints(n, why) {
+  if (!S || !n) return;
+  S.points = (S.points || 0) + n;
+  store.set('rk-points', store.get('rk-points', 0) + n);
+  const el = document.getElementById('points'); if (el) el.textContent = store.get('rk-points', 0);
+  if (why) S.pop = { text: `+${n} ${why}`, t: 2 };
+}
+// the day's quests, the same for everyone on a given Goan date
+const QUESTS = {
+  garbage: { giver: 'Shantabai', who: 'sweeping her yard', look: { body: '#8a2f5a', legs: '#8a2f5a', hair: '#cfcac0', h: 0.92, basket: true },
+    ask: 'Plastic everywhere after last night! Collect the bags along the lanes and put them in the bin by the road, baba.', thanks: 'Look how clean the vaddo is! The Rakhondar likes a clean village.', reward: 150 },
+  poee: { giver: 'Mai', who: 'the baker, with a basket of hot poee', look: { body: '#c9733a', legs: '#c9733a', hair: '#1a100a', h: 0.95, basket: true },
+    ask: 'Take these hot poee to three houses before they go cold. I have marked the doors.', thanks: 'All delivered, and still warm! Here, one poee for you.', reward: 120 },
+  hen: { giver: 'Tia Rosa', who: 'looking everywhere for her hen', look: { body: '#2f4f7a', legs: '#2f4f7a', hair: '#e0dcd2', h: 0.92 },
+    ask: 'My hen Pinky ran off again! She is somewhere in the fields. Catch her and bring her home, please.', thanks: 'Pinky! Naughty girl. Thank you, child, come for sorpotel on Sunday.', reward: 130 }
+};
+function setupQuest() {
+  const d = goaDay(S.dayIdx), key = dayKey(d);
+  let h = 0; for (const c of key) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const kind = ['garbage', 'poee', 'hen'][h % 3], Q = QUESTS[kind], r = rng(h);
+  const near = lanes.filter(([x, y]) => { const dd = hyp(x - START.x, y - START.y); return dd > 1.5 && dd < 4; });
+  const gs = near[Math.floor(r() * near.length)] || [START.x + 1, START.y];
+  const q = { kind, key, done: store.get('rk-quest-done', '') === key, state: 'offer', items: [], got: 0,
+    giver: { x: gs[0] + 0.5, y: gs[1] + 0.5, face: -1, moving: false, alpha: 1, role: { name: Q.giver, look: Q.look } } };
+  const spots = lanes.filter(([x, y]) => { const dd = hyp(x - START.x, y - START.y); return dd > 6 && dd < 30; });
+  const pickN = n => { const out = []; for (let t = 0; t < 400 && out.length < n; t++) { const s = spots[Math.floor(r() * spots.length)]; if (s && out.every(o => hyp(o[0] - s[0], o[1] - s[1]) > 4)) out.push(s); } return out; };
+  if (kind === 'garbage') {
+    q.items = pickN(8).map(([x, y]) => ({ x: x + 0.5 + (r() - 0.5) * 0.4, y: y + 0.5 + (r() - 0.5) * 0.4, got: false }));
+    const road = [];
+    for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) if (map[y * W + x] === ROAD) road.push([x, y]);
+    road.sort((a, b) => hyp(a[0] - START.x, a[1] - START.y) - hyp(b[0] - START.x, b[1] - START.y));
+    const b = road[Math.min(road.length - 1, 3)] || [gs[0] + 1, gs[1]];
+    q.bin = { x: b[0] + 0.5, y: b[1] + 0.5 };
+  } else if (kind === 'poee') {
+    const doors = houses.map(hh => [hh.x + Math.floor(hh.w / 2), hh.y + hh.h]).filter(([x, y]) => !solid(at(x, y)) && dist[y * W + x] > 6 && dist[y * W + x] < 40);
+    for (let t = 0; t < 200 && q.items.length < 3 && doors.length; t++) { const [x, y] = doors[Math.floor(r() * doors.length)]; if (q.items.every(o => hyp(o.x - x, o.y - y) > 5)) q.items.push({ x: x + 0.5, y: y + 0.5, got: false }); }
+    for (const [x, y] of pickN(6)) if (q.items.length < 3 && q.items.every(o => hyp(o.x - x, o.y - y) > 4)) q.items.push({ x: x + 0.5, y: y + 0.5, got: false });   // crowded towns: a lane-side door will do
+  } else {
+    const fields = [];
+    for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) { const dd = dist[y * W + x]; if ((map[y * W + x] === PAD || map[y * W + x] === GR) && dd > 12 && dd < 30) fields.push([x, y]); }
+    const f = fields[Math.floor(r() * fields.length)] || pickN(1)[0];
+    q.hen = { x: f[0] + 0.5, y: f[1] + 0.5, r: 0.2, caught: false, face: 1 };
+  }
+  S.quest = q;
+}
+const isNight = () => sunLight(S.dayMin) < 0.35;
+function newLifeDay() {
+  const d = goaDay(S.dayIdx), f = CAL.festivals(d);
+  WX = weatherFor(d); S.moon = f.p; S.today = f;
+  setupQuest();
+}
+function wakeHome() {
+  S.hearts = COURAGE; S.inv = 2; renderHud();
+  if (player.bike) dismount(false);
+  player.x = START.x + 0.5; player.y = START.y + 0.5; lastPT = -1;
+  if (S.dayMin > 6 * 60) { S.dayIdx++; newLifeDay(); }
+  S.dayMin = 6 * 60 + 5;
+  for (const d of demons.slice()) banish(d);
+  if (S.npc) { S.npc = null; S.nextT = 0; }
+  addPoints(-50);
+  whisper('You wake up at home as the sun rises. The Rakhondar carried you back in the night.');
+}
+function updateLife(dt) {
+  const was = isNight();
+  S.dayMin += dt * SPEED / 60;
+  if (S.dayMin >= 1440) { S.dayMin -= 1440; S.dayIdx++; newLifeDay(); whisper(`A new day: ${S.moon.month} ${S.moon.paksha} ${S.moon.name}. ${WX.kind}.`); }
+  const night = isNight();
+  if (night && !was) { SFX.play('call'); whisper(`The sun has gone down over ${CH.place}. The shadows are waking, and so am I. Keep your lamp lit.`); S.lifeT = 8; }
+  if (!night && was) { whisper('Morning! The shadows melt into the ground. The village wakes up.'); if (S.npc && S.npc.state === 'find') S.npc = null; }
+  if (!night) for (const d of demons.slice()) if (rand() < dt * 1.5) banish(d);
+  // at night, people get stranded now and then
+  if (night && !S.npc && S.nextT <= 0) {
+    S.lifeT -= dt;
+    if (S.lifeT <= 0) {
+      const pool = ROLES.filter(r => r.dest === 'home' || exits.some(e => e.kind === r.dest));
+      S.roster.push({ role: pool[Math.floor(rand() * pool.length)], fake: rand() < 0.25 });
+      S.ri = S.roster.length - 1;
+      startRescue();
+    }
+  }
+  // the day's quest
+  const q = S.quest;
+  if (!q || night) return;
+  const px = player.x, py = player.y;
+  if (hyp(q.giver.x - px, q.giver.y - py) < 1.3) {
+    if (q.state === 'offer' && !q.done) { q.state = 'on'; SFX.play('talk'); whisper(`${q.giver.role.name}: “${QUESTS[q.kind].ask}”`); }
+    if (q.state === 'return' || (q.kind === 'hen' && q.hen.caught && q.state === 'on')) finishQuest();
+    if (q.done && !q.thanked) { q.thanked = true; whisper(`${q.giver.role.name}: “You already helped me today. Come back tomorrow!”`); }
+  }
+  if (q.state !== 'on') return;
+  if (q.kind === 'garbage') {
+    for (const it of q.items) if (!it.got && hyp(it.x - px, it.y - py) < 0.75) { it.got = true; q.got++; SFX.play('chime', it.x, it.y); addPoints(10, 'bag'); }
+    if (q.got === q.items.length && hyp(q.bin.x - px, q.bin.y - py) < 1.4) { q.state = 'return'; SFX.play('saved'); whisper('All the bags in the bin. Go and tell Shantabai.'); }
+  } else if (q.kind === 'poee') {
+    for (const it of q.items) if (!it.got && hyp(it.x - px, it.y - py) < 1.1) { it.got = true; q.got++; SFX.play('chime', it.x, it.y); addPoints(10, 'poee'); }
+    if (q.got === q.items.length) { q.state = 'return'; whisper('Every basket delivered. Back to Mai at the bakery.'); }
+  } else {
+    const h = q.hen, d = hyp(h.x - px, h.y - py);
+    if (!h.caught) {
+      if (d < 3 && d > 0.01) { moveEnt(h, (h.x - px) / d * dt * 3.0 + Math.sin(S.t * 7) * dt, (h.y - py) / d * dt * 3.0 + Math.cos(S.t * 5) * dt); h.face = Math.sign(h.x - px) || 1; }
+      if (d < 0.6) { h.caught = true; SFX.play('chime', h.x, h.y); whisper('Got her! Pinky clucks crossly under your arm. Take her home to Tia Rosa.'); }
+    } else { h.x = px + 0.3; h.y = py - 0.2; }
+  }
+}
+function finishQuest() {
+  const q = S.quest; q.state = 'done'; q.done = true; q.thanked = true;
+  const last = store.get('rk-quest-done', ''), y = dayKey(goaDay(S.dayIdx - 1));
+  const streak = last === y ? store.get('rk-streak', 0) + 1 : 1;
+  store.set('rk-quest-done', q.key); store.set('rk-streak', streak);
+  SFX.play('saved');
+  addPoints(QUESTS[q.kind].reward + (streak - 1) * 20, 'quest');
+  whisper(`${q.giver.role.name}: “${QUESTS[q.kind].thanks}”${streak > 1 ? ` ${streak}-day streak!` : ''}`);
+  const best = store.get('rk-board', []);
+  best.push({ name: NAME, pts: S.points, day: q.key, place: CH.place });
+  best.sort((a, b) => b.pts - a.pts); store.set('rk-board', best.slice(0, 8));
+}
+// where the daytime quest sends you; undefined at night, so the rescue objective takes over
+function lifeObjective() {
+  if (isNight()) return undefined;
+  const q = S.quest;
+  if (S.npc && S.npc.state === 'escort') return undefined;
+  if (!q || q.done && q.state !== 'return') return null;
+  if (q.state === 'offer' || q.state === 'return' || (q.kind === 'hen' && q.hen.caught)) return spot(q.giver.x, q.giver.y, q.giver.role.name);
+  if (q.kind === 'hen') return spot(q.hen.x, q.hen.y, 'Pinky the hen');
+  const left = q.items.filter(i => !i.got).sort((a, b) => hyp(a.x - player.x, a.y - player.y) - hyp(b.x - player.x, b.y - player.y));
+  if (left.length) return spot(left[0].x, left[0].y, q.kind === 'garbage' ? 'a garbage bag' : 'a marked door');
+  return q.kind === 'garbage' ? spot(q.bin.x, q.bin.y, 'the bin') : spot(q.giver.x, q.giver.y, q.giver.role.name);
+}
+function lifeObjectiveText() {
+  const q = S.quest, night = isNight();
+  const wx = `${WX.kind}${S.moon && night ? ` · ${S.moon.name === 'Purnima' ? 'full moon' : S.moon.name === 'Amavasya' ? 'no moon' : (S.moon.waxing ? 'waxing' : 'waning') + ' moon'}` : ''}`;
+  let t;
+  if (night) {
+    const n = S.npc;
+    t = !n || n.state === 'leave' || n.state === 'home' ? 'Night · Watch the lanes' : n.state === 'find' ? 'Someone is stranded. Find them' : S.dest && S.dest.locked ? lockText(S.dest) : `Walk ${n.role.name} to ${S.dest.label}`;
+  } else if (!q || q.done && q.state !== 'return') t = 'Today’s quest done · Explore, or wait for dusk';
+  else if (q.state === 'offer') t = `${q.giver.role.name} needs help today`;
+  else if (q.state === 'return') t = `Go back to ${q.giver.role.name}`;
+  else if (q.kind === 'garbage') t = q.got < q.items.length ? `Collect the garbage ${q.got}/${q.items.length}` : 'Put the bags in the bin';
+  else if (q.kind === 'poee') t = `Deliver the poee ${q.got}/${q.items.length}`;
+  else t = q.hen.caught ? 'Take Pinky home to Tia Rosa' : 'Catch Pinky the hen';
+  return `${wx} · ${t}`;
+}
+function drawQuest(ctx, inView) {
+  const q = S.quest;
+  if (!q || isNight()) return;
+  if (q.kind === 'garbage' && q.state === 'on') {
+    for (const it of q.items) if (!it.got) {
+      const [sx, sy] = iso(it.x, it.y); if (!inView(sx, sy)) continue;
+      blob(ctx, sx, sy - 6, 7, 6, '#2a2a30', 1.2); blob(ctx, sx + 6, sy - 4, 5, 4, '#e8e4dc', 1); blob(ctx, sx - 5, sy - 3, 4, 3, '#3f6fa8', 1);
+    }
+    const [bx, by] = iso(q.bin.x, q.bin.y);
+    box(ctx, q.bin.x - 0.25, q.bin.y - 0.25, q.bin.x + 0.25, q.bin.y + 0.25, 0, 20, '#2f7a3a', '#3a8a46', '#2a6a32');
+    ctx.fillStyle = '#fff'; ctx.font = '700 8px Mukta, sans-serif'; ctx.fillText('BIN', bx - 7, by - 9);
+  }
+  if (q.kind === 'poee' && q.state === 'on') for (const it of q.items) if (!it.got) {
+    const [sx, sy] = iso(it.x, it.y); if (!inView(sx, sy)) continue;
+    const b = Math.sin(S.t * 4) * 3;
+    blob(ctx, sx, sy - 34 + b, 7, 5, '#e9c46a', 1.2); blob(ctx, sx, sy - 37 + b, 5, 3, '#f4e3b0', 1);
+  }
+}
+function drawHen(g, h) {
+  const [sx, sy] = iso(h.x, h.y), f = h.face, hop = Math.abs(Math.sin(S.t * 12)) * 2;
+  g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(sx, sy, 6, 2.5, 0, 0, 7); g.fill();
+  blob(g, sx, sy - 7 - hop, 6, 5, '#f4efe4', 1.2);
+  blob(g, sx + f * 5, sy - 12 - hop, 3, 3, '#f4efe4', 1);
+  g.fillStyle = '#d0242a'; g.beginPath(); g.arc(sx + f * 5, sy - 15.5 - hop, 1.6, 0, 7); g.fill();
+  g.fillStyle = '#e8a02a'; g.beginPath(); g.moveTo(sx + f * 7.5, sy - 12.5 - hop); g.lineTo(sx + f * 10, sy - 11.5 - hop); g.lineTo(sx + f * 7.5, sy - 10.5 - hop); g.fill();
+}
+// the moon in the corner of the night sky, in its real phase
+function drawMoon(ctx) {
+  if (!CH.life || !S.moon) return;
+  const a = 1 - sunLight(S.dayMin) * 1.6 - WX.cloud * 0.6;
+  if (a <= 0.02) return;
+  const r = 16 * dpr, cx = cv.width - 60 * dpr, cy = 120 * dpr, k = S.moon.illum, sgn = S.moon.waxing ? 1 : -1;
+  ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(60,70,100,.6)'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
+  ctx.fillStyle = '#f4ecd0'; ctx.shadowColor = '#f4ecd0'; ctx.shadowBlur = 18 * dpr;
+  ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, sgn < 0);
+  ctx.ellipse(cx, cy, Math.abs(r * (1 - 2 * k)) + 0.01, r, 0, Math.PI / 2, -Math.PI / 2, (k < 0.5) === (sgn > 0));
+  ctx.fill(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+}
+
 /* ---------- motorbikes ---------- */
 const nearBike = () => S.bikes.find(b => hyp(b.x - player.x, b.y - player.y) < 1.3);
 function toggleBike() {
@@ -2552,14 +2867,15 @@ function updateFx(dt) {
 
 let lastObj = '';
 function clockText() {
-  const m = Math.floor(S.clock / 5) * 5, h = (21 + Math.floor(m / 60)) % 24, mm = m % 60;
+  const m = Math.floor((CH.life ? S.dayMin : S.clock) / 5) * 5, h = ((CH.life ? 0 : 21) + Math.floor(m / 60)) % 24, mm = m % 60;
   return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${h >= 12 && h < 24 ? 'PM' : 'AM'}`;
 }
 function setObjective() {
   let t;
   const n = S.npc;
   const R = S.roster.length, ch = exits.find(e => e.kind === 'chapel'), tp = exits.find(e => e.kind === 'temple');
-  if (S.phase === 'boss') t = S.burnT >= 0 ? 'Dawn is coming' : 'Lead Narkasur to the pyre on the chapel square';
+  if (CH.life) t = lifeObjectiveText();
+  else if (S.phase === 'boss') t = S.burnT >= 0 ? 'Dawn is coming' : 'Lead Narkasur to the pyre on the chapel square';
   else if (S.phase === 'done') t = 'Dawn is coming';
   else if (S.phase === 'ferry') t = `Catch the last ferry at ${PLACE_NAMES.ferry} · ${Math.max(0, Math.ceil(S.deadline))}s`;
   else if (S.phase === 'zagor') t = S.rung ? `Hold the square until the singers come · ${Math.max(0, Math.ceil(S.hold))}s` : lockText(tp);
@@ -2582,6 +2898,7 @@ function renderHud() {
   const pips = (n, max, cls) => Array.from({ length: max }, (_, i) => `<span class="pip ${cls}${i < n ? ' on' : ''}"></span>`).join('');
   document.getElementById('hearts').innerHTML = pips(S.hearts, COURAGE, 'courage');
   document.getElementById('charges').innerHTML = pips(S.charges, 3, 'spirit');
+  document.getElementById('points').textContent = store.get('rk-points', 0);
   document.getElementById('callBtn').disabled = S.charges <= 0 || S.mode !== 'play';
 }
 
@@ -2792,6 +3109,14 @@ function render() {
     }
     if (c.state === 'fuse') { ctx.fillStyle = '#ffd36b'; ctx.beginPath(); ctx.arc(a[0], a[1] - 2, 2.5 + Math.random() * 1.5, 0, 7); ctx.fill(); }
   }
+  if (CH.life) drawQuest(ctx, inView);
+  // potholes in the roads; full of water when it rains, and then hard to see
+  for (const ph of potholes) {
+    const [sx, sy] = iso(ph.x, ph.y); if (!inView(sx, sy)) continue;
+    const wet = rainAmt() > 0.3;
+    ctx.fillStyle = wet ? 'rgba(40,70,90,.75)' : '#141418'; ctx.beginPath(); ctx.ellipse(sx, sy, 11 * ph.s, 5 * ph.s, 0.2, 0, 7); ctx.fill();
+    if (!wet) { ctx.strokeStyle = '#4a4a50'; ctx.lineWidth = 1.5; ctx.stroke(); }
+  }
   // the marked stones round the sealed devli, and the seal itself
   for (const st of seals) {
     const [sx, sy] = iso(st.x + 0.5, st.y + 0.5);
@@ -2844,6 +3169,14 @@ function render() {
   for (const b of S.bikes) { const [sx, sy] = iso(b.x, b.y); if (inView(sx, sy)) list.push({ key: depth(b.x, b.y), draw: g => drawBike(g, b.x, b.y, b.hx, b.hy, b.col) }); }
   for (const d of S.dogs) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: depth(d.x, d.y), draw: g => drawDog(g, d) }); }
   if (sacr) list.push({ key: depth(sacr.x, sacr.y), draw: g => { drawPerson(g, sacr); if (!S.key) { const [sx, sy] = iso(sacr.x, sacr.y); g.strokeStyle = '#d9c27a'; g.lineWidth = 1.5; g.beginPath(); g.arc(sx + 9, sy - 18, 3, 0, 7); g.stroke(); line(g, [sx + 9, sy - 15], [sx + 9, sy - 8], '#d9c27a', 1.5); } } });
+  if (CH.life && S.quest && !isNight()) {
+    const q = S.quest, gv = q.giver;
+    list.push({ key: depth(gv.x, gv.y), draw: g => {
+      drawPerson(g, gv);
+      if (!q.done || q.state === 'return') { const [sx, sy] = iso(gv.x, gv.y); g.fillStyle = '#f2b441'; g.font = '700 18px Mukta, sans-serif'; g.textAlign = 'center'; g.fillText(q.state === 'return' ? '★' : '!', sx, sy - 52); g.textAlign = 'start'; }
+    } });
+    if (q.hen) list.push({ key: depth(q.hen.x, q.hen.y), draw: g => drawHen(g, q.hen) });
+  }
   if (BELL) list.push({ key: depth(BELL.x, BELL.y) - 0.5, draw: drawBell });
   if (S.boss) list.push({ key: depth(S.boss.x, S.boss.y), draw: g => drawNarkasur(g, S.boss) });
   list.sort((a, b) => a.key - b.key);
@@ -2853,7 +3186,7 @@ function render() {
   dctx.setTransform(1, 0, 0, 1, 0, 0);
   dctx.globalCompositeOperation = 'source-over';
   dctx.clearRect(0, 0, dark.width, dark.height);
-  dctx.fillStyle = `rgba(16,24,66,${0.66 * (1 - 0.85 * S.dawn)})`; dctx.fillRect(0, 0, dark.width, dark.height);
+  dctx.fillStyle = `rgba(16,24,66,${darkAlpha()})`; dctx.fillRect(0, 0, dark.width, dark.height);
   dctx.globalCompositeOperation = 'destination-out';
   toWorld(dctx);
   const hole = (wx, wy, r, a, lift = 0) => {
@@ -2914,8 +3247,8 @@ function render() {
   }
   ctx.globalCompositeOperation = 'source-over';
 
-  // moonlight catching roof ridges, domes and treetops
-  for (const o of list) if (o.rim) o.rim(ctx);
+  // moonlight catching roof ridges, domes and treetops (not by day)
+  if (!CH.life || sunLight(S.dayMin) < 0.5) for (const o of list) if (o.rim) o.rim(ctx);
   // moon glinting on the river
   for (const [x, y, s] of waterTiles) {
     const [sx, sy] = iso(x + 0.5, y + 0.5);
@@ -2929,7 +3262,7 @@ function render() {
     }
   }
   // mist lying over the paddy and the river
-  ctx.globalAlpha = 0.22;
+  ctx.globalAlpha = CH.life ? 0.12 + 0.3 * WX.mist : 0.22;
   for (const m of mists) {
     const [sx, sy] = iso(m.x + Math.sin(t * 0.08 + m.ph) * 1.2, m.y);
     if (!inView(sx, sy)) continue;
@@ -3149,16 +3482,25 @@ function render() {
   }
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  // monsoon rain, slanting down across the whole night
-  if (CH.monsoon) {
+  // daylight warms and lifts the night-painted village; dusk and dawn wash it gold and pink
+  if (CH.life) {
+    const L = sunLight(S.dayMin), gold = Math.sin(Math.PI * Math.min(1, L * 1.4)) * (L < 1 ? 1 : 0);
+    if (L > 0.02) { ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = `rgba(255,236,196,${0.26 * L * (1 - 0.5 * WX.cloud)})`; ctx.fillRect(0, 0, cv.width, cv.height); ctx.globalCompositeOperation = 'source-over'; }
+    if (gold > 0.02) { ctx.fillStyle = `rgba(255,${S.dayMin < 12 * 60 ? 150 : 110},70,${0.2 * gold})`; ctx.fillRect(0, 0, cv.width, cv.height); }
+    if (WX.lightning && isNight() && Math.random() < 0.004) S.lightning = 0.5;
+    if (S.lightning > 0) { ctx.fillStyle = `rgba(230,235,255,${S.lightning})`; ctx.fillRect(0, 0, cv.width, cv.height); S.lightning -= 0.05; }
+  }
+  // rain, slanting down across the whole view
+  if (rainAmt() > 0) {
     ctx.strokeStyle = 'rgba(170,190,220,.28)'; ctx.lineWidth = 1 * dpr;
     ctx.beginPath();
-    for (let i = 0; i < 140; i++) {
+    for (let i = 0; i < 140 * rainAmt(); i++) {
       const x = ((i * 97.3 + t * 260) % (cv.width + 200)) - 100, y = ((i * 211.7 + t * 900 * (0.8 + (i % 5) * 0.1)) % (cv.height + 60)) - 30;
       ctx.moveTo(x, y); ctx.lineTo(x - 6 * dpr, y + 18 * dpr);
     }
     ctx.stroke();
   }
+  drawMoon(ctx);
   // the moon's haze in the top corner
   const mg = ctx.createRadialGradient(cv.width * 0.85, 0, 0, cv.width * 0.85, 0, cv.height * 0.6);
   mg.addColorStop(0, 'rgba(170,190,240,.13)'); mg.addColorStop(1, 'rgba(170,190,240,0)');
@@ -3179,6 +3521,12 @@ function render() {
     ctx.fillStyle = `rgba(242,226,190,${0.9 * al})`; ctx.fillText(label[0].toUpperCase() + label.slice(1), qx, qy);
   }
   ctx.textAlign = 'start';
+  if (S.pop) {
+    const [gx, gy] = iso(player.x, player.y);
+    ctx.font = `700 ${14 * dpr}px Mukta, sans-serif`; ctx.textAlign = 'center';
+    ctx.fillStyle = `rgba(242,180,65,${Math.min(1, S.pop.t)})`; ctx.fillText(S.pop.text, (gx - camX) * k, (gy - 60 - camY) * k - (2 - S.pop.t) * 20 * dpr);
+    ctx.textAlign = 'start';
+  }
   // an arrow at the screen edge pointing to whatever needs you next
   const goal = S.mode === 'play' ? objective() : null;
   if (goal) {
@@ -3363,7 +3711,7 @@ const SFX = (() => {
     set(layers.beam, live && S.beam ? 0.05 : 0);
     set(layers.hum, live && S.beam ? 0.025 : 0);
     set(layers.fire, S.burnT >= 0 ? Math.min(0.3, 0.06 + S.burnT * 0.06) : 0);
-    set(layers.rain, CH.monsoon ? 0.09 : 0);
+    set(layers.rain, rainAmt() * 0.09);
     const bk = live && player.bike;
     set(layers.engine, bk ? 0.05 + player.bike.v * 0.006 : 0);
     if (bk) layers.engine.src.frequency.setTargetAtTime(42 + player.bike.v * 11, ac.currentTime, 0.1);
@@ -3428,19 +3776,47 @@ const CONTROLS = `
     </div>`;
 // the title screen: your name and the four chapters
 function showIntro() {
-  const d = done();
+  const d = done(), t = todayInGoa(), p = t.p, wx = t.wx;
+  const paused = S && S.mode === 'play';
+  if (paused) S.mode = 'paused';
+  const tonight = t.list.map(x => x.chapter).filter(Boolean);
+  const dateText = t.date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+  const board = store.get('rk-board', []);
   card.innerHTML = `
-    <span class="eyebrow">Four nights in Goa</span>
+    <span class="eyebrow">Rakhondar · Goa</span>
     <h1>Rakhondar<small>राखणदार</small></h1>
-    <p>The Rakhondar, the guardian who walks the village at night, has chosen you and blessed your little clay lamp. On festival nights the shadows come out, people get stranded in the lanes, and some of the stranded are not who they seem.</p>
-    <label class="field">What does your aaji call you?<input id="nameIn" maxlength="16" autocomplete="off" value="${esc(NAME)}"></label>
-    <div class="chapters">${CHAPTERS.map((c, i) => `
-      <button class="chapter" type="button" data-i="${i}"><span class="num">${i + 1}</span><span>${c.title}</span><span class="done">${d.includes(c.id) ? 'Dawn reached' : ''}</span><span class="where">${c.place} · ${c.when}</span></button>`).join('')}
+    <div class="today">
+      <span><b>Today in Goa</b> · ${dateText}</span>
+      <span>${p.month} ${p.paksha} ${p.name} · ${p.illum > 0.97 ? 'full moon' : p.illum < 0.03 ? 'no moon' : `${Math.round(p.illum * 100)}% moon`} · ${wx.kind}</span>
+      ${t.list.length ? `<span>Festival: <b>${t.list.map(x => x.name).join(', ')}</b></span>` : ''}
+      <span style="font-size:12px;color:var(--muted)">The tithi is worked out from the moon and sun; near a boundary it can be a day off the printed panchang.</span>
     </div>
-    <label class="check"><input type="checkbox" id="randomIn" ${MODE === 'random' ? 'checked' : ''}> Play in a randomly generated village instead of the real map</label>`;
+    <label class="field">What does your aaji call you?<input id="nameIn" maxlength="16" autocomplete="off" value="${esc(NAME)}"></label>
+    <p>Live in a village on Goa time: day for errands and the daily quest, dusk when the lamps come on, night when the Rakhondar walks.</p>
+    <div class="row">
+      ${paused ? '<button class="start" id="resumeBtn" type="button">Resume</button>' : ''}
+      <button class="${paused ? 'ghost' : 'start'}" id="lifeTonca" type="button">Live in Tonca</button>
+      <button class="ghost" id="lifePanjim" type="button">Live in Panjim</button>
+    </div>
+    <label class="check">Clock speed
+      <select id="speedIn">${[[1, 'real time'], [10, '×10'], [60, '×60 (a day in 24 minutes)'], [240, '×240']].map(([v, l]) => `<option value="${v}" ${SPEED === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    </label>
+    <span class="eyebrow">Festival nights</span>
+    <div class="chapters">${CHAPTERS.map((c, i) => `
+      <button class="chapter" type="button" data-i="${i}"><span class="num">${i + 1}</span><span>${c.title}${tonight.includes(c.id) ? '<span class="badge">Tonight</span>' : ''}</span><span class="done">${d.includes(c.id) ? 'Dawn reached' : ''}</span><span class="where">${c.place} · ${c.when}</span></button>`).join('')}
+    </div>
+    <label class="check"><input type="checkbox" id="randomIn" ${MODE === 'random' ? 'checked' : ''}> Play the festival nights in a randomly generated village instead</label>
+    <span class="eyebrow">Your points · ${store.get('rk-points', 0)} · streak ${store.get('rk-streak', 0)} day${store.get('rk-streak', 0) === 1 ? '' : 's'}</span>
+    ${board.length ? `<div class="board">${board.slice(0, 5).map((b, i) => `<span>${i + 1}</span><span>${esc(b.name)} · ${esc(b.place)} · ${b.day}</span><b>${b.pts}</b>`).join('')}</div>` : '<p style="font-size:13px;color:var(--muted)">Finish a daily quest to get on the board. The board is on this device for now.</p>'}`;
   screen.hidden = false;
   const saveName = () => { NAME = document.getElementById('nameIn').value.trim().slice(0, 16) || 'Baba'; try { localStorage.setItem('rk-name', NAME); } catch (e) {} };
   document.getElementById('randomIn').onchange = e => { MODE = e.target.checked ? 'random' : 'real'; try { localStorage.setItem('rk-mode', MODE); } catch (e) {} };
+  document.getElementById('speedIn').onchange = e => { SPEED = +e.target.value; try { localStorage.setItem('rk-speed', SPEED); } catch (e) {} };
+  const live = v => () => { saveName(); const m = MODE; MODE = 'real'; CH = lifeChapter(v); start(); MODE = m; };
+  document.getElementById('lifeTonca').onclick = live('tonca');
+  document.getElementById('lifePanjim').onclick = live('panjim');
+  const rb = document.getElementById('resumeBtn');
+  if (rb) rb.onclick = () => { saveName(); S.mode = 'play'; screen.hidden = true; };
   for (const b of card.querySelectorAll('.chapter')) b.onclick = () => { saveName(); showChapter(+b.dataset.i); };
 }
 function showChapter(i) {
@@ -3464,7 +3840,10 @@ function showChapter(i) {
 function start() {
   SFX.init();
   newGame(); S.mode = 'play'; screen.hidden = true; document.getElementById('talk').hidden = true;
-  renderHud(); startRescue();
+  renderHud();
+  if (!CH.life) return startRescue();
+  const f = S.today.list.map(x => x.name).join(' and ');
+  whisper(`${CH.place}, ${clockText()}. ${S.moon.month} ${S.moon.paksha} ${S.moon.name}${f ? `, ${f}` : ''}. ${WX.kind}.`);
 }
 function endNight(kind) {
   S.mode = 'end'; renderHud();
