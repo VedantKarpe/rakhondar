@@ -288,6 +288,7 @@ const cv = document.getElementById('game'), ctx = cv.getContext('2d');
 const dark = document.createElement('canvas'), dctx = dark.getContext('2d');
 let dpr = 1, vw = 0, vh = 0, sc = 1, BAKE = 1;
 let L_CONNECTED = false;
+let pumps = [];   // petrol pumps on this map
 let CITY = false;   // a city map (20 m tiles): real buildings at their own size, drawn as town buildings
 // the strong colours of Panjim's old quarters
 const TOWN_WALLS = ['#f2c230', '#e8a33a', '#2f6fd0', '#e8e0cc', '#2fa08a', '#e0763a', '#d0344a', '#e07a8a', '#4a8fe0', '#f4d84a', '#8a5ab8'];   // true in a real village: its roads are not the random village's straight main road
@@ -801,6 +802,20 @@ function gen(seed) {
       }
     };
     if (sand.length > 40) { put(5, (x, y) => !nearW(x, y, 2), 'shack', 6); put(12, (x, y) => nearW(x, y, 2) && !nearW(x, y, 0), 'umbrella', 3); }
+  }
+  // petrol pumps where the map has them: a canopy on a tile beside the road
+  pumps = [];
+  if (L.connect) for (const [px, py, name] of VILLAGE.pumps || []) {
+    let best = null, bd = 6;
+    for (let yy = Math.floor(py) - 4; yy <= Math.floor(py) + 4; yy++) for (let xx = Math.floor(px) - 4; xx <= Math.floor(px) + 4; xx++) {
+      const d = hyp(xx - px, yy - py);
+      if (d < bd && xx > 1 && yy > 1 && xx < W - 2 && yy < H - 2 && [GR, PAD, MUD].includes(at(xx, yy)) && D4.some(([dx, dy]) => [ROAD, LANE].includes(at(xx + dx, yy + dy)))) { bd = d; best = [xx, yy]; }
+    }
+    if (!best) continue;
+    set(best[0], best[1], PROP);
+    const pu = { kind: 'pump', x: best[0], y: best[1], name, col: /Indian/.test(name) ? '#f07a1a' : /Bharat/.test(name) ? '#f2c230' : /Hindustan|HP/.test(name) ? '#2f4fa0' : '#2fa08a' };
+    props.push(pu); pumps.push(pu);
+    lights.push({ kind: 'pump', x: best[0] + 0.5, y: best[1] + 0.9, r: 2.8, lift: 30, color: '235,245,255' });
   }
   const tav = houses.find(h => h.w === 4);
   if (tav) { tav.tavern = true; tav.wall = '#2f6e6a'; }
@@ -1627,6 +1642,13 @@ function drawProp(g, p) {
   } else if (p.kind === 'car') drawCar(g, cx, cy, p.dir, 0, p.col, false);
   else if (p.kind === 'devli') drawDevli(g, p);
   else if (p.kind === 'sight') drawSight(g, p);
+  else if (p.kind === 'pump') {
+    // a petrol pump: a canopy in the company's colour on four posts, two dispensers under it
+    for (const [u, v] of [[-0.38, -0.3], [0.38, -0.3], [-0.38, 0.3], [0.38, 0.3]]) line(g, P(cx + u, cy + v, 0), P(cx + u, cy + v, 34), '#d8d8d4', 2.5);
+    box(g, cx - 0.12, cy - 0.32, cx + 0.12, cy - 0.12, 0, 14, '#f4f4f0', '#e2e2dc', '#c4c4bc'); box(g, cx - 0.12, cy + 0.12, cx + 0.12, cy + 0.32, 0, 14, '#f4f4f0', '#e2e2dc', '#c4c4bc');
+    box(g, cx - 0.5, cy - 0.45, cx + 0.5, cy + 0.45, 34, 40, '#f4f4f0', p.col, shade(p.col, 0.8));
+    const [tx, ty] = P(cx, cy + 0.45, 37); g.fillStyle = '#fff'; g.font = '700 6px Mukta, sans-serif'; g.textAlign = 'center'; g.fillText('PETROL', tx, ty + 2); g.textAlign = 'start';
+  }
   else if (p.kind === 'shack') {
     // a beach shack: bamboo posts, a palm-thatch roof and a string of bulbs
     box(g, cx - 0.42, cy - 0.42, cx + 0.42, cy + 0.42, 0, 4, '#b08a52', '#9a7444', '#7d5c34');
@@ -2573,7 +2595,8 @@ function update(dt) {
   const ride = player.bike, wet = flood[Math.floor(player.y) * W + Math.floor(player.x)];
   player.creep = !ride && (keys.has('shift') || (joy.id !== null && mag < 0.55));
   let sp = 4.3 * (pTile === PAD ? 0.6 : 1) * (player.creep ? 0.5 : 1) * (1 - 0.55 * wet);
-  if (ride) {
+  if (ride && ride.pushing) sp *= 0.55;   // pushing a dry bike: walking pace, and slower
+  else if (ride) {
     const surf = [ROAD, LANE, PLAZA, COURT, JETTY].includes(pTile) ? 1 : pTile === PAD ? 0.3 : 0.55;
     const target = player.moving && ride.fuel > 0 ? 9 * surf * mag * (1 - 0.6 * wet) : 0;
     ride.v += (target - ride.v) * Math.min(1, dt * (target > ride.v ? 1.8 : 2.6));
@@ -3324,6 +3347,7 @@ function updateLife(dt) {
       startRescue();
     }
   }
+  updatePacks(dt, night);
   // litter: any time, day or night
   for (const it of S.litter || []) if (!it.got && hyp(it.x - player.x, it.y - player.y) < 0.7) {
     it.got = true; SFX.play('chime', it.x, it.y); addPoints(5, 'litter');
@@ -3492,7 +3516,18 @@ function updateBike(dt) {
     for (const d of demons) if (hyp(d.x - player.x, d.y - player.y) < 9) d.alert = Math.max(d.alert || 0, 3);
     for (const g of S.dogs) if (g.state === 'sleep' && hyp(g.x - player.x, g.y - player.y) < 5) { g.state = 'bark'; g.t = 4; g.barkT = 0; }
   }
-  if (b.fuel <= 0 && b.v < 0.3) { dismount(false); whisper('The engine coughs and dies. Out of petrol.'); }
+  if (b.fuel <= 0 && !b.pushing && b.v < 0.3) {
+    b.pushing = true; b.v = 0; SFX.play('kick');
+    whisper(pumps.length ? 'The engine coughs and dies. Out of petrol! Get off and push it to a petrol pump. Places (P) shows the nearest.' : 'The engine coughs and dies. Out of petrol.');
+    if (!pumps.length) dismount(false);
+  }
+  // at a petrol pump the attendant fills the tank
+  const pu = pumps.find(q => hyp(q.x + 0.5 - player.x, q.y + 0.5 - player.y) < 1.7);
+  if (pu && b.fuel < 50) {
+    b.fuel = 60; b.pushing = false; SFX.play('chime', pu.x, pu.y);
+    if (CH.life) addPoints(-15, 'petrol');
+    whisper(`${pu.name}: the attendant fills the tank. “Full, baba. Cash or GPay?” Back on the road.`);
+  }
 }
 function spawnGuard() {
   const court = [];
@@ -3566,7 +3601,7 @@ function setObjective() {
   else if (S.dest.locked) t = lockText(S.dest);
   else if (S.dest.need && S.dest.wait > 0) t = `${S.dest.kind === 'bus' ? 'The pilot is coming' : 'The ferry is crossing'} · ${Math.ceil(S.dest.need - S.dest.wait)}s`;
   else t = `Walk ${n.role.name} to ${S.dest.label}`;
-  if (player.bike) t += ` · Petrol ${Math.round(player.bike.fuel / 0.6)}%`;
+  if (player.bike) t += player.bike.pushing ? ' · Out of petrol: push it to a pump' : ` · Petrol ${Math.round(player.bike.fuel / 0.6)}%`;
   t = `${clockText()} · ${t}`;
   if (S.guide) t = `Going to ${S.guide.what} · ${Math.round(hyp(S.guide.x - player.x, S.guide.y - player.y) * 12)} m · ${t}`;
   const rb = document.getElementById('rideBtn'), showRide = !!player.bike || !!nearBike();
@@ -3629,7 +3664,9 @@ function drawBike(g, x, y, hx, hy, col) {
   blob(g, hbx + f * 2, hby + 5, 2.4, 2, '#fff6d0', 0.8);
 }
 function drawChild(g, alpha) {
-  if (player.bike) {
+  const pushing = player.bike && player.bike.pushing;
+  if (pushing) drawBike(g, player.x + player.hy * 0.35, player.y - player.hx * 0.35, player.hx, player.hy, player.bike.col);   // wheeled alongside
+  else if (player.bike) {
     const b = player.bike, jolt = b.v > 1 ? Math.sin(S.t * 30) * 0.6 : 0;
     drawBike(g, player.x, player.y, player.hx, player.hy, b.col);
     g.save(); g.translate(0, -7 + jolt);
@@ -3643,7 +3680,7 @@ function drawChild(g, alpha) {
   blob(g, sx, sy - 19 - bob, 8, 7, '#f2c230');
   cartoonHead(g, sx, sy - 33 - bob, 9.5, { skin: '#b8794a', hair: '#1a1410', face: f, scared: S.hearts <= 2 });
   g.globalAlpha = 1;
-  if (player.bike) g.restore();
+  if (player.bike && !player.bike.pushing) g.restore();
 }
 function drawDemon(g, d) {
   const K = d.kind && DEMON_KINDS[d.kind];
@@ -3671,6 +3708,25 @@ function drawDemon(g, d) {
   g.restore();
 }
 
+// a poder on his bicycle, a basket of pao strapped behind him
+function drawPoder(g, w) {
+  const [sx, sy] = iso(w.x, w.y), [ax, ay] = iso(w.x + w.dx, w.y + w.dy);
+  let dx = ax - sx; const f = dx >= 0 ? 1 : -1;
+  g.globalAlpha = w.alpha;
+  g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(sx, sy, 16, 5, 0, 0, 7); g.fill();
+  const spin = S.t * 10;
+  for (const u of [-11, 11]) {
+    g.strokeStyle = INK; g.lineWidth = 1.5; g.beginPath(); g.arc(sx + u, sy - 7, 6.5, 0, 7); g.stroke();
+    g.beginPath(); g.moveTo(sx + u + Math.cos(spin) * 6, sy - 7 + Math.sin(spin) * 6); g.lineTo(sx + u - Math.cos(spin) * 6, sy - 7 - Math.sin(spin) * 6); g.stroke();
+  }
+  g.strokeStyle = '#2a4a7a'; g.lineWidth = 2.2; g.beginPath(); g.moveTo(sx - 11, sy - 7); g.lineTo(sx - 1, sy - 17); g.lineTo(sx + 9 * f, sy - 17); g.lineTo(sx + 11 * f, sy - 7); g.moveTo(sx - 1, sy - 17); g.lineTo(sx + 2, sy - 7); g.stroke();
+  line(g, [sx + 9 * f, sy - 17], [sx + 10 * f, sy - 23], '#888', 2);
+  // the bread basket on the carrier
+  blob(g, sx - 12 * f, sy - 19, 8, 5, '#c9963a', 1.2); g.fillStyle = '#e9c46a'; for (const u of [-4, 0, 4]) { g.beginPath(); g.arc(sx - 12 * f + u, sy - 23, 2.4, 0, 7); g.fill(); }
+  blob(g, sx, sy - 26, 6, 7, w.role.look.body, 1.3);
+  cartoonHead(g, sx + 2 * f, sy - 38, 6.5, { skin: '#9a6a44', hair: '#1a100a', face: f, moustache: true });
+  g.globalAlpha = 1;
+}
 // a village dog: curled up asleep, sitting up watching, or on its feet barking
 function drawDog(g, d) {
   const [sx, sy] = iso(d.x, d.y), f = d.face, c = d.coat;
@@ -3862,7 +3918,8 @@ function render() {
   list.push({ key: depth(player.x, player.y), draw: g => drawChild(g, 1) });
   for (const d of demons) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: depth(d.x, d.y), draw: g => drawDemon(g, d) }); }
   for (const c of S.cars) { const [sx, sy] = iso(c.x, c.y); if (inView(sx, sy)) list.push({ key: depth(c.x, c.y), draw: g => drawVehicle(g, c) }); }
-  for (const wk of S.walkers || []) { if (wk.alpha <= 0.02) continue; const [sx, sy] = iso(wk.x, wk.y); if (inView(sx, sy)) list.push({ key: depth(wk.x, wk.y), draw: g => drawPerson(g, wk) }); }
+  for (const wk of S.walkers || []) { if (wk.alpha <= 0.02) continue; const [sx, sy] = iso(wk.x, wk.y); if (inView(sx, sy)) list.push({ key: depth(wk.x, wk.y), draw: g => wk.state === 'poder' ? drawPoder(g, wk) : drawPerson(g, wk) }); }
+  for (const pk of S.packs || []) for (const d of pk.dogs) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: depth(d.x, d.y), draw: g => drawDog(g, d) }); }
   if (S.npc) list.push({ key: depth(S.npc.x, S.npc.y), draw: g => { if (S.npc.pillion) { g.save(); g.translate(0, -8); drawPerson(g, S.npc); g.restore(); } else drawPerson(g, S.npc); } });
   for (const b of S.bikes) { const [sx, sy] = iso(b.x, b.y); if (inView(sx, sy)) list.push({ key: depth(b.x, b.y), draw: g => drawBike(g, b.x, b.y, b.hx, b.hy, b.col) }); }
   for (const d of S.dogs) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: depth(d.x, d.y), draw: g => drawDog(g, d) }); }
@@ -4409,6 +4466,8 @@ const SFX = (() => {
     fuse: s => noise(0.5, { type: 'highpass', f: 4000, g: 0.06, v: s.v, pan: s.pan }),
     gate: () => { tone(90, 1.2, { to: 70, type: 'sawtooth', lp: 400, a: 0.2, g: 0.08 }); noise(1.2, { f: 300, q: 3, a: 0.2, g: 0.06 }); },
     wrong: () => { tone(220, 0.6, { type: 'square', lp: 800, g: 0.07 }); tone(208, 0.6, { type: 'square', lp: 800, g: 0.07 }); },
+    poderHorn: s => { for (const [f, d] of [[760, 0], [620, 0.16]]) tone(f, 0.12, { to: f * 0.9, type: 'square', lp: 1800, g: 0.07, v: s.v, pan: s.pan, at: ac.currentTime + d }); },
+    howl: s => { const v = Math.max(0.35, s.v); tone(420, 2.2, { to: 300, type: 'triangle', a: 0.5, g: 0.06, v, pan: s.pan }); tone(560, 1.8, { to: 470, type: 'sine', a: 0.6, g: 0.04, v, pan: s.pan, at: ac.currentTime + 0.4 }); },
     voice: s => { for (const [f, d] of [[392, 0], [330, 0.45], [392, 1.1], [330, 1.55]]) tone(f, 0.4, { to: f * 0.96, type: 'triangle', a: 0.12, g: 0.05, v: Math.max(0.4, s.v), pan: s.pan, at: ac.currentTime + d }); }
   };
   function play(name, x, y, range, arg) {
@@ -4631,6 +4690,59 @@ function endNight(kind) {
   (nb || document.getElementById('startBtn')).focus();
 }
 
+/* ---------- dog packs: they roam the lanes at night, howl now and then, and chase anyone who hurries past ---------- */
+function updatePacks(dt, night) {
+  if (!night) { S.packs = null; return; }
+  if (!S.packs) {
+    S.packs = []; S.howlT = 6 + Math.random() * 10;
+    const far = lanes.filter(([x, y]) => hyp(x - player.x, y - player.y) > 14);
+    for (let k = 0; k < Math.max(1, Math.round(lanes.length / 700)) && far.length; k++) {
+      const [x, y] = far[Math.floor(Math.random() * far.length)], n = 3 + Math.floor(Math.random() * 2);
+      S.packs.push({ x: x + 0.5, y: y + 0.5, dx: 1, dy: 0, tile: -1, state: 'roam', t: 0, calm: 0, r: 0.3,
+        dogs: Array.from({ length: n }, (_, i) => ({ x: x + 0.5, y: y + 0.5, ox: (i % 2 ? 0.5 : -0.5) * Math.ceil(i / 2), oy: (i % 2 ? -0.3 : 0.3) * Math.ceil(i / 2), face: 1, state: 'bark', coat: ['#8a5a32', '#c9a06a', '#3a2a20', '#d8cbb0'][i % 4] })) });
+    }
+  }
+  S.howlT -= dt;
+  if (S.howlT <= 0 && S.packs.length) {
+    S.howlT = 18 + Math.random() * 20;
+    const pk = S.packs[Math.floor(Math.random() * S.packs.length)];
+    SFX.play('howl', pk.x, pk.y, 45);
+    hint('howl', 'Dogs howling somewhere in the dark. A pack roams the lanes at night: creep past it, and do not run.');
+  }
+  for (const pk of S.packs) {
+    const pd = hyp(pk.x - player.x, pk.y - player.y);
+    pk.calm -= dt;
+    if (pk.state === 'roam' && pk.calm <= 0 && pd < 6 && player.moving && !player.creep && S.mode === 'play') {
+      pk.state = 'chase'; pk.t = 8; alarm(pk.x, pk.y, 12);
+      hint('pack', 'The pack has seen you running! Get onto holy ground, under a light, or stand still and let them lose interest.');
+    }
+    if (pk.state === 'chase') {
+      pk.t -= dt;
+      const tx = player.x - pk.x, ty = player.y - pk.y, m = hyp(tx, ty) || 1;
+      if (pk.t <= 0 || inSafe(player.x, player.y) || !player.moving && pd > 2) { pk.state = 'roam'; pk.calm = 15; }
+      else {
+        moveEnt(pk, tx / m * 3.6 * dt, ty / m * 3.6 * dt);
+        if ((pk.barkT = (pk.barkT || 0) - dt) <= 0) { pk.barkT = 0.6; SFX.play('bark', pk.x, pk.y, 22); }
+        if (pd < 0.8 && S.inv <= 0) { hurt(pk.x, pk.y); pk.state = 'roam'; pk.calm = 15; }
+      }
+    } else {
+      // roam the lanes tile to tile
+      const cx = Math.floor(pk.x), cy = Math.floor(pk.y), ti = cy * W + cx;
+      if (ti !== pk.tile && hyp(pk.x - cx - 0.5, pk.y - cy - 0.5) < 0.15) {
+        pk.tile = ti; pk.x = cx + 0.5; pk.y = cy + 0.5;
+        const opts = D4.filter(([ax, ay]) => [LANE, ROAD].includes(at(cx + ax, cy + ay)) && !(ax === -pk.dx && ay === -pk.dy));
+        const nx = opts[Math.floor(Math.random() * opts.length)];
+        if (nx) { pk.dx = nx[0]; pk.dy = nx[1]; } else { pk.dx = -pk.dx; pk.dy = -pk.dy; }
+      }
+      pk.x += pk.dx * 1.3 * dt; pk.y += pk.dy * 1.3 * dt;
+    }
+    for (const d of pk.dogs) {
+      const wx = pk.x + d.ox, wy = pk.y + d.oy;
+      d.x += (wx - d.x) * Math.min(1, dt * 4); d.y += (wy - d.y) * Math.min(1, dt * 4);
+      d.state = 'bark'; d.face = (pk.state === 'chase' ? player.x - d.x : pk.dx - pk.dy) >= 0 ? 1 : -1;
+    }
+  }
+}
 /* ---------- villagers: out on the lanes by day, home by dark; shopkeepers at their doors ---------- */
 const WALKER_LOOKS = [
   { body: '#d0344a', legs: '#d0344a', hair: '#1a100a', h: 0.92, basket: true }, { body: '#3f6fa8', legs: '#3a3a44', hair: '#2a2018', h: 1 },
@@ -4648,6 +4760,12 @@ function setupWalkers() {
     out.push({ x: x + 0.5, y: y + 0.5, r: 0.25, tile: -1, dx: 1, dy: 0, face: 1, moving: true, alpha: 0, state: 'walk', role: { look: WALKER_LOOKS[i % WALKER_LOOKS.length] }, spd: 0.9 + r() * 0.5, pause: 0,
       name: `${FIRST_NAMES[Math.floor(r() * FIRST_NAMES.length)]} ${fam || ''}`.trim() });
   }
+  // poders: the bread men, cycling the lanes in the early morning with a basket of pao and a bulb horn
+  if (CH.life) for (let i = 0; i < Math.max(1, Math.round(lanes.length / 500)); i++) {
+    const [x, y] = lanes[Math.floor(r() * lanes.length)];
+    out.push({ x: x + 0.5, y: y + 0.5, r: 0.25, tile: -1, dx: 1, dy: 0, face: 1, moving: true, alpha: 0, state: 'poder', role: { look: { body: '#e8e0cc', legs: '#3a3a44', hair: '#1a100a', h: 1, belly: true } },
+      spd: 2.4, pause: 0, name: `Poder ${['Joaquim', 'Savio', 'Anthony', 'Minguel', 'Caitan'][i % 5]}`, hornT: 2 + r() * 4 });
+  }
   // a shopkeeper stands at each shop's door by day
   for (const h of houses) if (h.shop) out.push({ x: h.x + Math.floor(h.w / 2) + 0.5, y: h.y + h.h + 0.35, r: 0.25, face: 1, moving: false, alpha: 0, state: 'shop', role: { look: WALKER_LOOKS[(h.x + h.y) % WALKER_LOOKS.length] },
     name: `${FIRST_NAMES[(h.x * 3 + h.y) % FIRST_NAMES.length]} ${h.family}` });
@@ -4656,19 +4774,29 @@ function setupWalkers() {
 function updateWalkers(dt) {
   if (!S.walkers) return;
   const day = CH.life && !isNight() && sunLight(S.dayMin) > 0.4;
+  const morning = CH.life && S.dayMin > 5.5 * 60 && S.dayMin < 9.5 * 60;   // the poder's round
   for (const w of S.walkers) {
-    w.alpha = Math.max(0, Math.min(1, w.alpha + (day ? dt : -dt) * 0.6));
-    if (w.state !== 'walk' || w.alpha <= 0) continue;
+    const out = w.state === 'poder' ? morning : day;
+    w.alpha = Math.max(0, Math.min(1, w.alpha + (out ? dt : -dt) * 0.6));
+    if (w.state === 'poder' && w.alpha > 0.5) {
+      w.hornT -= dt;
+      if (w.hornT <= 0) { w.hornT = 5 + Math.random() * 6; SFX.play('poderHorn', w.x, w.y, 22); }
+      if (hyp(w.x - player.x, w.y - player.y) < 1.6 && S.poderDay !== S.dayIdx) {
+        S.poderDay = S.dayIdx; w.pause = 4; SFX.play('poderHorn', w.x, w.y, 22); addPoints(10, 'pao');
+        whisper(`${w.name} squeezes his horn and holds out a warm pao from the basket. “Fresh, baba! Take, take.”`);
+      }
+    }
+    if ((w.state !== 'walk' && w.state !== 'poder') || w.alpha <= 0) continue;
     if (w.pause > 0) { w.pause -= dt; w.moving = false; continue; }
     // stroll tile to tile along the lanes, now and then stopping for a chat
     const tx = Math.floor(w.x), ty = Math.floor(w.y), ti = ty * W + tx;
     if (ti !== w.tile && hyp(w.x - tx - 0.5, w.y - ty - 0.5) < 0.12) {
       w.tile = ti; w.x = tx + 0.5; w.y = ty + 0.5;
-      const opts = D4.filter(([ax, ay]) => [LANE, PLAZA, COURT].includes(at(tx + ax, ty + ay)) && !(ax === -w.dx && ay === -w.dy));
+      const opts = D4.filter(([ax, ay]) => (w.state === 'poder' ? [LANE, ROAD] : [LANE, PLAZA, COURT]).includes(at(tx + ax, ty + ay)) && !(ax === -w.dx && ay === -w.dy));
       const straight = opts.find(([ax, ay]) => ax === w.dx && ay === w.dy);
       const nx = straight && Math.random() < 0.7 ? straight : opts[Math.floor(Math.random() * opts.length)];
       if (nx) { w.dx = nx[0]; w.dy = nx[1]; } else { w.dx = -w.dx; w.dy = -w.dy; }
-      if (Math.random() < 0.04) w.pause = 2 + Math.random() * 4;
+      if (w.state === 'walk' && Math.random() < 0.04) w.pause = 2 + Math.random() * 4;
     }
     w.x += w.dx * w.spd * dt; w.y += w.dy * w.spd * dt; w.moving = true;
     const sd = w.dx - w.dy; if (Math.abs(sd) > 0.1) w.face = Math.sign(sd);
@@ -4863,6 +4991,7 @@ function placesList() {
     out.push({ x: e.x, y: e.y, tx: e.tx, ty: e.ty, what: nm.replace(/^the /, ''), type: e.kind });
   }
   for (const sg of sights) out.push({ x: sg.x + 0.5, y: sg.y + 0.5, tx: sg.x, ty: sg.y, what: sg.name, type: 'sight', visited: visitedSight(sg) });
+  for (const pu of pumps) out.push({ x: pu.x + 0.5, y: pu.y + 1, tx: pu.x, ty: pu.y + 1, what: `${pu.name} petrol pump`, type: 'pump' });
   for (const h of houses) if (h.shop) { const dx = h.x + Math.floor(h.w / 2), dy = h.y + h.h; out.push({ x: dx + 0.5, y: dy + 0.5, tx: dx, ty: dy, what: h.shop.name.toLowerCase().replace(/^./, c => c.toUpperCase()), type: 'shop' }); }
   if (CH.life && S.quest && !isNight() && !(S.quest.done && S.quest.state !== 'return')) out.push({ x: S.quest.giver.x, y: S.quest.giver.y, tx: Math.floor(S.quest.giver.x), ty: Math.floor(S.quest.giver.y), what: S.quest.giver.role.name, type: 'quest' });
   const left = (S.litter || []).filter(l => !l.got);
@@ -4870,7 +4999,7 @@ function placesList() {
   for (const p of out) p.d = Math.round(hyp(p.x - player.x, p.y - player.y) * 12);
   return out.sort((a, b) => a.d - b.d);
 }
-const PLACE_ICON = { shop: '#e0763a', temple: '#f0c86a', chapel: '#ffffff', bus: '#8fd0ff', ferry: '#8fd0ff', devli: '#9fe8d6', sight: '#ffe1a0', quest: '#f2b441', litter: '#e8e4dc' };
+const PLACE_ICON = { pump: '#f07a1a', shop: '#e0763a', temple: '#f0c86a', chapel: '#ffffff', bus: '#8fd0ff', ferry: '#8fd0ff', devli: '#9fe8d6', sight: '#ffe1a0', quest: '#f2b441', litter: '#e8e4dc' };
 function showPlaces() {
   if (!S || !player) return;
   const paused = S.mode === 'play';
