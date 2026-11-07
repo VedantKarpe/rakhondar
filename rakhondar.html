@@ -743,6 +743,12 @@ function gen(seed) {
       if (at(kx, ky) === GR) { set(kx, ky, MUD); kids.push({ x: kx + 0.5, y: ky + 0.5, shirt: ['#3f7fbf', '#e0a33a', '#5aa05a'][n], face: -dx || 1, ph: rand() * 6 }); n++; }
     }
   }
+  // street tubelights on poles beside the roads and lanes; about one in three flickers
+  for (const [x, y] of pick(Math.round(W * H / 170), (x, y) => (roadAdj(x, y) || laneAdj(x, y)) && hyp(x - START.x, y - START.y) > 2, 6)) {
+    set(x, y, PROP);
+    const l = { kind: 'tube', x: x + 0.5, y: y + 0.5, r: 2.6, lift: 44, color: '220,240,255', flick: rand() < 0.33, ph: rand() * 50 };
+    lights.push(l); props.push({ kind: 'tube', x, y, light: l });
+  }
   // billboards by the roads and lanes, two tiles wide, facing the street
   const nearStreet = (x, y) => [ROAD, LANE].includes(at(x, y + 1)) || [ROAD, LANE].includes(at(x + 1, y + 1));
   const ads = ADS.slice().sort(() => rand() - 0.5);
@@ -1293,6 +1299,14 @@ function drawProp(g, p) {
   } else if (p.kind === 'car') drawCar(g, cx, cy, p.dir, 0, p.col, false);
   else if (p.kind === 'devli') drawDevli(g, p);
   else if (p.kind === 'sight') drawSight(g, p);
+  else if (p.kind === 'tube') {
+    // a concrete pole with an arm and a white tubelight
+    const [bx, by] = iso(cx, cy), on = streetOn() && tubeOn(p.light);
+    g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(bx + 2, by + 1, 6, 3, 0, 0, 7); g.fill();
+    line(g, [bx, by], [bx, by - 50], '#9a9a94', 3.5); line(g, [bx, by - 48], [bx + 10, by - 52], '#9a9a94', 2.5);
+    g.fillStyle = on ? '#f4fbff' : '#5a6068'; g.fillRect(bx + 4, by - 52, 14, 3);
+    if (on) { g.fillStyle = 'rgba(220,240,255,.35)'; g.fillRect(bx + 2, by - 55, 18, 9); }
+  }
   else if (p.kind === 'bigcross') withOff(g, OFF.c, drawBigCross);
   else if (p.kind === 'flag') {
     // a Bonderam flag on a tall bamboo pole, with bunting to the ground
@@ -1610,6 +1624,28 @@ function steer(e, mx, my, dt) {
 const diyaStrength = l => Math.min(1, 0.35 + l.life / 6);
 const ferryPos = e => { const k = 1.3 + (1 - Math.min(1, e.wait / e.need)) * 1.5; return [e.x + e.dir[0] * k, e.y + e.dir[1] * k]; };
 // cars on roads and canoes on water wander tile to tile, mostly keeping straight
+// which way a car is pointing, from its smooth heading
+const carDir = c => c.h === undefined ? [c.dx, c.dy] : [Math.cos(c.h), Math.sin(c.h)];
+function driveCar(c, dt, go) {
+  const tx = Math.floor(c.x), ty = Math.floor(c.y), ti = ty * W + tx;
+  if (c.h === undefined) { c.h = Math.atan2(c.dy, c.dx); c.v = 0; c.tile = ti; }
+  // choose the next turn as the car passes the middle of a tile, without snapping it there
+  if (ti !== c.tile && hyp(c.x - tx - 0.5, c.y - ty - 0.5) < 0.35) {
+    c.tile = ti;
+    const opts = D4.filter(([ax, ay]) => at(tx + ax, ty + ay) === ROAD && !(ax === -c.dx && ay === -c.dy));
+    const straight = opts.find(([ax, ay]) => ax === c.dx && ay === c.dy);
+    const next = straight && Math.random() < 0.85 ? straight : opts[Math.floor(Math.random() * opts.length)];
+    if (next) { c.dx = next[0]; c.dy = next[1]; } else { c.dx = -c.dx; c.dy = -c.dy; }
+  }
+  // head for the middle of the next tile along, turning at a steady rate
+  const ax = tx + 0.5 + c.dx - c.x, ay = ty + 0.5 + c.dy - c.y, want = Math.atan2(ay, ax);
+  let dh = want - c.h; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
+  const turn = Math.max(-1, Math.min(1, dh / 0.5));
+  c.h += Math.sign(dh) * Math.min(Math.abs(dh), dt * (Math.abs(dh) > 2.5 ? 6 : 3.2));
+  const target = go ? 3.2 * (1 - 0.55 * Math.abs(turn)) : 0;
+  c.v += (target - c.v) * Math.min(1, dt * (target > c.v ? 1.6 : 4));
+  c.x += Math.cos(c.h) * c.v * dt; c.y += Math.sin(c.h) * c.v * dt;
+}
 function wander(c, kind, speed, dt, straightBias) {
   const tx = Math.floor(c.x), ty = Math.floor(c.y), ti = ty * W + tx;
   if (ti !== c.tile && hyp(c.x - tx - 0.5, c.y - ty - 0.5) < 0.13) {
@@ -1624,8 +1660,29 @@ function wander(c, kind, speed, dt, straightBias) {
 // holy ground: the open temple, chapel and devli (not a locked one, and not a ride home)
 const holyPlace = e => !e.need && !e.locked && !e.edge && !e.contested;
 const holy = () => exits.filter(holyPlace);
+// street lights come on at dusk; a flickering tube goes dark in short stutters and the odd long gap
+const streetOn = () => !S || !CH.life || sunLight(S.dayMin) < 0.55;
+function tubeOn(l) {
+  if (!l.flick) return true;
+  const t = (S ? S.t : 0) + l.ph;
+  if (t % 11 < 1.6) return false;
+  return Math.sin(t * 17) + Math.sin(t * 5.3 + l.ph) > -0.9;
+}
+// shade: the forest floor, or ground with trees all round it
+function shadowAt(x, y) {
+  const tx = Math.floor(x), ty = Math.floor(y);
+  if (forest[ty * W + tx]) return true;
+  let n = 0;
+  for (let yy = ty - 1; yy <= ty + 1; yy++) for (let xx = tx - 1; xx <= tx + 1; xx++) if (at(xx, yy) === TREE || at(xx, yy) === MANG) n++;
+  return n >= 3;
+}
 function inSafe(x, y) {
   for (const l of lights) if (l.kind === 'diya' && l.lit && hyp(l.x - x, l.y - y) < l.safeR * diyaStrength(l)) return true;
+  if (S) {
+    if (CH.life && !isNight() && !shadowAt(x, y)) return true;   // demons out by day keep to the shade
+    if (streetOn()) for (const l of lights) if (l.kind === 'tube' && hyp(l.x - x, l.y - y) < 2.2 && tubeOn(l)) return true;
+    for (const c of S.cars || []) { const [hx, hy] = carDir(c); if (hyp(c.x + hx * 1.7 - x, c.y + hy * 1.7 - y) < 1.4) return true; }
+  }
   for (const e of exits) if (holyPlace(e) && hyp(x - e.x, y - e.y) < 3.2) return true;
   return false;
 }
@@ -1729,12 +1786,12 @@ function placeChapterThings(devli) {
 const OIL_MAX = 100, LAMP_RANGE = 3.4, COURAGE = 5, RESCUES = 5;
 const LAMP_CONE = Math.cos(0.95), LAMP_POINT = 0.9; // the beam reaches about 55 degrees either side, or anything touching the child
 let PYRE = { x: 31.5, y: 28.5 };
-function spawnDemon(near) {
+function spawnDemon(near, ok) {
   for (let tries = 0; tries < 400; tries++) {
     let x, y;
     if (near) { const a = rand() * 6.28, r = 2.5 + rand() * 2.5; x = Math.floor(near.x + Math.cos(a) * r); y = Math.floor(near.y + Math.sin(a) * r); }
     else { x = 1 + Math.floor(rand() * (W - 2)); y = 1 + Math.floor(rand() * (H - 2)); }
-    if (x < 1 || y < 1 || x > W - 2 || y > H - 2 || solid(map[y * W + x])) continue;
+    if (x < 1 || y < 1 || x > W - 2 || y > H - 2 || solid(map[y * W + x]) || (ok && !ok(x, y))) continue;
     const d = dist[y * W + x];
     if (d < 0 || (!near && d < 18) || inSafe(x + 0.5, y + 0.5) || holy().some(e => hyp(x - e.x, y - e.y) < 8)) continue;
     demons.push({ x: x + 0.5, y: y + 0.5, r: 0.32, dir: D4[Math.floor(rand() * 4)], wt: 0, stun: 0, chasing: !!near, ph: rand() * 6, hp: 1, maxHp: 1, lit: 0 });
@@ -2116,7 +2173,7 @@ function update(dt) {
   // traffic on the main road waits for a child standing in front of it
   for (const c of S.cars) {
     const ax = player.x - c.x, ay = player.y - c.y, ahead = ax * c.dx + ay * c.dy, side = Math.abs(ax * c.dy - ay * c.dx);
-    if (!(side < 0.9 && ahead > 0 && ahead < 2.2)) wander(c, ROAD, 3.2, dt, 0.85);
+    driveCar(c, dt, !(side < 0.9 && ahead > 0 && ahead < 2.4));
   }
   for (const b of S.boats) wander(b, WATER, 0.7, dt, 0.7);
 
@@ -2795,7 +2852,20 @@ function updateLife(dt) {
   const night = isNight();
   if (night && !was) { SFX.play('call'); whisper(`The sun has gone down over ${CH.place}. The shadows are waking, and so am I. Keep your lamp lit.`); S.lifeT = 8; }
   if (!night && was) { whisper('Morning! The shadows melt into the ground. The village wakes up.'); if (S.npc && S.npc.state === 'find') S.npc = null; }
-  if (!night) for (const d of demons.slice()) if (rand() < dt * 1.5) banish(d);
+  // by day, demons burn away in the sun; a shade demon lasts as long as it stays in the shade
+  if (!night) for (const d of demons.slice()) if (!(d.shade && shadowAt(d.x, d.y)) && rand() < dt * 1.5) banish(d);
+  // a quest that leads you into the shade wakes demons there
+  const qq = S.quest;
+  if (!night && qq && qq.state === 'on' && shadowAt(player.x, player.y)) {
+    S.shadeT = (S.shadeT === undefined ? 2.5 : S.shadeT) - dt;
+    if (S.shadeT <= 0) {
+      S.shadeT = 7;
+      if (demons.filter(d => d.shade).length < 3) {
+        const d = spawnDemon(player, (x, y) => shadowAt(x + 0.5, y + 0.5));
+        if (d) { d.shade = true; hint('shade', 'Something stirs in the shade of the trees. Step back into the sunlight, or burn it with your lamp.'); }
+      }
+    }
+  } else S.shadeT = undefined;
   // at night, people get stranded now and then
   if (night && !S.npc && S.nextT <= 0) {
     S.lifeT -= dt;
@@ -3316,7 +3386,7 @@ function render() {
   for (const s of statics) if (inView(s.sx, s.sy)) list.push(s);
   list.push({ key: depth(player.x, player.y), draw: g => drawChild(g, 1) });
   for (const d of demons) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: depth(d.x, d.y), draw: g => drawDemon(g, d) }); }
-  for (const c of S.cars) { const [sx, sy] = iso(c.x, c.y); if (inView(sx, sy)) list.push({ key: depth(c.x, c.y), draw: g => drawCar(g, c.x, c.y, c.dx, c.dy, c.col, true) }); }
+  for (const c of S.cars) { const [sx, sy] = iso(c.x, c.y); if (inView(sx, sy)) list.push({ key: depth(c.x, c.y), draw: g => { const [hx, hy] = carDir(c), along = Math.abs(hx) >= Math.abs(hy); drawCar(g, c.x, c.y, along ? Math.sign(hx) : 0, along ? 0 : Math.sign(hy), c.col, true); } }); }
   if (S.npc) list.push({ key: depth(S.npc.x, S.npc.y), draw: g => { if (S.npc.pillion) { g.save(); g.translate(0, -8); drawPerson(g, S.npc); g.restore(); } else drawPerson(g, S.npc); } });
   for (const b of S.bikes) { const [sx, sy] = iso(b.x, b.y); if (inView(sx, sy)) list.push({ key: depth(b.x, b.y), draw: g => drawBike(g, b.x, b.y, b.hx, b.hy, b.col) }); }
   for (const d of S.dogs) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: depth(d.x, d.y), draw: g => drawDog(g, d) }); }
@@ -3367,6 +3437,7 @@ function render() {
     if (l.kind === 'effigy') r *= 1 + Math.sin(t * 7 + l.x) * 0.05;
     if (l.off) on = false;
     if (l.kind === 'seal') on = l.seal.lit;
+    if (l.kind === 'tube') { on = streetOn() && tubeOn(l); if (on && l.flick) r *= 0.85 + 0.15 * Math.abs(Math.sin(t * 40 + l.ph)); }
     if (on) { hole(l.x, l.y, r, 0.95, l.lift || 4); glows.push([l, r]); }
   }
   for (const p of S.prints) { const age = t - p.born; if (age > 0) hole(p.x, p.y, 0.9, 0.35 * Math.min(1, (p.life - age) / 2)); }
@@ -3379,8 +3450,9 @@ function render() {
   }
   if (player.bike) { hole(player.x + player.hx * 2.2, player.y + player.hy * 2.2, 2.2, 0.8, 2); glows.push([{ x: player.x + player.hx * 2.2, y: player.y + player.hy * 2.2, lift: 2, color: '255,240,190' }, 2]); }
   for (const c of S.cars) {
-    hole(c.x + c.dx * 1.9, c.y + c.dy * 1.9, 2, 0.85, 2);
-    glows.push([{ x: c.x + c.dx * 1.9, y: c.y + c.dy * 1.9, lift: 2, color: '255,240,190' }, 2]);
+    const [hx, hy] = carDir(c);
+    hole(c.x + hx * 1.9, c.y + hy * 1.9, 2, 0.85, 2);
+    glows.push([{ x: c.x + hx * 1.9, y: c.y + hy * 1.9, lift: 2, color: '255,240,190' }, 2]);
   }
   for (const b of S.boats) { const bx = b.x, by = b.y; hole(bx, by, 1.6, 0.8, 6); glows.push([{ x: bx, y: by, lift: 6, color: '255,200,110' }, 1.6]); }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -3578,7 +3650,7 @@ function render() {
   }
   // headlight beams on the main road
   ctx.fillStyle = 'rgba(255,240,190,.22)';
-  for (const c of S.cars) onGround(ctx, c.x + c.dx * 0.75, c.y + c.dy * 0.75, g => { g.rotate(Math.atan2(c.dy, c.dx)); g.beginPath(); g.moveTo(0, -6); g.lineTo(90, -24); g.lineTo(90, 24); g.lineTo(0, 6); g.fill(); });
+  for (const c of S.cars) { const [hx, hy] = carDir(c); onGround(ctx, c.x + hx * 0.75, c.y + hy * 0.75, g => { g.rotate(Math.atan2(hy, hx)); g.beginPath(); g.moveTo(0, -6); g.lineTo(90, -24); g.lineTo(90, 24); g.lineTo(0, 6); g.fill(); }); }
   // fishing canoes drifting on the river with their lanterns
   for (const b of S.boats) {
     const bx = b.x, by = b.y, [sx, sy] = iso(bx, by);

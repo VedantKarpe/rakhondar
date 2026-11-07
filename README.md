@@ -35,6 +35,8 @@ Every village map is 96 x 80 tiles at 12 m a tile, about 1.15 km by 0.96 km. The
 
 **Quests all day.** In live mode one quest follows another: when you finish, someone else in the vaddo waves you over a few seconds later. The day's first quest moves your streak. Litter lies about the lanes every day; pick it up any time for 5 points a piece.
 
+**Light and shade.** Street tubelights stand along the roads and lanes; they come on at dusk, and about one in three flickers, going dark in stutters and the odd long gap. Demons keep out of every light that is on: lit diyas, holy ground, a tubelight, the beam ahead of a car, and by day the sun. In daytime a quest that leads you into the shade of the forest wakes demons there; step back into the sunlight to lose them. Cars ease through their turns and slow for a child in the road.
+
 To add a village, import it with `tools/osm_import.py` (below) and add it to `VILLAGE_TALUKA` and `VILLAGE_TITLES` in `rakhondar.html`. The importer's `--size` must match `W` and `H` in the game.
 
 ## Chapters
