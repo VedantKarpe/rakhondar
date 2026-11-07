@@ -1198,7 +1198,40 @@ function winX(g, x, yc, z0, z1, hw, nx = 1) {        // same on an x face
   poly(g, [P(x, yc + hw, z0), P(x, yc - hw, z0), P(x, yc - hw, z1 - 1), P(x, yc + hw, z1 - 1)], '#b9b29b');
   for (let i = 1; i < 4; i++) line(g, P(x, yc - hw + i * hw / 2, z0), P(x, yc - hw + i * hw / 2, z1 - 1), '#8a846f', 0.7);
 }
+/* ---------- houses modelled in Blender (tools/blender_house.py), rendered from the game's four view sides ---------- */
+// house_w{3,4}_v{0,1}_r{0..3}.png has white walls; ..._m.png is a mask of the walls, tinted with each house's colour.
+// v is the design: 0 a hipped roof over the balcão, 1 a white gabled pediment over it.
+// K switches between these and the hand-drawn houses.
+const HOUSE_SPRITES = {};
+let houseSprites = true;
+try { houseSprites = localStorage.getItem('rk-house3d') !== 'off'; } catch (e) {}
+(() => {
+  let left = 32;
+  const done = () => { if (--left === 0 && S && map && houseSprites) buildStatics(); };
+  for (const w of [3, 4]) for (const v of [0, 1]) for (let r = 0; r < 4; r++) {
+    const img = new Image(), mask = new Image();
+    img.onload = mask.onload = done; img.onerror = mask.onerror = () => {};
+    img.src = `sprites/house_w${w}_v${v}_r${r}.png`; mask.src = `sprites/house_w${w}_v${v}_r${r}_m.png`;
+    HOUSE_SPRITES[`${w}_${v}_${r}`] = { img, mask };
+  }
+})();
+const tintCanvas = document.createElement('canvas');
+function drawHouseSprite(g, h) {
+  const s = HOUSE_SPRITES[`${h.w}_${(h.x * 7 + h.y * 3) % 2}_${ROT}`];   // each house keeps one of the two designs
+  if (!houseSprites || !s || !s.img.naturalWidth || !s.mask.naturalWidth) return false;
+  const [sx, sy] = P(h.x + h.w / 2, h.y + h.h / 2, 0);
+  const n = s.mask.naturalWidth;
+  tintCanvas.width = tintCanvas.height = n;
+  const tg = tintCanvas.getContext('2d');
+  tg.drawImage(s.mask, 0, 0); tg.globalCompositeOperation = 'source-in'; tg.fillStyle = h.wall; tg.fillRect(0, 0, n, n);
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(s.img, sx - 128, sy - 176, 256, 256);
+  g.save(); g.globalCompositeOperation = 'multiply'; g.drawImage(tintCanvas, sx - 128, sy - 176, 256, 256); g.restore();
+  h.rim = [];
+  return true;
+}
 function drawHouse(g, h) {
+  if (!h.shop && !h.tavern && drawHouseSprite(g, h)) return;
   const x0 = h.x + 0.1, x1 = h.x + h.w - 0.1, y0 = h.y + 0.1, yb = h.y + h.h - 1 + 0.05, y1 = h.y + h.h - 0.1;
   const wh = 26, xm = (x0 + x1) / 2, pw = Math.min(2.2, h.w - 1.4), ym = (y0 + yb) / 2;
   const front = h.wall, side = shade(h.wall, 0.72), white = '#f2ecdf', whiteS = '#cfc8b8';
@@ -2278,6 +2311,7 @@ addEventListener('keydown', e => {
   if (k === 'e' && !e.repeat && S && S.mode === 'play' && nearWalker()) { e.preventDefault(); askWay(nearWalker()); return; }
   if (k === 'q' && S && S.mode === 'talk') { e.preventDefault(); accuse(); return; }
   if (k === 'b' && !e.repeat) toggleBike();
+  if (k === 'k' && !e.repeat && S) { houseSprites = !houseSprites; try { localStorage.setItem('rk-house3d', houseSprites ? 'on' : 'off'); } catch (er) {} buildStatics(); whisper(houseSprites ? 'Houses: modelled in 3D' : 'Houses: hand-drawn'); }
   if (k === 'g' && !e.repeat && S && S.mode === 'play') showGoaMap();
   if (k === 'p' && !e.repeat && S && S.mode === 'play') showPlaces();
   if (k === 'escape' && S && S.mode === 'play') { showIntro(); return; }
@@ -4322,6 +4356,7 @@ const CONTROLS = `
       <b>Mini map</b><span>Bottom left: the whole village, turned the same way as your view. You are the yellow dot, and your next goal pulses green.</span>
       <b>Ask the way</b><span>Walk up to a villager by day and press E, or tap Ask the way: pick a place or a family's house and they tell you which way to go.</span>
       <b>Places</b><span>Tap the mini map or press P for the village map: every temple, church, stop and sight, with a Guide me button that puts an arrow on the way. G opens the map of Goa by taluka.</span>
+      <b>3D houses</b><span>Press K to switch between the houses modelled in Blender and the hand-drawn ones.</span>
       <b>Turn the view</b><span>Drag with the right mouse button, press Z or X, or tap ⟲ ⟳ at the top right.</span>
     </div>`;
 // the title screen: your name and the four chapters
