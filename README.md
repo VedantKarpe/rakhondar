@@ -31,6 +31,10 @@ Every village map is 96 x 80 tiles at 12 m a tile, about 1.15 km by 0.96 km. The
 | Ponda | Tonca |
 | Pernem, Bicholim, Sattari, Mormugao, Dharbandora, Salcete, Sanguem, Quepem, Canacona | not mapped yet |
 
+**Exploring.** Each village starts in shadow and opens up as you walk it; the browser remembers what you have seen, and the Goa map shows how much of each village you have explored. Woodland from OpenStreetMap is dense with mango, cashew and palms. Named sights (monuments, museums, gardens) stand where OpenStreetMap puts them, are named as you approach, and are worth 25 points the first time you reach each one.
+
+**Quests all day.** In live mode one quest follows another: when you finish, someone else in the vaddo waves you over a few seconds later. The day's first quest moves your streak. Litter lies about the lanes every day; pick it up any time for 5 points a piece.
+
 To add a village, import it with `tools/osm_import.py` (below) and add it to `VILLAGE_TALUKA` and `VILLAGE_TITLES` in `rakhondar.html`. The importer's `--size` must match `W` and `H` in the game.
 
 ## Chapters
@@ -107,6 +111,7 @@ Import another village:
 
 ```bash
 python tools/osm_import.py fetch NAME LAT LON --radius 0.012
+python tools/osm_import.py sights NAME LAT LON --radius 0.012
 python tools/osm_import.py survey NAME
 python tools/osm_import.py build NAME LAT LON --tile 12 --inline rakhondar.html
 ```

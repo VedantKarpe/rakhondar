@@ -1,6 +1,7 @@
 """Turn a real Goan village from OpenStreetMap into a Rakhondar map.
 
     python tools/osm_import.py fetch NAME LAT LON [--radius 0.007]
+    python tools/osm_import.py sights NAME LAT LON [--radius 0.012]
     python tools/osm_import.py survey NAME
     python tools/osm_import.py build NAME LAT LON [--tile 12] [--size 96x80] [--inline rakhondar.html] [--anchor kind=lat,lon[,name]]
 
@@ -42,6 +43,16 @@ def fetch(name, lat, lon, radius):
     DATA.mkdir(exist_ok=True)
     (DATA / f'{name}.osm.json').write_text(json.dumps(d), encoding='utf-8', newline=chr(10))
     print(f'{len(d["elements"])} elements cached in data/{name}.osm.json')
+
+
+def sights_fetch(name, lat, lon, radius):
+    """Monuments, museums, viewpoints and other places a visitor would look for, cached in data/NAME.sights.json."""
+    b = f'({lat - radius},{lon - radius * 1.04},{lat + radius},{lon + radius * 1.04})'
+    q = (f'[out:json][timeout:120];(nwr["historic"]{b};nwr["tourism"~"attraction|museum|viewpoint|artwork|gallery"]{b};'
+         f'nwr["leisure"="park"]["name"]{b};);out center tags;')
+    d = overpass(q)
+    (DATA / f'{name}.sights.json').write_text(json.dumps(d), encoding='utf-8', newline=chr(10))
+    print(f'{len(d["elements"])} sights cached in data/{name}.sights.json')
 
 
 def load(name):
@@ -155,6 +166,10 @@ def build(name, lat, lon, tile, inline, pins=()):
             area(e, 'P')
     for e in els:
         t = tagged(e)
+        if t.get('landuse') == 'forest' or t.get('natural') in ('wood', 'scrub'):
+            area(e, 'F')
+    for e in els:
+        t = tagged(e)
         if t.get('wetland') == 'mangrove' or (t.get('natural') == 'wetland' and t.get('landuse') != 'farmland'):
             area(e, 'M')
     for e in els:
@@ -187,6 +202,23 @@ def build(name, lat, lon, tile, inline, pins=()):
             w, h = max(3, min(4, x1 - x0 + 1)), 3
             if 1 <= x0 and x0 + w < W - 1 and 1 <= y0 and y0 + h < H - 1:
                 houses.append([x0, y0, w, h])
+    # sights: named monuments and the like, from the separate sights cache when there is one
+    sights = []
+    sp = DATA / f'{name}.sights.json'
+    for e in json.loads(sp.read_text(encoding='utf-8'))['elements'] if sp.exists() else []:
+        t = e.get('tags', {})
+        nm = t.get('name:en') or t.get('name')
+        c = e.get('center') or ({'lat': e['lat'], 'lon': e['lon']} if 'lat' in e else None)
+        if not nm or not c or t.get('historic') in ('boundary_stone', 'milestone'):
+            continue
+        x, y = xy(c['lat'], c['lon'])
+        if 3 <= x < W - 3 and 3 <= y < H - 3 and all(math.hypot(x - s[0], y - s[1]) > 6 for s in sights):
+            kind = 'park' if t.get('leisure') == 'park' else 'museum' if t.get('tourism') in ('museum', 'gallery') else 'view' if t.get('tourism') == 'viewpoint' else 'monument'
+            if len(nm) > 34:   # keep labels short: cut at a word, and drop a dangling 'and', 'of' or 'the'
+                nm = nm[:34].rsplit(' ', 1)[0].rstrip(':,-')
+                while nm.split()[-1].lower() in ('and', 'of', 'the', 'de', 'da'):
+                    nm = nm.rsplit(' ', 1)[0]
+            sights.append([round(x, 1), round(y, 1), nm, kind])
     anchors, names = {}, {}
     for e in els:
         t = e.get('tags', {})
@@ -212,12 +244,13 @@ def build(name, lat, lon, tile, inline, pins=()):
     out = {'name': name.title(), 'centre': [lat, lon], 'tile': tile, 'W': W, 'H': H,
            'credit': 'Map data © OpenStreetMap contributors (ODbL)',
            'rows': [''.join(r) for r in grid], 'houses': houses,
-           'anchors': {k: [v[0], v[1]] for k, v in anchors.items()}, 'names': names}
+           'anchors': {k: [v[0], v[1]] for k, v in anchors.items()}, 'names': names, 'sights': sights}
     (DATA / f'{name}.map.json').write_text(json.dumps(out), encoding='utf-8', newline=chr(10))
     for r in out['rows']:
         print(r)
     print('anchors', out['anchors'], names)
     print('houses', len(houses))
+    print('sights', sights)
     if inline:
         f = pathlib.Path(inline)
         src = f.read_text(encoding='utf-8')
@@ -233,7 +266,7 @@ def build(name, lat, lon, tile, inline, pins=()):
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument('cmd', choices=['fetch', 'survey', 'build'])
+    ap.add_argument('cmd', choices=['fetch', 'sights', 'survey', 'build'])
     ap.add_argument('name')
     ap.add_argument('lat', type=float, nargs='?')
     ap.add_argument('lon', type=float, nargs='?')
@@ -246,6 +279,8 @@ if __name__ == '__main__':
     W, H = (int(v) for v in a.size.split('x'))
     if a.cmd == 'fetch':
         fetch(a.name, a.lat, a.lon, a.radius)
+    elif a.cmd == 'sights':
+        sights_fetch(a.name, a.lat, a.lon, a.radius)
     elif a.cmd == 'survey':
         survey(a.name)
     else:
