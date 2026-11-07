@@ -70,6 +70,11 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   border: 1px solid rgba(236, 228, 207, 0.3); border-radius: 6px; padding: 9px 12px; max-width: 16rem;
 }
 .check { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--muted); }
+#askBtn {
+  position: absolute; bottom: 72px; right: max(16px, env(safe-area-inset-right, 0px));
+  font: 600 15px var(--body); color: var(--night); background: var(--ink); border: 0; border-radius: 999px; padding: 10px 16px; cursor: pointer;
+}
+#askBtn kbd { font: inherit; font-weight: 400; opacity: 0.7; margin-left: 4px; }
 #rideBtn {
   position: absolute; bottom: 20px; right: calc(max(16px, env(safe-area-inset-right, 0px)) + 190px);
   font: 600 15px var(--body); color: var(--night); background: var(--lamp);
@@ -183,6 +188,7 @@ button:focus-visible { outline: 2px solid var(--lamp); outline-offset: 3px; }
   <div id="miniWrap"><canvas id="mini" width="192" height="96" aria-label="Mini map of the village. Opens the village map." role="button" tabindex="0"></canvas><div class="turn"><button class="sound" id="placesBtn" type="button">Places <kbd>P</kbd></button><button class="sound" id="goaBtn" type="button">Goa <kbd>G</kbd></button></div></div>
   <button id="callBtn" type="button">Call Rakhondar <kbd>Space</kbd></button>
   <button id="rideBtn" type="button" hidden>Ride <kbd>B</kbd></button>
+  <button id="askBtn" type="button" hidden>Ask the way <kbd>E</kbd></button>
   <div class="talk" id="talk" hidden>
     <div class="talk-card">
       <span class="eyebrow" id="talkWho"></span>
@@ -621,6 +627,12 @@ function layoutReal(V, noCarve) {
   return { jetty, bus, edge, connect: true };
 }
 
+// family names for the houses: Catholic families keep a cross in the yard, Hindu families a tulsi (as the game draws them)
+const FAMILIES = {
+  cross: ['Fernandes', 'D’Souza', 'Rodrigues', 'Pereira', 'Dias', 'Colaço', 'Mascarenhas', 'Lobo', 'Gomes', 'Furtado', 'Menezes', 'Noronha', 'Carvalho', 'Vaz', 'Almeida', 'Coutinho'],
+  tulsi: ['Naik', 'Kamat', 'Shirodkar', 'Gaonkar', 'Prabhu', 'Desai', 'Sawant', 'Borkar', 'Parab', 'Kerkar', 'Velip', 'Mandrekar', 'Naique', 'Shet', 'Sinai', 'Gawas']
+};
+const FIRST_NAMES = ['Maria', 'Ravi', 'Joaquim', 'Sunita', 'Anil', 'Fatima', 'Prakash', 'Agnes', 'Savio', 'Lata', 'Rohit', 'Bernadette', 'Ganesh', 'Lourdes', 'Nilesh', 'Conceição', 'Suresh', 'Anita', 'Peter', 'Rekha'];
 function gen(seed) {
   rand = rng(seed);
   map = new Uint8Array(W * H).fill(GR);
@@ -692,7 +704,9 @@ function gen(seed) {
     if (!ok || !nearLane(x, y, x + w - 1, y + h - 1, 3)) continue;
     if (hyp(x - START.x, y - START.y) < 3) continue;
     fill(x, y, x + w - 1, y + h - 1, HOUSE);
-    const hs = { x, y, w, h, wall: walls6[Math.floor(rand() * walls6.length)], faith: rand() < 0.5 ? 'tulsi' : 'cross', kandil: rand() < 0.45, tavern: false };
+    const faith = rand() < 0.5 ? 'tulsi' : 'cross', fams = FAMILIES[faith];
+    const hs = { x, y, w, h, wall: walls6[Math.floor(rand() * walls6.length)], faith, kandil: rand() < 0.45, tavern: false,
+      family: fams[(houses.length * 7 + Math.floor(rand() * fams.length)) % fams.length] };
     houses.push(hs);
     const yx = x + w, yy = y + h;
     if (at(yx, yy) === GR) { set(yx, yy, PROP); props.push({ kind: hs.faith, x: yx, y: yy }); }
@@ -764,7 +778,6 @@ function gen(seed) {
   // candles at the crosses and a diya at each tulsi, lit from dusk
   for (const pr of props) {
     if (pr.kind === 'cross') lights.push({ kind: 'candle', x: pr.x + 0.5, y: pr.y + 0.7, r: 1.2, lift: 4, color: '255,200,110' });
-    if (pr.kind === 'tulsi') lights.push({ kind: 'candle', x: pr.x + 0.5, y: pr.y + 0.7, r: 1.2, lift: 6, color: '255,180,80' });
   }
 
   const laneAdj = (x, y) => D4.some(([dx, dy]) => at(x + dx, y + dy) === LANE);
@@ -823,7 +836,6 @@ function gen(seed) {
   // little roadside devlis: a laterite niche with a painted stone and a diya, where the lanes meet
   for (const [x, y] of pick(Math.round(W * H / 900), (x, y) => D4.filter(([dx, dy]) => at(x + dx, y + dy) === LANE).length >= 2 && hyp(x - START.x, y - START.y) > 3, 8)) {
     set(x, y, PROP); props.push({ kind: 'ghumti', x, y });
-    lights.push({ kind: 'candle', x: x + 0.5, y: y + 0.8, r: 1.6, lift: 8, color: '255,190,90' });
   }
   for (const [x, y] of pick(3, laneAdj, 10)) {
     set(x, y, PROP); props.push({ kind: 'khuris', x, y });
@@ -873,12 +885,19 @@ function gen(seed) {
   const laneTiles = [];
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (map[y * W + x] === LANE) laneTiles.push([x, y]);
   lanes = laneTiles;
+  // the diyas you light are set in front of the shrines: each little devli and each tulsi, on the ground you can reach
   const diyas = [];
-  for (let tries = 0; tries < 3000 && diyas.length < 15; tries++) {
-    const [x, y] = laneTiles[Math.floor(rand() * laneTiles.length)];
-    if (hyp(x - START.x, y - START.y) < 5 || diyas.some(d => hyp(d[0] - x, d[1] - y) < 7)) continue;
+  const shrines = props.filter(pr => pr.kind === 'ghumti' || pr.kind === 'tulsi').sort(() => rand() - 0.5);
+  shrines.sort((a, b) => (b.kind === 'ghumti') - (a.kind === 'ghumti'));
+  for (const sh of shrines) {
+    if (diyas.length >= 18) break;
+    const front = [[0, 1], [1, 0], [-1, 0], [0, -1]].map(([dx, dy]) => [sh.x + dx, sh.y + dy, dx, dy]).find(([x, y]) => !solid(at(x, y)) && at(x, y) !== PIT && at(x, y) !== WATER);
+    if (!front) continue;
+    const [x, y, dx, dy] = front;
+    if (hyp(x - START.x, y - START.y) < 4 || diyas.some(d => hyp(d[0] - x, d[1] - y) < 5)) continue;
     diyas.push([x, y]);
-    lights.push({ kind: 'diya', x: x + 0.5, y: y + 0.5, r: 2.9, safeR: 2.1, lit: false, spent: false, life: 0, color: '242,170,60' });
+    sh.diya = true;
+    lights.push({ kind: 'diya', x: x + 0.5 - dx * 0.35, y: y + 0.5 - dy * 0.35, r: 2.9, safeR: 2.1, lit: false, spent: false, life: 0, color: '242,170,60' });
   }
   for (const h of houses) {
     if (h.kandil) lights.push({ kind: 'kandil', x: h.x + h.w / 2, y: h.y + h.h + 0.25, r: 1.9, lift: 6, hx: h.x + h.w / 2, hy: h.y + h.h - 0.05, color: ['255,120,60', '255,200,70', '240,80,110'][Math.floor(rand() * 3)] });
@@ -1407,15 +1426,12 @@ function drawProp(g, p) {
     box(g, cx - 0.24, cy - 0.24, cx + 0.24, cy + 0.24, 18, 21, '#c9733a', '#b8452a', '#8f3420');
     const [tx, ty] = P(cx, cy, 21);
     g.fillStyle = '#2f6a2a'; for (let i = 0; i < 9; i++) { g.beginPath(); g.arc(tx + Math.cos(i * 2.4) * 5, ty - 4 - (i % 3) * 3, 2.6, 0, 7); g.fill(); }
-    if (streetOn()) { const [dx, dy] = P(cx, cy + 0.26, 7), f = 1 + Math.sin(S.t * 13 + p.x) * 0.15; g.fillStyle = '#7d4524'; g.fillRect(dx - 3, dy - 1, 6, 2); g.fillStyle = '#ffd36b'; g.beginPath(); g.ellipse(dx, dy - 4, 1.6 * f, 3.2 * f, 0, 0, 7); g.fill(); }
   } else if (p.kind === 'ghumti') {
     // a tiny devli: a laterite niche with a tiled cap, a red-painted stone and a diya in front
     box(g, cx - 0.26, cy - 0.22, cx + 0.26, cy + 0.22, 0, 16, '#b45d38', '#9c4a2c', '#7a3820');
     hipRoof(g, cx - 0.32, cy - 0.28, cx + 0.32, cy + 0.28, 16, 7, false);
     const [nx, ny] = P(cx, cy + 0.23, 4); g.fillStyle = '#2a1a14'; g.fillRect(nx - 5, ny - 10, 10, 10);
     g.fillStyle = '#e2571e'; g.beginPath(); g.ellipse(nx, ny - 4, 3, 4, 0, 0, 7); g.fill();
-    const [fx, fy] = P(cx, cy + 0.36, 1); g.fillStyle = '#7d4524'; g.beginPath(); g.ellipse(fx, fy, 4, 2, 0, 0, 7); g.fill();
-    if (streetOn()) { const f = 1 + Math.sin(S.t * 13 + p.x) * 0.15; g.fillStyle = '#ffd36b'; g.beginPath(); g.ellipse(fx + 1, fy - 4, 1.8 * f, 3.6 * f, 0.2, 0, 7); g.fill(); }
   } else if (p.kind === 'cross' || p.kind === 'khuris') {
     const big = p.kind === 'khuris', r = big ? 0.26 : 0.18, ph = big ? 12 : 8;
     box(g, cx - r, cy - r, cx + r, cy + r, 0, ph, '#f1ece2', '#e2dccf', '#bcb5a6');
@@ -1712,7 +1728,7 @@ function buildStatics() {
   bakeMini();
   statics = [];
   // the depth key is given as x + y in map terms; turn it with the view (offsets along the diagonal stay small)
-  const add = (x, y, key, draw, rim) => { const [sx, sy] = iso(x, y); statics.push({ sx, sy, key: depth(x, y) + (key - x - y), draw, rim }); };
+  const add = (x, y, key, draw, rim) => { const [sx, sy] = iso(x, y); statics.push({ sx, sy, fx: x, fy: y, key: depth(x, y) + (key - x - y), draw, rim }); };
   for (const h of houses) {
     const spr = bakeOn(h.x - 0.4, h.y - 0.4, h.x + h.w + 0.7, h.y + h.h + 0.5, 72, g => drawHouse(g, h));
     add(h.x + h.w / 2, h.y + h.h / 2, h.x + h.w / 2 + h.y + h.h / 2, g => blit(g, spr), g => { for (const [a, b] of h.rim) line(g, a, b, 'rgba(175,200,255,.32)', 1.5); });
@@ -2259,6 +2275,7 @@ addEventListener('keydown', e => {
   if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
   if (k === ' ' && !e.repeat) callSpirit();
   if (k === 'e' && S && S.mode === 'talk') { e.preventDefault(); trust(); return; }
+  if (k === 'e' && !e.repeat && S && S.mode === 'play' && nearWalker()) { e.preventDefault(); askWay(nearWalker()); return; }
   if (k === 'q' && S && S.mode === 'talk') { e.preventDefault(); accuse(); return; }
   if (k === 'b' && !e.repeat) toggleBike();
   if (k === 'g' && !e.repeat && S && S.mode === 'play') showGoaMap();
@@ -3056,7 +3073,7 @@ function setupQuest(n = 0) {
       if (q.items.some(o => o.house === hh)) continue;
       const cx = hh.x + hh.w / 2, cy = hh.y + hh.h;
       const near = exits.map(e => ({ x: e.x, y: e.y, what: PLACE_NAMES[e.kind] })).filter(m => m.what).concat(sights.map(sg => ({ x: sg.x + 0.5, y: sg.y + 0.5, what: sg.name }))).sort((a, b) => hyp(a.x - cx, a.y - cy) - hyp(b.x - cx, b.y - cy))[0] || { x: cx, y: cy, what: 'the house' };
-      q.items.push({ x: hh.x + Math.floor(hh.w / 2) + 0.5, y: hh.y + hh.h + 0.5, got: false, house: hh, desc: describeHouse(hh), near });
+      q.items.push({ x: hh.x + Math.floor(hh.w / 2) + 0.5, y: hh.y + hh.h + 0.5, got: false, house: hh, desc: `the ${hh.family} family, at ${describeHouse(hh)}`, near });
     }
   } else if (kind === 'poee') {
     const doors = houses.map(hh => [hh.x + Math.floor(hh.w / 2), hh.y + hh.h]).filter(([x, y]) => !solid(at(x, y)) && dist[y * W + x] > 6 && dist[y * W + x] < 40);
@@ -3160,7 +3177,7 @@ function updateLife(dt) {
       const dx = hh.x + Math.floor(hh.w / 2) + 0.5, dy = hh.y + hh.h + 0.5;
       if (hyp(dx - px, dy - py) > 0.9) continue;
       const it = q.items.find(i => i.house === hh && !i.got);
-      if (it) { it.got = true; q.got++; SFX.play('chime', dx, dy); addPoints(15, 'letter'); const nx = q.items.find(i => !i.got); whisper(nx ? `The right door! Next letter: ${nx.desc}.` : 'All three letters delivered. Back to Anton.'); if (!nx) q.state = 'return'; }
+      if (it) { it.got = true; q.got++; SFX.play('chime', dx, dy); addPoints(15, 'letter'); hint('names', 'Every house has its family name by the door. Get close to read it, or ask a villager the way.'); const nx = q.items.find(i => !i.got); whisper(nx ? `The right door! Next letter: ${nx.desc}.` : 'All three letters delivered. Back to Anton.'); if (!nx) q.state = 'return'; }
       else if (cur && q.wrongAt !== hh) { q.wrongAt = hh; SFX.play('wrong'); whisper(`Not this one. You want ${cur.desc}.`); }
     }
   } else if (q.kind === 'poee') {
@@ -3376,6 +3393,8 @@ function setObjective() {
   const rb = document.getElementById('rideBtn'), showRide = !!player.bike || !!nearBike();
   const rideLabel = player.bike ? 'Get off ' : 'Ride ';
   if (rb.hidden === showRide) rb.hidden = !showRide;
+  const ab = document.getElementById('askBtn'), showAsk = !!nearWalker() && S.mode === 'play';
+  if (ab.hidden === showAsk) ab.hidden = !showAsk;
   if (rb.firstChild && rb.firstChild.textContent !== rideLabel) rb.firstChild.textContent = rideLabel;
   if (t !== lastObj) { document.getElementById('objective').textContent = t; lastObj = t; }
 }
@@ -3750,7 +3769,7 @@ function render() {
   ctx.globalCompositeOperation = 'source-over';
 
   // moonlight catching roof ridges, domes and treetops (not by day)
-  if (!CH.life || sunLight(S.dayMin) < 0.5) for (const o of list) if (o.rim) o.rim(ctx);
+  if (!CH.life || sunLight(S.dayMin) < 0.5) for (const o of list) if (o.rim && (o.fx === undefined || fogAt(o.fx, o.fy) > 200)) o.rim(ctx);   // no moonlit edges in unexplored shadow
   // moon glinting on the river
   for (const [x, y, s] of waterTiles) {
     const [sx, sy] = iso(x + 0.5, y + 0.5);
@@ -4022,6 +4041,23 @@ function render() {
     ctx.fillStyle = `rgba(6,11,30,${0.6 * al})`; ctx.fillText(label[0].toUpperCase() + label.slice(1), qx + dpr, qy + dpr);
     ctx.fillStyle = `rgba(242,226,190,${0.9 * al})`; ctx.fillText(label[0].toUpperCase() + label.slice(1), qx, qy);
   }
+  ctx.font = `600 ${11 * dpr}px Mukta, sans-serif`;
+  for (const h of houses) {
+    if (!h.family) continue;
+    const dx = h.x + h.w / 2, dy = h.y + h.h, pd = hyp(dx - player.x, dy + 0.5 - player.y);
+    if (pd > 4 || fogAt(dx, dy) < 120) continue;
+    const [gx, gy] = iso(dx, dy), qx = (gx - camX) * k, qy = (gy - 34 - camY) * k, al = Math.min(1, (4 - pd) / 1.5) * (1 - S.dawn);
+    const label = h.shop ? `${h.family} · ${h.shop.name.toLowerCase()}` : `${h.family} house`, tw = ctx.measureText(label).width;
+    ctx.fillStyle = `rgba(244,239,228,${0.92 * al})`; ctx.fillRect(qx - tw / 2 - 4 * dpr, qy - 9 * dpr, tw + 8 * dpr, 13 * dpr);
+    ctx.fillStyle = `rgba(30,40,70,${al})`; ctx.fillText(label, qx, qy + dpr);
+  }
+  // villagers' names over their heads when you are close
+  for (const wk of S.walkers || []) {
+    const pd = hyp(wk.x - player.x, wk.y - player.y);
+    if (wk.alpha < 0.5 || pd > 3.5 || !wk.name) continue;
+    const [gx, gy] = iso(wk.x, wk.y), qx = (gx - camX) * k, qy = (gy - 52 * wk.role.look.h - camY) * k;
+    ctx.fillStyle = `rgba(6,11,30,.6)`; ctx.fillText(wk.name, qx + dpr, qy + dpr); ctx.fillStyle = 'rgba(236,228,207,.95)'; ctx.fillText(wk.name, qx, qy);
+  }
   for (const sg of sights) {
     const pd = hyp(sg.x + 0.5 - player.x, sg.y + 0.5 - player.y);
     if (pd > 8 || fogAt(sg.x, sg.y) < 120) continue;
@@ -4284,6 +4320,7 @@ const CONTROLS = `
       <b>Motorbike</b><span>B or the Ride button next to a parked bike. Fast on lanes, slow in fields, loud enough to wake every dog, and it runs out of petrol. The person you're walking home can ride behind you.</span>
       <b>Explore</b><span>The village starts in shadow and opens up as you walk it. Find its monuments and gardens for points; the map remembers where you have been.</span>
       <b>Mini map</b><span>Bottom left: the whole village, turned the same way as your view. You are the yellow dot, and your next goal pulses green.</span>
+      <b>Ask the way</b><span>Walk up to a villager by day and press E, or tap Ask the way: pick a place or a family's house and they tell you which way to go.</span>
       <b>Places</b><span>Tap the mini map or press P for the village map: every temple, church, stop and sight, with a Guide me button that puts an arrow on the way. G opens the map of Goa by taluka.</span>
       <b>Turn the view</b><span>Drag with the right mouse button, press Z or X, or tap ⟲ ⟳ at the top right.</span>
     </div>`;
@@ -4425,10 +4462,13 @@ function setupWalkers() {
   const n = Math.min(16, Math.round(lanes.length / 45));
   for (let i = 0; i < n; i++) {
     const [x, y] = lanes[Math.floor(r() * lanes.length)];
-    out.push({ x: x + 0.5, y: y + 0.5, r: 0.25, tile: -1, dx: 1, dy: 0, face: 1, moving: true, alpha: 0, state: 'walk', role: { look: WALKER_LOOKS[i % WALKER_LOOKS.length] }, spd: 0.9 + r() * 0.5, pause: 0 });
+    const fam = houses.length ? houses[Math.floor(r() * houses.length)].family : '';
+    out.push({ x: x + 0.5, y: y + 0.5, r: 0.25, tile: -1, dx: 1, dy: 0, face: 1, moving: true, alpha: 0, state: 'walk', role: { look: WALKER_LOOKS[i % WALKER_LOOKS.length] }, spd: 0.9 + r() * 0.5, pause: 0,
+      name: `${FIRST_NAMES[Math.floor(r() * FIRST_NAMES.length)]} ${fam || ''}`.trim() });
   }
   // a shopkeeper stands at each shop's door by day
-  for (const h of houses) if (h.shop) out.push({ x: h.x + Math.floor(h.w / 2) + 0.5, y: h.y + h.h + 0.35, r: 0.25, face: 1, moving: false, alpha: 0, state: 'shop', role: { look: WALKER_LOOKS[(h.x + h.y) % WALKER_LOOKS.length] } });
+  for (const h of houses) if (h.shop) out.push({ x: h.x + Math.floor(h.w / 2) + 0.5, y: h.y + h.h + 0.35, r: 0.25, face: 1, moving: false, alpha: 0, state: 'shop', role: { look: WALKER_LOOKS[(h.x + h.y) % WALKER_LOOKS.length] },
+    name: `${FIRST_NAMES[(h.x * 3 + h.y) % FIRST_NAMES.length]} ${h.family}` });
   S.walkers = out;
 }
 function updateWalkers(dt) {
@@ -4452,6 +4492,55 @@ function updateWalkers(dt) {
     const sd = w.dx - w.dy; if (Math.abs(sd) > 0.1) w.face = Math.sign(sd);
   }
 }
+
+/* ---------- asking the way: any villager out by day will point you somewhere ---------- */
+const nearWalker = () => S && CH.life && (S.walkers || []).find(w => w.alpha > 0.6 && w.name && hyp(w.x - player.x, w.y - player.y) < 1.4);
+const COMPASS = ['east', 'north-east', 'north', 'north-west', 'west', 'south-west', 'south', 'south-east'];
+function directionsTo(p, from) {
+  const dx = p.x - from.x, dy = p.y - from.y, d = Math.round(hyp(dx, dy) * 12 / 10) * 10;
+  if (d < 20) return 'It’s right here, just look around you!';
+  const dir = COMPASS[(Math.round(Math.atan2(-dy, dx) * 180 / Math.PI / 45) + 8) % 8];
+  // a landmark on the way, if one lies roughly between here and there
+  const marks = exits.map(e => ({ x: e.x, y: e.y, what: PLACE_NAMES[e.kind] })).filter(m => m.what).concat(sights.map(sg => ({ x: sg.x + 0.5, y: sg.y + 0.5, what: sg.name })));
+  const via = marks.filter(m => { const t = ((m.x - from.x) * dx + (m.y - from.y) * dy) / (dx * dx + dy * dy); const off = hyp(from.x + dx * t - m.x, from.y + dy * t - m.y); return t > 0.2 && t < 0.85 && off < 5 && m.what !== p.what; })[0];
+  const lane = p.house ? (describeHouse(p.house).match(/on a lane running [a-z ]+/) || [''])[0] : '';
+  return `Go about ${d} m ${dir}${via ? `, past ${via.what}` : ''}.${lane ? ` It’s ${lane}.` : ''}`;
+}
+function askWay(w) {
+  if (!w) return;
+  S.mode = 'paused'; w.pause = 6; w.moving = false;
+  const greet = ['Haan, tell me', 'Yes, baba?', 'Lost, are you?', 'Bolo, where to?'][Math.floor(Math.random() * 4)];
+  const opts = [];
+  const q = S.quest;
+  if (q && q.kind === 'letters' && q.state === 'on') for (const it of q.items) if (!it.got) opts.push({ what: `the ${it.house.family} house`, x: it.x, y: it.y, house: it.house });
+  if (q && !q.done && q.state !== 'on') opts.push({ what: q.giver.role.name, x: q.giver.x, y: q.giver.y });
+  for (const pl of placesList()) if (!opts.some(o => o.what === pl.what) && pl.type !== 'litter') opts.push(pl);
+  // any family in the village, by name
+  const fams = [...new Set(houses.filter(h => h.family).map(h => h.family))].sort();
+  card.innerHTML = `
+    <span class="eyebrow">${esc(w.name)}${w.state === 'shop' ? ' · at the shop door' : ''}</span>
+    <h1 style="font-size:32px">“${greet}”</h1>
+    <p id="askAnswer">Where do you want to go?</p>
+    <div class="taluka-list" id="askList">${opts.slice(0, 12).map((o, i) => `<div><button class="go" type="button" data-i="${i}">${esc(o.what[0].toUpperCase() + o.what.slice(1))}</button></div>`).join('')}
+      <div><label class="check" style="flex:1">A family’s house <select id="askFam"><option value="">choose…</option>${fams.map(f => `<option>${esc(f)}</option>`).join('')}</select></label></div>
+    </div>
+    <div class="row"><button class="ghost" id="askBye" type="button">Thanks, bye</button></div>`;
+  screen.hidden = false;
+  const answer = o => {
+    document.getElementById('askAnswer').textContent = `“${o.what[0].toUpperCase() + o.what.slice(1)}? ${directionsTo(o, w)}”`;
+    document.getElementById('askList').innerHTML = `<div><button class="start" type="button" id="askGuide">Show me on the map</button></div>`;
+    document.getElementById('askGuide').onclick = () => { S.guide = { x: o.x, y: o.y, tx: Math.floor(o.x), ty: Math.floor(o.y), what: o.what }; bye(); };
+  };
+  const bye = () => { S.mode = 'play'; screen.hidden = true; };
+  for (const b of card.querySelectorAll('button[data-i]')) b.onclick = () => answer(opts[+b.dataset.i]);
+  document.getElementById('askFam').onchange = e => {
+    const h = houses.find(hh => hh.family === e.target.value);
+    if (h) answer({ what: `the ${h.family} house`, x: h.x + Math.floor(h.w / 2) + 0.5, y: h.y + h.h + 0.5, house: h });
+  };
+  document.getElementById('askBye').onclick = bye;
+  const first = card.querySelector('button[data-i]'); (first || document.getElementById('askBye')).focus();
+}
+document.getElementById('askBtn').addEventListener('click', e => { e.currentTarget.blur(); askWay(nearWalker()); });
 
 /* ---------- exploring: the village starts in shadow and opens as you walk it ---------- */
 // fog[i] is how well tile i is known, 0 (never seen) to 255 (seen); kept per village in this browser
