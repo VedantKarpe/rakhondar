@@ -22,6 +22,12 @@ The Rakhondar, the guardian spirit who walks the village at night, has blessed a
 
 Points, the streak and the top-scores board are kept in this browser for now. A shared board and shared village progress need the artifact's shared storage, which is the next step.
 
+## Panjim, the city
+
+Panjim is mapped as a small city, 230 x 120 tiles at 20 m, from Campal and Kala Academy to Patto and the Ponte de Linhares causeway, and from the Mandovi to Altinho. Each real building from OpenStreetMap keeps its own footprint and is drawn as a town building of one to three storeys, with balconies, shop awnings and tiled roofs or terraces; Fontainhas has two-storey row houses in strong colours. The Immaculate Conception Church has its white front and the zig-zag stairways down its square; the Kadamba bus stand has a garden roundabout ringed by painted pillars; the big bridge over the Mandovi has cable-stayed towers and coloured lights at night. Positions of Fontainhas, the pillars and the bus stand are approximate.
+
+Street life: petrol pumps stand where the map has them, and a motorbike that runs dry has to be pushed to one. Poders cycle the lanes from 5:30 to 9:30 with pao and a bulb horn. At night dog packs roam and howl, and chase anyone who runs past.
+
 ## Goa by taluka, and the mini map
 
 Every village map is 96 x 80 tiles at 12 m a tile, about 1.15 km by 0.96 km. The **mini map** in the bottom-left corner shows the whole village turned the same way as the view: you are the yellow dot, your next goal pulses green, and landmarks are marked. Tap it or press **G** for the **map of Goa**, laid out by its twelve talukas. Pick another village there to take the bus or ferry; in live mode the clock, points and streak come with you.
