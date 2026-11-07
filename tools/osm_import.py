@@ -211,10 +211,14 @@ def build(name, lat, lon, tile, inline, pins=()):
         hw = t.get('highway')
         if e['type'] != 'way' or not hw:
             continue
+        # widths are for 12 m tiles; at larger tiles roads narrow so a city's streets stay a tile or two wide
+        k = min(1.0, 12 / tile)
         if hw in ROADS:
-            paint_line(geo(e), ROADS[hw], 'R')
+            paint_line(geo(e), max(1.4, ROADS[hw] * k), 'R')
         elif hw in LANES:
-            paint_line(geo(e), LANES[hw], 'L', keep=('R',))
+            if tile >= 18 and hw in ('footway', 'path', 'service'):
+                continue   # in a city these are pavements, alleys and driveways: at this scale they would cover every block
+            paint_line(geo(e), max(1.05, LANES[hw] * k), 'L', keep=('R',))
     houses = []
     for e in els:
         t = e.get('tags', {})
@@ -224,7 +228,25 @@ def build(name, lat, lon, tile, inline, pins=()):
                 continue
             x0, x1 = int(min(p[0] for p in pts)), int(max(p[0] for p in pts))
             y0, y1 = int(min(p[1] for p in pts)), int(max(p[1] for p in pts))
-            w, h = max(3, min(4, x1 - x0 + 1)), 3
+            if tile >= 18:   # a city map: each building keeps its own footprint, 1 to 6 tiles a side
+                w, h = max(1, min(6, x1 - x0 + 1)), max(1, min(6, y1 - y0 + 1))
+            else:            # a village map: every house is the game's 3 x 3 (or 4 x 3) house with its balcão
+                w, h = max(3, min(4, x1 - x0 + 1)), 3
+            if tile >= 18:
+                # shave the building back off any road, lane or water its outline overlaps, a row or column at a time
+                bad = lambda x, y: not (0 <= x < W and 0 <= y < H) or grid[y][x] not in 'GPF'
+                while w > 0 and h > 0:
+                    sides = {'l': sum(bad(x0, y) for y in range(y0, y0 + h)), 'r': sum(bad(x0 + w - 1, y) for y in range(y0, y0 + h)),
+                             't': sum(bad(x, y0) for x in range(x0, x0 + w)), 'b': sum(bad(x, y0 + h - 1) for x in range(x0, x0 + w))}
+                    worst = max(sides, key=sides.get)
+                    if not sides[worst]:
+                        break
+                    if worst == 'l': x0 += 1; w -= 1
+                    elif worst == 'r': w -= 1
+                    elif worst == 't': y0 += 1; h -= 1
+                    else: h -= 1
+                if w < 1 or h < 1:
+                    continue
             if 1 <= x0 and x0 + w < W - 1 and 1 <= y0 and y0 + h < H - 1:
                 houses.append([x0, y0, w, h])
     # sights: named monuments and the like, from the separate sights cache when there is one
@@ -244,6 +266,17 @@ def build(name, lat, lon, tile, inline, pins=()):
                 while nm.split()[-1].lower() in ('and', 'of', 'the', 'de', 'da'):
                     nm = nm.rsplit(' ', 1)[0]
             sights.append([round(x, 1), round(y, 1), nm, kind])
+    # petrol pumps, for riding (and pushing) a motorbike
+    pumps = []
+    for e in els:
+        t = e.get('tags', {})
+        if t.get('amenity') == 'fuel':
+            la, lo = centre(e)
+            if la is None:
+                continue
+            x, y = xy(la, lo)
+            if 2 <= x < W - 2 and 2 <= y < H - 2 and all(math.hypot(x - q[0], y - q[1]) > 4 for q in pumps):
+                pumps.append([round(x, 1), round(y, 1), (t.get('brand') or t.get('name') or 'Petrol pump')[:24]])
     anchors, names = {}, {}
     for e in els:
         t = e.get('tags', {})
@@ -269,13 +302,14 @@ def build(name, lat, lon, tile, inline, pins=()):
     out = {'name': name.title(), 'centre': [lat, lon], 'tile': tile, 'W': W, 'H': H,
            'credit': 'Map data © OpenStreetMap contributors (ODbL)',
            'rows': [''.join(r) for r in grid], 'houses': houses,
-           'anchors': {k: [v[0], v[1]] for k, v in anchors.items()}, 'names': names, 'sights': sights}
+           'anchors': {k: [v[0], v[1]] for k, v in anchors.items()}, 'names': names, 'sights': sights, 'pumps': pumps}
     (DATA / f'{name}.map.json').write_text(json.dumps(out), encoding='utf-8', newline=chr(10))
     for r in out['rows']:
         print(r)
     print('anchors', out['anchors'], names)
     print('houses', len(houses))
     print('sights', sights)
+    print('pumps', pumps)
     if inline:
         f = pathlib.Path(inline)
         src = f.read_text(encoding='utf-8')
