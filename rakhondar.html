@@ -1018,7 +1018,7 @@ function gen(seed) {
   const roadTiles = [], waterT = [];
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) { const t = map[y * W + x]; if (t === ROAD) roadTiles.push([x, y]); if (t === WATER) waterT.push([x, y]); }
   cars0 = [];
-  for (let i = 0; i < 3 && roadTiles.length; i++) {
+  for (let i = 0; i < (CITY ? 14 : 3) && roadTiles.length; i++) {
     const [x, y] = roadTiles[Math.floor(rand() * roadTiles.length)];
     const d = D4.find(([dx, dy]) => at(x + dx, y + dy) === ROAD) || [1, 0];
     cars0.push({ x: x + 0.5, y: y + 0.5, dx: d[0], dy: d[1], col: carCols[i % carCols.length], tile: -1, type: 'car' });
@@ -2064,17 +2064,32 @@ function paintReal(g, x0, y0, x1, y1) {
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const [sx, sy] = iso(x + 0.5, y + 0.5);
     if (sx < x0 - 40 || sx > x1 + 40 || sy < y0 - 30 || sy > y1 + 30) continue;
-    const t = map[y * W + x];
+    const t = map[y * W + x], isWet = t === WATER || t === JETTY;
     let col;
-    if (t === WATER || t === JETTY) col = [30, 78, 104];
-    else if (sandProps.has(y * W + x) || t === SAND) col = [196, 172, 118];
+    if (sandProps.has(y * W + x) || t === SAND) col = [196, 172, 118];
     else {
       const h = realHeight(x + 0.5, y + 0.5), sxp = realHeight(x + 1, y + 0.5) - realHeight(x, y + 0.5), syp = realHeight(x + 0.5, y + 1) - realHeight(x + 0.5, y);
       const [u, v] = rotV(sxp, syp), k = Math.max(0.7, Math.min(1.25, 1 - u * 0.025 - v * 0.012));
       const base = forest[y * W + x] ? [62, 104, 56] : h < 12 ? [104, 140, 72] : [90, 128, 64];
       col = base.map(c => c * k);
     }
-    diamond(g, x, y); g.fillStyle = g.strokeStyle = `rgb(${col.map(c => c | 0)})`; g.lineWidth = 1; g.fill(); g.stroke();
+    // the water under every tile, then the land cut to a smooth shore: each corner is how much land the four
+    // tiles around it hold, and the tile keeps the part where that is over half (marching squares)
+    diamond(g, x, y); g.fillStyle = g.strokeStyle = 'rgb(30,78,104)'; g.lineWidth = 1; g.fill(); g.stroke();
+    const landAt = (i, j) => { let n = 0; for (const [a, b] of [[i - 1, j - 1], [i, j - 1], [i - 1, j], [i, j]]) { const tt = a < 0 || b < 0 || a >= W || b >= H ? WATER : map[b * W + a]; if (tt !== WATER && tt !== JETTY) n++; } return n / 4; };
+    const cs = [[x, y, landAt(x, y)], [x + 1, y, landAt(x + 1, y)], [x + 1, y + 1, landAt(x + 1, y + 1)], [x, y + 1, landAt(x, y + 1)]];
+    const shore = [];
+    for (let i = 0; i < 4; i++) {
+      const [ax, ay, av] = cs[i], [bx, by, bv] = cs[(i + 1) % 4];
+      if (av >= 0.5) shore.push([ax, ay]);
+      if ((av >= 0.5) !== (bv >= 0.5)) { const f = (0.5 - av) / (bv - av); shore.push([ax + (bx - ax) * f, ay + (by - ay) * f]); }
+    }
+    if (shore.length > 2) {
+      g.beginPath(); shore.forEach((q, i) => { const s2 = iso(q[0], q[1]); i ? g.lineTo(s2[0], s2[1]) : g.moveTo(s2[0], s2[1]); }); g.closePath();
+      const lc = isWet ? [104, 140, 72] : col;
+      g.fillStyle = g.strokeStyle = `rgb(${lc.map(c => c | 0)})`; g.fill(); g.stroke();
+    }
+    if (isWet) continue;
     const tr = tileRng(x, y, 0);
     if (t !== WATER && t !== JETTY) for (let i = 0; i < 5; i++) { const [px, py] = iso(x + tr(), y + tr()); g.fillStyle = tr() < 0.6 ? 'rgba(40,70,30,.35)' : 'rgba(200,230,150,.18)'; g.fillRect(px, py, 2, 1); }
     // a contour line where the ground crosses each 10 m
@@ -2216,6 +2231,7 @@ function buildStatics() {
     const spr = bakeOn(h.x - 0.4, h.y - 0.4, h.x + h.w + 0.7, h.y + h.h + 0.5, 72, g => drawHouse(g, h));
     add(h.x + h.w / 2, h.y + h.h / 2, h.x + h.w / 2 + h.y + h.h / 2, g => blit(g, spr), g => { for (const [a, b] of h.rim) line(g, a, b, 'rgba(175,200,255,.32)', 1.5); });
   }
+  const TS = real ? 0.6 : 1;   // trees too stand smaller in the real city
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = y * W + x, t = map[i];
     if (t === TREE || t === MANG) {
@@ -2226,9 +2242,9 @@ function buildStatics() {
       const sway = () => sp.sway ? Math.sin(S.t * 1.2 + ph) * 0.035 : 0;
       add(x + 0.5 + jx, y + 0.5 + jy, x + y + 1, g => {
         const a = sway();
-        if (a) { g.save(); g.translate(sx, sy); g.rotate(a); g.drawImage(sp.c, -sp.ax, -sp.ay, sp.w, sp.h); g.restore(); }
-        else g.drawImage(sp.c, sx - sp.ax, sy - sp.ay, sp.w, sp.h);
+        g.save(); g.translate(sx, sy); if (a) g.rotate(a); if (TS !== 1) g.scale(TS, TS); g.drawImage(sp.c, -sp.ax, -sp.ay, sp.w, sp.h); g.restore();
       }, g => {
+        if (TS !== 1) return;
         const a = sway(), [rx, ry, rr] = sp.rim;
         g.strokeStyle = 'rgba(175,200,255,.28)'; g.lineWidth = 2;
         g.beginPath(); g.arc(sx - sp.ax + rx + a * (sp.ay - ry), sy - sp.ay + ry, rr, Math.PI * 1.12, Math.PI * 1.72); g.stroke();
@@ -2327,7 +2343,53 @@ const ferryPos = e => { const k = 1.3 + (1 - Math.min(1, e.wait / e.need)) * 1.5
 // cars on roads and canoes on water wander tile to tile, mostly keeping straight
 // which way a car is pointing, from its smooth heading
 const carDir = c => c.h === undefined ? [c.dx, c.dy] : [Math.cos(c.h), Math.sin(c.h)];
+// In the real Panjim the traffic drives the mapped streets themselves: along each way's own line, in the left
+// lane, easing round its bends, and on to a street that meets it at the end (or turning back at a dead end).
+function realDriveNet() {
+  const R = realPrep();
+  if (R.net) return R.net;
+  const ways = R.roads.filter(r => r.w >= 5 && r.p.length > 1), ends = new Map(), key = (x, y) => Math.round(x * 20) + ',' + Math.round(y * 20);
+  ways.forEach((r, i) => { r.len = []; let s = 0; for (let k = 1; k < r.p.length; k++) { s += hyp(r.p[k][0] - r.p[k - 1][0], r.p[k][1] - r.p[k - 1][1]); r.len.push(s); }
+    for (const [k, e] of [[0, 0], [r.p.length - 1, 1]]) { const kk = key(...r.p[k]); if (!ends.has(kk)) ends.set(kk, []); ends.get(kk).push([i, e]); } });
+  return (R.net = { ways, ends, key });
+}
+function driveReal(c, dt, go) {
+  const N = realDriveNet();
+  if (c.rd === undefined) {   // join the nearest street
+    let best = 1e9;
+    N.ways.forEach((r, i) => r.p.forEach((q, k) => { const d = hyp(q[0] - c.x, q[1] - c.y); if (d < best) { best = d; c.rd = i; c.s = k ? r.len[k - 1] : 0; } }));
+    c.dir = Math.random() < 0.5 ? 1 : -1; c.v = 0;
+  }
+  let r = N.ways[c.rd];
+  const L = r.len[r.len.length - 1];
+  const top = ({ ktc: 1.5, private: 2.4, rick: 1.4, pilot: 2.1 }[c.type] || 1.8);
+  c.v += ((go ? top : 0) - c.v) * Math.min(1, dt * (go ? 1.2 : 4));
+  c.s += c.v * dt * c.dir;
+  if (c.s < 0 || c.s > L) {   // the end of this way: carry on along a street that meets it, mostly not straight back
+    const endPt = c.s > L ? r.p[r.p.length - 1] : r.p[0], here = N.ends.get(N.key(...endPt)) || [];
+    const opts = here.filter(([i]) => i !== c.rd);
+    if (opts.length) {
+      const [i, e] = opts[Math.floor(Math.random() * opts.length)], over = c.s > L ? c.s - L : -c.s;
+      c.rd = i; r = N.ways[i]; const L2 = r.len[r.len.length - 1];
+      c.dir = e === 0 ? 1 : -1; c.s = e === 0 ? Math.min(L2, over) : Math.max(0, L2 - over);
+    } else { c.dir = -c.dir; c.s = Math.max(0, Math.min(L, c.s)); }
+  }
+  // the point at distance s along the way, and the way's direction there
+  let k = 0; while (k < r.len.length - 1 && r.len[k] < c.s) k++;
+  const a = r.p[k], b = r.p[k + 1], s0 = k ? r.len[k - 1] : 0, sl = r.len[k] - s0 || 1e-6, t = Math.max(0, Math.min(1, (c.s - s0) / sl));
+  let dx = (b[0] - a[0]) / sl * c.dir, dy = (b[1] - a[1]) / sl * c.dir;
+  const lane = r.w / 4 / 20;   // keep left, as Goa drives
+  const px = a[0] + (b[0] - a[0]) * t + dy * lane, py = a[1] + (b[1] - a[1]) * t - dx * lane;
+  const want = Math.atan2(dy, dx);
+  if (c.h === undefined) c.h = want;
+  let dh = want - c.h; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
+  c.h += dh * Math.min(1, dt * 5);
+  // ease toward the lane point rather than jumping, so corners and lane changes are smooth
+  if (c.x === undefined || hyp(px - c.x, py - c.y) > 3) { c.x = px; c.y = py; } else { c.x += (px - c.x) * Math.min(1, dt * 8); c.y += (py - c.y) * Math.min(1, dt * 8); }
+  c.dx = Math.cos(c.h); c.dy = Math.sin(c.h);
+}
 function driveCar(c, dt, go) {
+  if (realOn()) return driveReal(c, dt, go);
   const tx = Math.floor(c.x), ty = Math.floor(c.y), ti = ty * W + tx;
   if (c.h === undefined) { c.h = Math.atan2(c.dy, c.dx); c.v = 0; c.tile = ti; }
   // choose the next turn as the car passes the middle of a tile, without snapping it there
@@ -2887,6 +2949,7 @@ function update(dt) {
   const ride = player.bike, wet = flood[Math.floor(player.y) * W + Math.floor(player.x)];
   player.creep = !ride && (keys.has('shift') || (joy.id !== null && mag < 0.55));
   let sp = 4.3 * (pTile === PAD ? 0.6 : 1) * (player.creep ? 0.5 : 1) * (1 - 0.55 * wet);
+  if (realOn()) sp *= 0.6;   // a child in a real-sized city walks it more slowly
   if (ride && ride.pushing) sp *= 0.55;   // pushing a dry bike: walking pace, and slower
   else if (ride) {
     const surf = [ROAD, LANE, PLAZA, COURT, JETTY].includes(pTile) ? 1 : pTile === PAD ? 0.3 : 0.55;
@@ -4217,25 +4280,28 @@ function render() {
   // standing things, back to front
   const list = [];
   for (const s of statics) if (inView(s.sx, s.sy)) list.push(s);
-  list.push({ key: depth(player.x, player.y), draw: g => drawChild(g, 1) });
-  for (const d of demons) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: depth(d.x, d.y), draw: g => drawDemon(g, d) }); }
-  for (const c of S.cars) { const [sx, sy] = iso(c.x, c.y); if (inView(sx, sy)) list.push({ key: depth(c.x, c.y), draw: g => drawVehicle(g, c) }); }
-  for (const wk of S.walkers || []) { if (wk.alpha <= 0.02) continue; const [sx, sy] = iso(wk.x, wk.y); if (inView(sx, sy)) list.push({ key: depth(wk.x, wk.y), draw: g => wk.state === 'poder' ? drawPoder(g, wk) : drawPerson(g, wk) }); }
-  for (const pk of S.packs || []) for (const d of pk.dogs) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: depth(d.x, d.y), draw: g => drawDog(g, d) }); }
-  if (S.npc) list.push({ key: depth(S.npc.x, S.npc.y), draw: g => { if (S.npc.pillion) { g.save(); g.translate(0, -8); drawPerson(g, S.npc); g.restore(); } else drawPerson(g, S.npc); } });
-  for (const b of S.bikes) { const [sx, sy] = iso(b.x, b.y); if (inView(sx, sy)) list.push({ key: depth(b.x, b.y), draw: g => drawBike(g, b.x, b.y, b.hx, b.hy, b.col) }); }
-  for (const d of S.dogs) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ key: depth(d.x, d.y), draw: g => drawDog(g, d) }); }
-  if (sacr) list.push({ key: depth(sacr.x, sacr.y), draw: g => { drawPerson(g, sacr); if (!S.key) { const [sx, sy] = iso(sacr.x, sacr.y); g.strokeStyle = '#d9c27a'; g.lineWidth = 1.5; g.beginPath(); g.arc(sx + 9, sy - 18, 3, 0, 7); g.stroke(); line(g, [sx + 9, sy - 15], [sx + 9, sy - 8], '#d9c27a', 1.5); } } });
+  list.push({ mob: { x: player.x, y: player.y }, key: depth(player.x, player.y), draw: g => drawChild(g, 1) });
+  for (const d of demons) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ mob: { x: d.x, y: d.y }, key: depth(d.x, d.y), draw: g => drawDemon(g, d) }); }
+  for (const c of S.cars) { const [sx, sy] = iso(c.x, c.y); if (inView(sx, sy)) list.push({ mob: { x: c.x, y: c.y }, key: depth(c.x, c.y), draw: g => drawVehicle(g, c) }); }
+  for (const wk of S.walkers || []) { if (wk.alpha <= 0.02) continue; const [sx, sy] = iso(wk.x, wk.y); if (inView(sx, sy)) list.push({ mob: { x: wk.x, y: wk.y }, key: depth(wk.x, wk.y), draw: g => wk.state === 'poder' ? drawPoder(g, wk) : drawPerson(g, wk) }); }
+  for (const pk of S.packs || []) for (const d of pk.dogs) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ mob: { x: d.x, y: d.y }, key: depth(d.x, d.y), draw: g => drawDog(g, d) }); }
+  if (S.npc) list.push({ mob: { x: S.npc.x, y: S.npc.y }, key: depth(S.npc.x, S.npc.y), draw: g => { if (S.npc.pillion) { g.save(); g.translate(0, -8); drawPerson(g, S.npc); g.restore(); } else drawPerson(g, S.npc); } });
+  for (const b of S.bikes) { const [sx, sy] = iso(b.x, b.y); if (inView(sx, sy)) list.push({ mob: { x: b.x, y: b.y }, key: depth(b.x, b.y), draw: g => drawBike(g, b.x, b.y, b.hx, b.hy, b.col) }); }
+  for (const d of S.dogs) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ mob: { x: d.x, y: d.y }, key: depth(d.x, d.y), draw: g => drawDog(g, d) }); }
+  if (sacr) list.push({ mob: { x: sacr.x, y: sacr.y }, key: depth(sacr.x, sacr.y), draw: g => { drawPerson(g, sacr); if (!S.key) { const [sx, sy] = iso(sacr.x, sacr.y); g.strokeStyle = '#d9c27a'; g.lineWidth = 1.5; g.beginPath(); g.arc(sx + 9, sy - 18, 3, 0, 7); g.stroke(); line(g, [sx + 9, sy - 15], [sx + 9, sy - 8], '#d9c27a', 1.5); } } });
   if (CH.life && S.quest && !isNight()) {
     const q = S.quest, gv = q.giver;
-    list.push({ key: depth(gv.x, gv.y), draw: g => {
+    list.push({ mob: { x: gv.x, y: gv.y }, key: depth(gv.x, gv.y), draw: g => {
       drawPerson(g, gv);
       if (!q.done || q.state === 'return') { const [sx, sy] = iso(gv.x, gv.y); g.fillStyle = '#f2b441'; g.font = '700 18px Mukta, sans-serif'; g.textAlign = 'center'; g.fillText(q.state === 'return' ? '★' : '!', sx, sy - 52); g.textAlign = 'start'; }
     } });
-    if (q.hen) list.push({ key: depth(q.hen.x, q.hen.y), draw: g => drawHen(g, q.hen) });
+    if (q.hen) list.push({ mob: { x: q.hen.x, y: q.hen.y }, key: depth(q.hen.x, q.hen.y), draw: g => drawHen(g, q.hen) });
   }
   if (BELL) list.push({ key: depth(BELL.x, BELL.y) - 0.5, draw: drawBell });
-  if (S.boss) list.push({ key: depth(S.boss.x, S.boss.y), draw: g => drawNarkasur(g, S.boss) });
+  if (S.boss) list.push({ mob: { x: S.boss.x, y: S.boss.y }, key: depth(S.boss.x, S.boss.y), draw: g => drawNarkasur(g, S.boss) });
+  // in the real city people, animals and vehicles are drawn smaller, about their size beside its buildings
+  const CS = realOn() ? 0.5 : 1;
+  if (CS !== 1) for (const o of list) if (o.mob) { const d0 = o.draw, [sx, sy] = iso(o.mob.x, o.mob.y); o.draw = g => { g.save(); g.translate(sx, sy); g.scale(CS, CS); g.translate(-sx, -sy); d0(g); g.restore(); }; }
   list.sort((a, b) => a.key - b.key);
   for (const o of list) o.draw(ctx);
   drawFog(inView);
@@ -4596,7 +4662,7 @@ function render() {
   for (const wk of S.walkers || []) {
     const pd = hyp(wk.x - player.x, wk.y - player.y);
     if (wk.alpha < 0.5 || pd > 3.5 || !wk.name) continue;
-    const [gx, gy] = iso(wk.x, wk.y), qx = (gx - camX) * k, qy = (gy - 52 * wk.role.look.h - camY) * k;
+    const [gx, gy] = iso(wk.x, wk.y), qx = (gx - camX) * k, qy = (gy - 52 * wk.role.look.h * (realOn() ? 0.5 : 1) - camY) * k;
     ctx.fillStyle = `rgba(6,11,30,.6)`; ctx.fillText(wk.name, qx + dpr, qy + dpr); ctx.fillStyle = 'rgba(236,228,207,.95)'; ctx.fillText(wk.name, qx, qy);
   }
   for (const sg of sights) {
@@ -5189,6 +5255,17 @@ function fogPct(v) {
 }
 // unexplored tiles are drawn over with the night's darkest blue, as tall as a house so roofs stay hidden too
 function drawFog(inView) {
+  if (realOn()) {
+    // the fog as one smooth sheet: the known-map image (a px a tile) laid on the ground with the view's own
+    // transform and smoothed, once on the ground and once at roof height so tall buildings stay hidden too
+    if (miniFogDirty || miniFog.width !== W) bakeMiniFog(true);
+    const o = iso(0, 0), ex = iso(1, 0), ey = iso(0, 1);
+    for (const lift of [0, 55]) {
+      ctx.save(); ctx.transform(ex[0] - o[0], ex[1] - o[1], ey[0] - o[0], ey[1] - o[1], o[0], o[1] - lift);
+      ctx.imageSmoothingEnabled = true; ctx.globalAlpha = lift ? 0.85 : 1; ctx.drawImage(miniFog, 0, 0); ctx.restore();
+    }
+    return;
+  }
   for (let y = VIEWT[1]; y <= VIEWT[3]; y++) for (let x = VIEWT[0]; x <= VIEWT[2]; x++) {
     const f = fog[y * W + x];
     if (f >= 250) continue;
