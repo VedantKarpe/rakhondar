@@ -423,8 +423,8 @@ def render(name, x0, y0, x1, y1, scale, zscale, labels):
         rot = lbl.rotate(-ang, expand=True, resample=Image.BICUBIC)
         img.paste(rot, (int(mx - rot.width / 2), int(my - rot.height / 2)), rot)
     d.text((10, Hpx - 22), 'Map data (c) OpenStreetMap contributors (ODbL) · elevation: SRTM via OpenTopoData', fill=(200, 200, 200), font=ImageFont.load_default())
-    img.save(OUT / name)
-    print('wrote', OUT / name, img.size)
+    if name: img.save(OUT / name); print('wrote', OUT / name, img.size)
+    return img, P
 
 
 # names placed where OpenStreetMap's own place points are (the river, creek and bridge from their mapped water and roads)
@@ -432,6 +432,7 @@ LABELS = [('Mandovi', 15.5040, 73.8250, 0), ('Panaji', 15.49899, 73.82821, 35), 
           ('São Tomé', 15.49945, 73.83218, 20), ('Mala', 15.49205, 73.82948, 20), ('Altinho', 15.48789, 73.82626, 25), ('Campal', 15.49412, 73.81957, 15),
           ('Santa Inez', 15.48693, 73.81752, 15), ('Patto', 15.49515, 73.83542, 40), ('Panjim Bazaar', 15.49775, 73.82602, 25), ('Neugi Nagar', 15.48931, 73.83119, 15),
           ('Ourém creek', 15.4935, 73.8335, 0), ('Atal Setu', 15.5040, 73.8445, 30), ('Ponte de Linhares', 15.4990, 73.8490, 10)]
-render('panaji_overview.png', 0, 0, W_M, H_M, 0.36, 0.9, LABELS)
-dx, dy = xy(15.5010, 73.8240); ex, ey = xy(15.4880, 73.8370)
-render('panaji_detail.png', dx, dy, ex, ey, 1.25, 2.6, LABELS)
+if __name__ == '__main__':
+    render('panaji_overview.png', 0, 0, W_M, H_M, 0.36, 0.9, LABELS)
+    dx, dy = xy(15.5010, 73.8240); ex, ey = xy(15.4880, 73.8370)
+    render('panaji_detail.png', dx, dy, ex, ey, 1.25, 2.6, LABELS)
