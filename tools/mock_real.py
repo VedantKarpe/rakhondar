@@ -85,7 +85,7 @@ for e in els:
     if hw and e['type'] == 'way':
         pts = [xy(p['lat'], p['lon']) for p in e.get('geometry') or [] if p]
         if len(pts) > 1 and inside(pts):
-            if hw in ROADW: roads.append({'p': pts, 'w': ROADW[hw], 'bridge': bool(t.get('bridge')), 'hw': hw, 'name': t.get('name', ''), 'round': t.get('junction') in ('roundabout', 'circular'), 'oneway': t.get('oneway') == 'yes'})
+            if hw in ROADW: roads.append({'p': pts, 'w': ROADW[hw], 'bridge': bool(t.get('bridge')), 'hw': hw, 'name': t.get('name', ''), 'round': t.get('junction') in ('roundabout', 'circular'), 'oneway': t.get('oneway') == 'yes', 'atal': t.get('name') == 'Atal Setu'})
             elif hw in ('footway', 'path', 'steps', 'pedestrian', 'track', 'cycleway'): paths.append({'p': pts, 'steps': hw == 'steps', 'bridge': bool(t.get('bridge'))})
     if t.get('amenity') == 'place_of_worship':
         for r in rings(e) if e['type'] != 'node' else []:
@@ -94,8 +94,12 @@ print(f'{len(buildings)} buildings, {len(worship)} temples/churches, {len(roads)
 # landmarks modelled in Blender (tools/blender_*.py): each sprite replaces the plain blocks and steps under it
 LANDMARKS = []
 for jf in sorted((ROOT / 'sprites').glob('landmark_*.json')):
-    lm = json.load(open(jf)); ox_, oy_ = xy(lm['lat'], lm['lon'])
-    lm['x'], lm['y'] = ox_, oy_; lm['img'] = Image.open(ROOT / 'sprites' / lm['file']).convert('RGBA')
+    lm = json.load(open(jf)); img_ = Image.open(ROOT / 'sprites' / lm['file']).convert('RGBA')
+    insts = lm.get('instances') or [[lm['lat'], lm['lon']]]
+    for la_, lo_ in insts[1:]:
+        LANDMARKS.append(dict(lm, img=img_, x=xy(la_, lo_)[0], y=xy(la_, lo_)[1]))
+    ox_, oy_ = xy(*insts[0])
+    lm['x'], lm['y'] = ox_, oy_; lm['img'] = img_
     cov = lm['covers']; inside_cov = lambda px, py: cov['x'][0] <= px - ox_ <= cov['x'][1] and cov['y'][0] <= py - oy_ <= cov['y'][1]
     buildings[:] = [b for b in buildings if not inside_cov(sum(q[0] for q in b['r']) / len(b['r']), sum(q[1] for q in b['r']) / len(b['r']))]
     paths[:] = [q for q in paths if not all(inside_cov(*pt) for pt in q['p'])]
@@ -210,7 +214,26 @@ def render(name, x0, y0, x1, y1, scale, zscale, labels):
     # roads: pavement, kerb, asphalt, dashed centre line; bridges lifted with railings
     def line(pts, w, col, z=None):
         d.line([P(x, y, z) for x, y in pts], fill=col, width=max(1, int(round(w))), joint='curve')
-    vis = [r for r in roads if inbox(r['p'])]
+    vis = [r for r in roads if inbox(r['p']) and not r.get('atal')]
+    # the Atal Setu: an elevated deck that climbs from the Patto bank to ~22 m over the river, standing on piers
+    def deck_z(px, py):
+        s0 = math.hypot(px - patto[0], py - patto[1])
+        return min(22.0, 3 + s0 * 0.06)
+    patto = xy(15.49653, 73.83756)
+    for r in roads:
+        if not r.get('atal') or not inbox(r['p']): continue
+        pts = [q for q in r['p']]
+        for (ax, ay, ux, uy) in along(pts, 45):     # piers down to the water or ground
+            if not (x0 - 20 <= ax <= x1 + 20 and y0 - 20 <= ay <= y1 + 20): continue
+            z = deck_z(ax, ay)
+            d.line([P(ax, ay, 0), P(ax, ay, z)], fill=(214, 210, 200), width=max(2, int(2.2 * scale)))
+        for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+            L = math.hypot(bx - ax, by - ay) or 1; nx_, ny_ = -(by - ay) / L * r['w'] / 2, (bx - ax) / L * r['w'] / 2
+            za, zb = deck_z(ax, ay), deck_z(bx, by)
+            d.polygon([P(ax + nx_, ay + ny_, za), P(bx + nx_, by + ny_, zb), P(bx - nx_, by - ny_, zb), P(ax - nx_, ay - ny_, za)], fill=(58, 60, 68))
+            d.polygon([P(ax - nx_, ay - ny_, za), P(bx - nx_, by - ny_, zb), P(bx - nx_, by - ny_, zb - 2.2), P(ax - nx_, ay - ny_, za - 2.2)], fill=(226, 222, 212))
+            for sgn in (1, -1):
+                d.line([P(ax + nx_ * sgn, ay + ny_ * sgn, za + 1.1), P(bx + nx_ * sgn, by + ny_ * sgn, zb + 1.1)], fill=(242, 240, 232), width=max(1, int(scale * 0.7)))
     for r in sorted(vis, key=lambda r: r['w']):                       # pavements, wider for the bigger roads
         line(r['p'], (r['w'] + (5 if r['w'] >= 8 else 3)) * scale, (206, 200, 188), 6 if r['bridge'] else None)
     for r in sorted(vis, key=lambda r: r['w']):                       # kerb
@@ -302,7 +325,7 @@ def render(name, x0, y0, x1, y1, scale, zscale, labels):
         if kind == 'l':   # a Blender landmark, scaled from its render to this view and pasted at its real spot
             k = scale / (b['px_per_m'] * math.cos(math.radians(45)))
             im = b['img'].resize((max(1, int(b['img'].width * k)), max(1, int(b['img'].height * k))), Image.LANCZOS)
-            ax_, ay_ = P(b['x'], b['y'])
+            ax_, ay_ = P(b['x'], b['y'], b.get('deck_z'))
             img.paste(im, (int(ax_ - b['anchor'][0] * k), int(ay_ - b['anchor'][1] * k)), im)
             continue
         r = b['r']; t = b['tags']
