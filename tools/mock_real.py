@@ -93,6 +93,7 @@ for e in els:
 print(f'{len(buildings)} buildings, {len(worship)} temples/churches, {len(roads)} roads ({sum(r["bridge"] for r in roads)} bridges), {len(paths)} paths, {len(water)} water, {len(mangroves)} mangrove, {len(marsh)} marsh areas')
 # landmarks modelled in Blender (tools/blender_*.py): each sprite replaces the plain blocks and steps under it
 LANDMARKS = []
+ALL_BUILDINGS, ALL_PATHS = list(buildings), list(paths)    # before the landmarks take their ground (the game needs both)
 for jf in sorted((ROOT / 'sprites').glob('landmark_*.json')):
     lm = json.load(open(jf)); img_ = Image.open(ROOT / 'sprites' / lm['file']).convert('RGBA')
     insts = lm.get('instances') or [[lm['lat'], lm['lon']]]
