@@ -4406,7 +4406,7 @@ function render() {
   const list = [];
   for (const s of statics) if (inView(s.sx, s.sy)) list.push(s);
   list.push({ mob: { x: player.x, y: player.y }, key: depth(player.x, player.y), draw: g => drawChild(g, 1) });
-  for (const d of demons) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ mob: { x: d.x, y: d.y }, key: depth(d.x, d.y), draw: g => drawDemon(g, d) }); }
+  for (const d of demons) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ mob: { x: d.x, y: d.y, k: 0.9 }, key: depth(d.x, d.y), draw: g => drawDemon(g, d) }); }   // monsters loom larger than the people
   for (const c of S.cars) { const [sx, sy] = iso(c.x, c.y); if (inView(sx, sy)) list.push({ mob: { x: c.x, y: c.y }, key: depth(c.x, c.y), draw: g => drawVehicle(g, c) }); }
   for (const wk of S.walkers || []) { if (wk.alpha <= 0.02) continue; const [sx, sy] = iso(wk.x, wk.y); if (inView(sx, sy)) list.push({ mob: { x: wk.x, y: wk.y }, key: depth(wk.x, wk.y), draw: g => wk.state === 'poder' ? drawPoder(g, wk) : drawPerson(g, wk) }); }
   for (const pk of S.packs || []) for (const d of pk.dogs) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ mob: { x: d.x, y: d.y }, key: depth(d.x, d.y), draw: g => drawDog(g, d) }); }
@@ -4426,7 +4426,7 @@ function render() {
   if (S.boss) list.push({ mob: { x: S.boss.x, y: S.boss.y }, key: depth(S.boss.x, S.boss.y), draw: g => drawNarkasur(g, S.boss) });
   // in the real city people, animals and vehicles are drawn smaller, about their size beside its buildings
   const CS = realOn() ? 0.5 : 1;
-  if (CS !== 1) for (const o of list) if (o.mob) { const d0 = o.draw, [sx, sy] = iso(o.mob.x, o.mob.y); o.draw = g => { g.save(); g.translate(sx, sy); g.scale(CS, CS); g.translate(-sx, -sy); d0(g); g.restore(); }; }
+  if (CS !== 1) for (const o of list) if (o.mob) { const d0 = o.draw, [sx, sy] = iso(o.mob.x, o.mob.y); o.draw = g => { g.save(); g.translate(sx, sy); g.scale(o.mob.k || CS, o.mob.k || CS); g.translate(-sx, -sy); d0(g); g.restore(); }; }
   list.sort((a, b) => a.key - b.key);
   for (const o of list) o.draw(ctx);
   drawFog(inView);
@@ -4652,8 +4652,9 @@ function render() {
       ctx.fillStyle = 'rgba(236,228,207,.8)'; ctx.font = '600 10px Mukta, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(n.role.name, sx, top - 4); ctx.textAlign = 'left';
     }
   }
-  // the child shows through anything standing in front of them
-  drawChild(ctx, 0.3);
+  // the child shows through anything standing in front of them (at the same size as the child)
+  if (realOn()) { const [sx, sy] = iso(player.x, player.y); ctx.save(); ctx.translate(sx, sy); ctx.scale(0.5, 0.5); ctx.translate(-sx, -sy); drawChild(ctx, 0.3); ctx.restore(); }
+  else drawChild(ctx, 0.3);
   if (S.boss) {
     const [bx, by] = iso(S.boss.x, S.boss.y);
     ctx.shadowColor = '#ff3b2f'; ctx.shadowBlur = 14; ctx.fillStyle = '#ff5b3a';
