@@ -2233,6 +2233,7 @@ function buildStatics() {
   // the depth key is given as x + y in map terms; turn it with the view (offsets along the diagonal stay small)
   const add = (x, y, key, draw, rim) => { const [sx, sy] = iso(x, y); statics.push({ sx, sy, fx: x, fy: y, key: depth(x, y) + (key - x - y), draw, rim }); };
   const real = realOn();
+  REAL_TILES = real;
   // in the real city the hand-made props are drawn smaller too, scaled about their foot
   const small = (x, y, fn, k = 0.55) => g => { const [sx, sy] = iso(x, y); g.save(); g.translate(sx, sy); g.scale(k, k); g.translate(-sx, -sy); fn(g); g.restore(); };
   if (real) addRealStatics(add);
@@ -2346,12 +2347,48 @@ function downhill(field, e, tx, ty) {
   return best ? [tx + best[0] + 0.5 - e.x, ty + best[1] + 0.5 - e.y] : null;
 }
 function blocked(x, y, r) {
-  return solid(at(Math.floor(x - r), Math.floor(y - r))) || solid(at(Math.floor(x + r), Math.floor(y - r))) ||
-         solid(at(Math.floor(x - r), Math.floor(y + r))) || solid(at(Math.floor(x + r), Math.floor(y + r)));
+  // in the real city the tile buildings, walls and church floor are invisible: the drawn outlines block instead
+  const sol = REAL_TILES ? t => solid(t) && t !== HOUSE && t !== WALL && t !== CHAPEL : solid;
+  return sol(at(Math.floor(x - r), Math.floor(y - r))) || sol(at(Math.floor(x + r), Math.floor(y - r))) ||
+         sol(at(Math.floor(x - r), Math.floor(y + r))) || sol(at(Math.floor(x + r), Math.floor(y + r)));
 }
+let REAL_TILES = false;   // set with the statics: true while the real Panjim is on
+// is (x, y) inside, or within r of, a real building's outline? (a grid of 2-tile cells finds the few nearby)
+function realSolid(x, y, r) {
+  const R = realPrep();
+  if (!R.grid) {
+    R.grid = new Map();
+    R.b.forEach((b, i) => { for (let gx = Math.floor(b.bb[0] / 2); gx <= Math.floor(b.bb[2] / 2); gx++) for (let gy = Math.floor(b.bb[1] / 2); gy <= Math.floor(b.bb[3] / 2); gy++) { const k = gx * 4096 + gy; if (!R.grid.has(k)) R.grid.set(k, []); R.grid.get(k).push(b); } });
+  }
+  const list = R.grid.get(Math.floor(x / 2) * 4096 + Math.floor(y / 2));
+  if (!list) return false;
+  for (const b of list) {
+    if (x < b.bb[0] - r || x > b.bb[2] + r || y < b.bb[1] - r || y > b.bb[3] + r) continue;
+    const p = b.p; let ins = false;
+    for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+      if ((p[i][1] > y) !== (p[j][1] > y) && x < (p[j][0] - p[i][0]) * (y - p[i][1]) / (p[j][1] - p[i][1] + 1e-9) + p[i][0]) ins = !ins;
+      const ex = p[i][0] - p[j][0], ey = p[i][1] - p[j][1], L2 = ex * ex + ey * ey || 1e-9, t = Math.max(0, Math.min(1, ((x - p[j][0]) * ex + (y - p[j][1]) * ey) / L2));
+      if (hyp(x - p[j][0] - ex * t, y - p[j][1] - ey * t) < r) return true;
+    }
+    if (ins) return true;
+  }
+  return false;
+}
+const RBODY = 0.07;   // a child's body against the real walls, in tiles (about 1.4 m)
 function moveEnt(e, dx, dy) {
-  if (!blocked(e.x + dx, e.y, e.r)) e.x += dx;
-  if (!blocked(e.x, e.y + dy, e.r)) e.y += dy;
+  const walls = REAL_TILES && (e === player || demons.includes(e));
+  if (walls && realSolid(e.x, e.y, RBODY)) realFree(e);   // never stuck inside: step out to the nearest street
+  const r = REAL_TILES ? Math.min(e.r, 0.15) : e.r;   // half-size people in the city have half the reach
+  if (!blocked(e.x + dx, e.y, r) && !(walls && realSolid(e.x + dx, e.y, RBODY))) e.x += dx;
+  if (!blocked(e.x, e.y + dy, r) && !(walls && realSolid(e.x, e.y + dy, RBODY))) e.y += dy;
+}
+// out of a building (the start, a spawn, a ride ending on one): the nearest clear spot, searched in rings
+function realFree(e) {
+  if (!REAL_TILES || !realSolid(e.x, e.y, RBODY)) return;
+  for (let rr = 0.1; rr < 4; rr += 0.1) for (let a = 0; a < 6.28; a += 0.3) {
+    const x = e.x + Math.cos(a) * rr, y = e.y + Math.sin(a) * rr;
+    if (!realSolid(x, y, RBODY) && !blocked(x, y, e.r)) { e.x = x; e.y = y; return; }
+  }
 }
 // move a walker; if a corner keeps catching it, ease it back to the middle of its tile
 function steer(e, mx, my, dt) {
