@@ -2399,6 +2399,18 @@ function moveEnt(e, dx, dy) {
   if (walls && realSolid(e.x, e.y, RBODY)) realFree(e);   // never stuck inside: step out to the nearest street
   const r = REAL_TILES ? Math.min(e.r, 0.15) : e.r;   // half-size people in the city have half the reach
   const wall = (x, y) => walls && !onRealRoad(x, y) && realSolid(x, y, RBODY);   // a building spilling onto a street doesn't close it
+  if (walls) {
+    // the real city's walls run at every angle, so slide along them: try the move, then the move turned a
+    // little either way (shortened by how far it's turned), then each axis alone
+    const ok = (x, y) => !blocked(x, y, r) && !wall(x, y);
+    if (ok(e.x + dx, e.y + dy)) { e.x += dx; e.y += dy; return; }
+    for (const a of [0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4]) {
+      const c = Math.cos(a), sn = Math.sin(a), mx = (dx * c - dy * sn) * c, my = (dx * sn + dy * c) * c;
+      if (ok(e.x + mx, e.y + my)) { e.x += mx; e.y += my; return; }
+    }
+    if (ok(e.x + dx, e.y)) e.x += dx; else if (ok(e.x, e.y + dy)) e.y += dy;
+    return;
+  }
   if (!blocked(e.x + dx, e.y, r) && !wall(e.x + dx, e.y)) e.x += dx;
   if (!blocked(e.x, e.y + dy, r) && !wall(e.x, e.y + dy)) e.y += dy;
 }
