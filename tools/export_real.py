@@ -80,7 +80,8 @@ for r in ZONES: put(zg, bbox(r), (r, bbox(r)))
 for r in NOGO: put(ng, bbox(r), (r, bbox(r)))
 for r in MR.water + MR.mangroves + MR.marsh: put(wg, bbox(r), (r, bbox(r)))
 for b in MR.ALL_BUILDINGS: bb = bbox(b['r']); put(bg, (bb[0] - 2, bb[1] - 2, bb[2] + 2, bb[3] + 2), (b['r'], bb))
-lines = [(r['p'], r['w'] / 2 + 1.2) for r in MR.roads] + [(p['p'], 1.6) for p in MR.ALL_PATHS]
+ROAD_K = 1.5   # the game draws streets 1.5x their mapped width, so they read and walk easily
+lines = [(r['p'], r['w'] * ROAD_K / 2 + 1.2) for r in MR.roads] + [(p['p'], 1.6) for p in MR.ALL_PATHS]
 for pts, half in lines:
     for a, b in zip(pts, pts[1:]):
         put(sg, (min(a[0], b[0]) - half, min(a[1], b[1]) - half, max(a[0], b[0]) + half, max(a[1], b[1]) + half), (a, b, half))
@@ -100,13 +101,13 @@ def clear(rect):
     lo = (min(xs), min(ys), max(xs), max(ys))
     for it in near(bg, cx, cy, 20):
         bb = it[1]
-        if not (lo[2] < bb[0] - 1.5 or lo[0] > bb[2] + 1.5 or lo[3] < bb[1] - 1.5 or lo[1] > bb[3] + 1.5): return False
+        if not (lo[2] < bb[0] - 3 or lo[0] > bb[2] + 3 or lo[3] < bb[1] - 3 or lo[1] > bb[3] + 3): return False
     return True
 guessed = []
 for r in MR.roads:
     if r['hw'] not in ('residential', 'living_street', 'unclassified', 'tertiary', 'secondary', 'service') or r['bridge']: continue
     for side in (-1, 1):
-        rows = [0, 1] if rnd.random() < 0.7 else [0]
+        rows = [0, 1] if rnd.random() < 0.3 else [0]
         for row in rows:
             s_off = rnd.uniform(0, 6)
             for (px, py, ux, uy) in MR.along(r['p'], 1.0):
@@ -114,10 +115,11 @@ for r in MR.roads:
                 if s_off > 0: continue
                 wid, dep = rnd.uniform(7, 12), rnd.uniform(8, 12)
                 nx, ny = -uy * side, ux * side
-                back = r['w'] / 2 + rnd.uniform(2.0, 4.0) + row * (dep + rnd.uniform(2.5, 4.5))
+                back = r['w'] * ROAD_K / 2 + rnd.uniform(2.5, 5.0) + row * (dep + rnd.uniform(4.0, 7.0))
                 cx, cy = px + nx * (back + dep / 2), py + ny * (back + dep / 2)
                 rect = [(cx + ux * sx * wid / 2 + nx * sy * dep / 2, cy + uy * sx * wid / 2 + ny * sy * dep / 2) for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
-                s_off = wid + rnd.uniform(1.0, 3.0)
+                s_off = wid + rnd.uniform(3.5, 8.0)
+                if rnd.random() < 0.25: continue   # an empty plot now and then: a garden, a yard, a gap
                 if clear(rect):
                     lv = 1 if rnd.random() < 0.7 else 2
                     guessed.append((rect, lv, wid * dep))
