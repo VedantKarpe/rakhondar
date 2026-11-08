@@ -2347,8 +2347,11 @@ function downhill(field, e, tx, ty) {
   return best ? [tx + best[0] + 0.5 - e.x, ty + best[1] + 0.5 - e.y] : null;
 }
 function blocked(x, y, r) {
-  // in the real city the tile buildings, walls and church floor are invisible: the drawn outlines block instead
-  const sol = REAL_TILES ? t => solid(t) && t !== HOUSE && t !== WALL && t !== CHAPEL : solid;
+  // in the real city a mapped street or footpath is always open, whatever tile it crosses; off them, the tile
+  // buildings, walls and church floor are invisible (the drawn outlines block instead), and a tree or a pole
+  // doesn't fill its whole 20 m tile
+  if (REAL_TILES && onRealRoad(x, y)) return false;
+  const sol = REAL_TILES ? t => solid(t) && t !== HOUSE && t !== WALL && t !== CHAPEL && t !== TREE && t !== PROP && t !== SHELTER : solid;
   return sol(at(Math.floor(x - r), Math.floor(y - r))) || sol(at(Math.floor(x + r), Math.floor(y - r))) ||
          sol(at(Math.floor(x - r), Math.floor(y + r))) || sol(at(Math.floor(x + r), Math.floor(y + r)));
 }
@@ -2374,13 +2377,30 @@ function realSolid(x, y, r) {
   }
   return false;
 }
+// on (or within a metre of) the surface of a mapped street or footpath? (a grid of 1-tile cells of segments)
+function onRealRoad(x, y) {
+  const R = realPrep();
+  if (!R.rgrid) {
+    R.rgrid = new Map();
+    const addSeg = (a, b, half) => { for (let gx = Math.floor(Math.min(a[0], b[0]) - half); gx <= Math.floor(Math.max(a[0], b[0]) + half); gx++) for (let gy = Math.floor(Math.min(a[1], b[1]) - half); gy <= Math.floor(Math.max(a[1], b[1]) + half); gy++) { const k = gx * 4096 + gy; if (!R.rgrid.has(k)) R.rgrid.set(k, []); R.rgrid.get(k).push([a, b, half]); } };
+    for (const r of R.roads) for (let i = 1; i < r.p.length; i++) addSeg(r.p[i - 1], r.p[i], (r.w / 2 + 1) / 20);
+    for (const f of R.paths) for (let i = 1; i < f.p.length; i++) addSeg(f.p[i - 1], f.p[i], 1.6 / 20);
+  }
+  const list = R.rgrid.get(Math.floor(x) * 4096 + Math.floor(y));
+  if (list) for (const [a, b, half] of list) {
+    const ex = b[0] - a[0], ey = b[1] - a[1], L2 = ex * ex + ey * ey || 1e-9, t = Math.max(0, Math.min(1, ((x - a[0]) * ex + (y - a[1]) * ey) / L2));
+    if (hyp(x - a[0] - ex * t, y - a[1] - ey * t) < half) return true;
+  }
+  return false;
+}
 const RBODY = 0.07;   // a child's body against the real walls, in tiles (about 1.4 m)
 function moveEnt(e, dx, dy) {
   const walls = REAL_TILES && (e === player || demons.includes(e));
   if (walls && realSolid(e.x, e.y, RBODY)) realFree(e);   // never stuck inside: step out to the nearest street
   const r = REAL_TILES ? Math.min(e.r, 0.15) : e.r;   // half-size people in the city have half the reach
-  if (!blocked(e.x + dx, e.y, r) && !(walls && realSolid(e.x + dx, e.y, RBODY))) e.x += dx;
-  if (!blocked(e.x, e.y + dy, r) && !(walls && realSolid(e.x, e.y + dy, RBODY))) e.y += dy;
+  const wall = (x, y) => walls && !onRealRoad(x, y) && realSolid(x, y, RBODY);   // a building spilling onto a street doesn't close it
+  if (!blocked(e.x + dx, e.y, r) && !wall(e.x + dx, e.y)) e.x += dx;
+  if (!blocked(e.x, e.y + dy, r) && !wall(e.x, e.y + dy)) e.y += dy;
 }
 // out of a building (the start, a spawn, a ride ending on one): the nearest clear spot, searched in rings
 function realFree(e) {
