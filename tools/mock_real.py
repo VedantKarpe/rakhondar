@@ -91,6 +91,16 @@ for e in els:
         for r in rings(e) if e['type'] != 'node' else []:
             if len(r) > 2 and inside(r, 0): worship.append({'r': r, 'rel': t.get('religion'), 'name': t.get('name', '')})
 print(f'{len(buildings)} buildings, {len(worship)} temples/churches, {len(roads)} roads ({sum(r["bridge"] for r in roads)} bridges), {len(paths)} paths, {len(water)} water, {len(mangroves)} mangrove, {len(marsh)} marsh areas')
+# landmarks modelled in Blender (tools/blender_*.py): each sprite replaces the plain blocks and steps under it
+LANDMARKS = []
+for jf in sorted((ROOT / 'sprites').glob('landmark_*.json')):
+    lm = json.load(open(jf)); ox_, oy_ = xy(lm['lat'], lm['lon'])
+    lm['x'], lm['y'] = ox_, oy_; lm['img'] = Image.open(ROOT / 'sprites' / lm['file']).convert('RGBA')
+    cov = lm['covers']; inside_cov = lambda px, py: cov['x'][0] <= px - ox_ <= cov['x'][1] and cov['y'][0] <= py - oy_ <= cov['y'][1]
+    buildings[:] = [b for b in buildings if not inside_cov(sum(q[0] for q in b['r']) / len(b['r']), sum(q[1] for q in b['r']) / len(b['r']))]
+    paths[:] = [q for q in paths if not all(inside_cov(*pt) for pt in q['p'])]
+    LANDMARKS.append(lm)
+print(f'{len(LANDMARKS)} landmark models')
 WORSHIP_IDS = {id(w['r']) for w in worship}
 wpoly = [w['r'] for w in worship]
 
@@ -282,12 +292,19 @@ def render(name, x0, y0, x1, y1, scale, zscale, labels):
             d.line([(bx_, by_), (bx_, by_ - 3 * scale)], fill=(90, 64, 48), width=max(1, int(scale)))
             d.ellipse([bx_ - rr, by_ - 3 * scale - rr * 1.5, bx_ + rr, by_ - 3 * scale + rr * 0.3], fill=(47, 106, 50), outline=(26, 58, 28))
     items = [(sum(x + y for x, y in b['r']) / len(b['r']), 'b', b) for b in blds] + [(tx + ty, 't', (tx, ty, kd)) for tx, ty, kd in trees]
+    items += [(lm['x'] + lm['y'], 'l', lm) for lm in LANDMARKS if x0 - 100 <= lm['x'] <= x1 + 100 and y0 - 100 <= lm['y'] <= y1 + 100]
     items.sort(key=lambda it: it[0])
     blds_in_order = items
     palette = [(242, 194, 48), (224, 118, 58), (47, 111, 208), (232, 224, 204), (47, 160, 138), (232, 163, 58), (208, 52, 74), (224, 122, 138), (74, 143, 224)]
     for _, kind, b in blds_in_order:
         if kind == 't':
             draw_tree(*b); continue
+        if kind == 'l':   # a Blender landmark, scaled from its render to this view and pasted at its real spot
+            k = scale / (b['px_per_m'] * math.cos(math.radians(45)))
+            im = b['img'].resize((max(1, int(b['img'].width * k)), max(1, int(b['img'].height * k))), Image.LANCZOS)
+            ax_, ay_ = P(b['x'], b['y'])
+            img.paste(im, (int(ax_ - b['anchor'][0] * k), int(ay_ - b['anchor'][1] * k)), im)
+            continue
         r = b['r']; t = b['tags']
         church = t.get('building') in ('church', 'chapel', 'cathedral') or t.get('amenity') == 'place_of_worship' and t.get('religion') == 'christian' or any(r is w for w in wpoly)
         temple = t.get('building') == 'temple' or (t.get('amenity') == 'place_of_worship' and t.get('religion') == 'hindu')
