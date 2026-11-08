@@ -2032,8 +2032,9 @@ function realPrep() {
     b: D.b.map(([f, lv, kind, area], i) => {
       const o = feat(f), p = o.p, n = p.length;
       o.cx = p.reduce((s, q) => s + q[0], 0) / n; o.cy = p.reduce((s, q) => s + q[1], 0) / n;
-      o.lv = lv; o.kind = kind; o.col = kind === 1 ? '#faf8f2' : kind === 2 ? '#ecd6a0' : pal[(i * 7 + n) % pal.length];
-      o.top = lv * 3.2 * RZ * (kind === 1 ? 1.6 : kind === 2 ? 1.2 : 1);
+      if (!kind && area < 150) lv = 1;   // a small footprint is a Goan house: one storey, not a tower
+      o.lv = lv; o.kind = kind; o.small = !kind && area < 260; o.col = kind === 1 ? '#faf8f2' : kind === 2 ? '#ecd6a0' : pal[(i * 7 + n) % pal.length];
+      o.top = lv * 3.2 * RZ * (kind === 1 ? 1.6 : kind === 2 ? 1.2 : o.small ? 0.8 : 1);
       o.tiled = !kind && area < 600 && n <= 6;
       o.edges = [];
       for (let k = 0; k < n; k++) {
@@ -2115,7 +2116,18 @@ function paintReal(g, x0, y0, x1, y1) {
     const o = r.p.map((q, i) => { const a = r.p[Math.max(0, i - 1)], b = r.p[Math.min(r.p.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [q[0] - (b[1] - a[1]) / L * s * r.w / 40, q[1] + (b[0] - a[0]) / L * s * r.w / 40]; });
     strokeP(o, 1.6, '#efebe0');
   }
-  for (const f of R.paths) if (near(f)) { strokeP(f.p, 2.4 * M, '#cdb98e'); if (f.steps) strokeP(f.p, 2.4 * M, 'rgba(120,100,70,.7)', [1, 2]); }
+  for (const f of R.paths) if (near(f)) { strokeP(f.p, 1.2 * M, 'rgba(214,196,150,.55)'); if (f.steps) strokeP(f.p, 1.2 * M, 'rgba(120,100,70,.45)', [1, 2]); }
+  // each building's shadow on the ground: its footprint swept away from the light (from the left, as its walls
+  // are shaded), painted solid on a sheet of their own and laid down at once so overlaps don't darken twice
+  const sh = document.createElement('canvas'); sh.width = g.canvas.width; sh.height = g.canvas.height;
+  const sg = sh.getContext('2d'); sg.setTransform(g.getTransform()); sg.fillStyle = '#000';
+  for (const b of R.b) {
+    if (!realNear(b.bb, x0, y0, x1, y1, 200)) continue;
+    const ox = b.top * 0.75, oy = b.top * 0.22, q = b.p.map(([x, y]) => iso(x, y)), n = q.length;
+    sg.beginPath(); q.forEach((s2, i) => i ? sg.lineTo(s2[0] + ox, s2[1] + oy) : sg.moveTo(s2[0] + ox, s2[1] + oy)); sg.closePath(); sg.fill();
+    for (let i = 0; i < n; i++) { const a = q[i], c = q[(i + 1) % n]; sg.beginPath(); sg.moveTo(a[0], a[1]); sg.lineTo(c[0], c[1]); sg.lineTo(c[0] + ox, c[1] + oy); sg.lineTo(a[0] + ox, a[1] + oy); sg.closePath(); sg.fill(); }
+  }
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 0.34; g.drawImage(sh, 0, 0); g.restore();
   // street names along each street's longest stretch
   g.font = '700 10px Mukta, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
   for (const r of roads) {
@@ -2151,13 +2163,15 @@ function drawRealBuilding(g, b) {
       }
     }
   }
-  const p = b.p, roofc = b.kind === 1 ? '#f0eee8' : b.kind === 2 ? '#c88c3c' : b.tiled ? '#a8492b' : '#c0baac';
+  // the roof stands out past the walls: wide eaves on the small tiled houses
+  const ek = 1 + 0.9 / Math.max(2, b.edges.reduce((s, e) => s + e.L, 0) / 8);
+  const p = b.tiled ? b.p.map(q => [b.cx + (q[0] - b.cx) * ek, b.cy + (q[1] - b.cy) * ek]) : b.p, roofc = b.kind === 1 ? '#f0eee8' : b.kind === 2 ? '#c88c3c' : b.tiled ? '#a8492b' : '#c0baac';
   g.beginPath(); p.forEach((q, i) => { const s = P(q[0], q[1], top); i ? g.lineTo(s[0], s[1]) : g.moveTo(s[0], s[1]); }); g.closePath();
   g.fillStyle = roofc; g.fill(); g.strokeStyle = INK; g.lineWidth = 0.7; g.stroke();
   if (b.tiled) {   // the ridge along the long side, the courses falling away from it
     let li = 0, ll = 0, sl = 1e9;
     for (let i = 0; i < p.length; i++) { const L = Math.hypot(p[(i + 1) % p.length][0] - p[i][0], p[(i + 1) % p.length][1] - p[i][1]); if (L > ll) { ll = L; li = i; } sl = Math.min(sl, L); }
-    const a = p[li], c = p[(li + 1) % p.length], ux = (c[0] - a[0]) / ll, uy = (c[1] - a[1]) / ll, half = ll / 2 - Math.min(sl / 2, ll / 3), rh = Math.min(3.5, sl * 20 * 0.3) * RZ;
+    const a = p[li], c = p[(li + 1) % p.length], ux = (c[0] - a[0]) / ll, uy = (c[1] - a[1]) / ll, half = ll / 2 - Math.min(sl / 2, ll / 3), rh = Math.min(2.4, sl * 20 * 0.22) * RZ * 0.7;
     const r0 = [b.cx - ux * half, b.cy - uy * half], r1 = [b.cx + ux * half, b.cy + uy * half];
     const faces2 = p.map((q, i) => { const q2 = p[(i + 1) % p.length]; return { q, q2, d: depth((q[0] + q2[0]) / 2, (q[1] + q2[1]) / 2) }; }).sort((s, t) => s.d - t.d);
     for (const { q, q2 } of faces2) {
@@ -2213,6 +2227,8 @@ function buildStatics() {
   // the depth key is given as x + y in map terms; turn it with the view (offsets along the diagonal stay small)
   const add = (x, y, key, draw, rim) => { const [sx, sy] = iso(x, y); statics.push({ sx, sy, fx: x, fy: y, key: depth(x, y) + (key - x - y), draw, rim }); };
   const real = realOn();
+  // in the real city the hand-made props are drawn smaller too, scaled about their foot
+  const small = (x, y, fn, k = 0.55) => g => { const [sx, sy] = iso(x, y); g.save(); g.translate(sx, sy); g.scale(k, k); g.translate(-sx, -sy); fn(g); g.restore(); };
   if (real) addRealStatics(add);
   for (const h of houses) {
     if (real && h.town) continue;   // the real city's own outlines stand in for the town's tile buildings
@@ -2250,7 +2266,7 @@ function buildStatics() {
         g.beginPath(); g.arc(sx - sp.ax + rx + a * (sp.ay - ry), sy - sp.ay + ry, rr, Math.PI * 1.12, Math.PI * 1.72); g.stroke();
       });
     }
-    if (t === WALL) { const bloom = walls.has(i); add(x + 0.5, y + 0.5, x + y + 1, g => drawWall(g, x, y, bloom)); }
+    if (t === WALL && !real) { const bloom = walls.has(i); add(x + 0.5, y + 0.5, x + y + 1, g => drawWall(g, x, y, bloom)); }
   }
   const [tx, ty] = OFF.t, [cx, cy] = OFF.c, [bx, by] = OFF.s;
   const blitAt = (g, s, o) => { const [dx, dy] = offPx(o); g.drawImage(s.c, s.l + dx, s.t + dy, s.w, s.h); };
@@ -2259,7 +2275,7 @@ function buildStatics() {
     const [sx, sy] = P(35.5, 3.9, 57), rx = 1.6 * 32 * Math.SQRT2;
     g.strokeStyle = 'rgba(175,200,255,.35)'; g.lineWidth = 2; g.beginPath(); g.ellipse(sx, sy, rx, 38, 0, Math.PI * 1.1, Math.PI * 1.6); g.stroke();
   }));
-  add(31.5 + tx, 7.5 + ty, 39 + tx + ty, g => withOff(g, OFF.t, g => drawStambha(g, S.t)));
+  add(31.5 + tx, 7.5 + ty, 39 + tx + ty, real ? small(31.5 + tx, 7.5 + ty, g => withOff(g, OFF.t, g => drawStambha(g, S.t))) : g => withOff(g, OFF.t, g => drawStambha(g, S.t)));
   const cspr = CITY ? bakeOn(29.6, 21.6, 40.4, 31.4, 190, drawImmaculate) : bakeOn(32.6, 21.6, 37.4, 26.4, 120, drawChapel);
   if (!real) add(35 + cx, 24 + cy, 59 + cx + cy, g => blitAt(g, cspr, OFF.c), g => withOff(g, OFF.c, g => line(g, P(36.95, 21.95, 34), P(36.95, 26, 34), 'rgba(175,200,255,.3)', 1.5)));
   if (exits.some(e => e.kind === 'bus')) {
@@ -2273,9 +2289,9 @@ function buildStatics() {
       continue;
     }
     const c = p.kind === 'devli' ? 1 : 0.5;
-    add(p.x + c, p.y + c, p.x + p.y + 2 * c, g => drawProp(g, p));
+    add(p.x + c, p.y + c, p.x + p.y + 2 * c, real ? small(p.x + c, p.y + c, g => drawProp(g, p)) : g => drawProp(g, p));
   }
-  for (const k of kids) add(k.x, k.y, k.x + k.y, g => drawKid(g, k));
+  for (const k of kids) add(k.x, k.y, k.x + k.y, real ? small(k.x, k.y, g => drawKid(g, k)) : g => drawKid(g, k));
   if (CH.finale === 'boss') add(PYRE.x, PYRE.y, PYRE.x + PYRE.y, drawPyre);
   // the cable-stayed towers of the big bridge over the Mandovi, every few spans, with fans of cables
   for (const b of bridges) if (!real && b.big && b.y % 5 === 2) add(b.x + 0.5, b.y + 0.5, b.x + b.y + 1, g => {
