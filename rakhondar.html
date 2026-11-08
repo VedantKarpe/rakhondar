@@ -180,7 +180,7 @@ button:focus-visible { outline: 2px solid var(--lamp); outline-offset: 3px; }
   <canvas id="game"></canvas>
   <div class="hud">
     <div class="stat"><span class="lbl">Courage</span><div class="pips" id="hearts"></div><span class="lbl">Lamp oil</span><div class="oil"><span id="oilFill"></span></div></div>
-    <div class="stat right"><span class="lbl">Rakhondar calls</span><div class="pips" id="charges"></div><span class="lbl">Points</span><b class="pts" id="points">0</b><button class="sound" id="soundBtn" type="button">Sound on <kbd>M</kbd></button><div class="turn"><button class="sound" id="turnL" type="button" aria-label="Turn the view left">⟲</button><button class="sound" id="turnR" type="button" aria-label="Turn the view right">⟳</button></div></div>
+    <div class="stat right"><span class="lbl">Rakhondar calls</span><div class="pips" id="charges"></div><span class="lbl">Points</span><b class="pts" id="points">0</b><button class="sound" id="soundBtn" type="button">Sound on <kbd>M</kbd></button><div class="turn"><button class="sound" id="turnL" type="button" aria-label="Turn the view left">⟲</button><button class="sound" id="turnR" type="button" aria-label="Turn the view right">⟳</button></div><div class="turn"><button class="sound" id="zoomOut" type="button" aria-label="Zoom out">−</button><button class="sound" id="zoomIn" type="button" aria-label="Zoom in">+</button></div><button class="sound" id="menuBtn" type="button" aria-label="Back to the menu">← Menu</button></div>
   </div>
   <div id="objective"></div>
   <div id="whisper" aria-live="polite"></div>
@@ -3539,6 +3539,7 @@ function updateChapter(dt) {
   }
 }
 /* ---------- the calendar: Goa time, the tithi and the moon, the festivals ---------- */
+const HINDU_CAL = false;   // the Hindu calendar (tithi and its festivals) is switched off for now
 // Approximate astronomy, worked out offline: good to a few hours, so a tithi near its boundary can be a day off a printed panchang.
 const CAL = (() => {
   const DAY = 864e5, J2000 = Date.UTC(2000, 0, 1, 12), rad = Math.PI / 180;
@@ -3577,7 +3578,7 @@ const CAL = (() => {
     const out = [];
     // dates checked against printed calendars, where the tithi turns too close to sunrise for this approximation
     const key = `${y}-${mo + 1}-${day}`, PIN = { '2026-9-14': 'chovoth', '2026-3-19': 'padvo' }, SKIP = { '2026-9-15': 'chovoth' };
-    const hindu = (m, t, id, name, extra) => { if (SKIP[key] !== id && ((p.month === m && p.tithi === t) || PIN[key] === id)) out.push(Object.assign({ id, name }, extra)); };
+    const hindu = (m, t, id, name, extra) => { if (HINDU_CAL && SKIP[key] !== id && ((p.month === m && p.tithi === t) || PIN[key] === id)) out.push(Object.assign({ id, name }, extra)); };
     hindu('Ashvin', 29, 'narkasur', 'Naraka Chaturdashi, Narkasur night', { chapter: 'narkasur', fest: 'effigy', crackers: true });
     hindu('Ashvin', 30, 'diwali', 'Diwali', { fest: 'samai', crackers: true });
     hindu('Kartika', 1, 'padwa', 'Diwali Padwa', { fest: 'samai' });
@@ -3809,7 +3810,7 @@ function updateLife(dt) {
   const was = isNight();
   // on a fast clock the daytime hours run quicker, so more of the playing time is night (real time stays true)
   S.dayMin += dt * SPEED / 60 * (SPEED > 1 && sunLight(S.dayMin) > 0.5 ? 2.5 : 1);
-  if (S.dayMin >= 1440) { S.dayMin -= 1440; S.dayIdx++; newLifeDay(); whisper(`A new day: ${S.moon.month} ${S.moon.paksha} ${S.moon.name}. ${WX.kind}.`); }
+  if (S.dayMin >= 1440) { S.dayMin -= 1440; S.dayIdx++; newLifeDay(); whisper(HINDU_CAL ? `A new day: ${S.moon.month} ${S.moon.paksha} ${S.moon.name}. ${WX.kind}.` : `A new day. ${WX.kind}.`); }
   const night = isNight();
   if (night !== was) renderHud();
   if (night && !was) { SFX.play('call'); whisper(`The sun has gone down over ${CH.place}. The shadows are waking, and so am I. Keep your lamp lit.`); S.lifeT = 8; }
@@ -5073,9 +5074,9 @@ function showIntro() {
     <h1>Rakhondar<small>राखणदार</small></h1>
     <div class="today">
       <span><b>Today in Goa</b> · ${dateText}</span>
-      <span>${p.month} ${p.paksha} ${p.name} · ${p.illum > 0.97 ? 'full moon' : p.illum < 0.03 ? 'no moon' : `${Math.round(p.illum * 100)}% moon`} · ${wx.kind}</span>
+      <span>${HINDU_CAL ? `${p.month} ${p.paksha} ${p.name} · ` : ''}${p.illum > 0.97 ? 'full moon' : p.illum < 0.03 ? 'no moon' : `${Math.round(p.illum * 100)}% moon`} · ${wx.kind}</span>
       ${t.list.length ? `<span>Festival: <b>${t.list.map(x => x.name).join(', ')}</b></span>` : ''}
-      <span style="font-size:12px;color:var(--muted)">The tithi is worked out from the moon and sun; near a boundary it can be a day off the printed panchang.</span>
+      ${HINDU_CAL ? '<span style="font-size:12px;color:var(--muted)">The tithi is worked out from the moon and sun; near a boundary it can be a day off the printed panchang.</span>' : ''}
     </div>
     <label class="field">What does your aaji call you?<input id="nameIn" maxlength="16" autocomplete="off" value="${esc(NAME)}"></label>
     <p>Live in a village on Goa time: day for errands and the daily quest, dusk when the lamps come on, night when the Rakhondar walks.</p>
@@ -5133,7 +5134,7 @@ function start() {
   renderHud();
   if (!CH.life) return startRescue();
   const f = S.today.list.map(x => x.name).join(' and ');
-  whisper(`${CH.place}, ${clockText()}. ${S.moon.month} ${S.moon.paksha} ${S.moon.name}${f ? `, ${f}` : ''}. ${WX.kind}.`);
+  whisper(`${CH.place}, ${clockText()}.${HINDU_CAL ? ` ${S.moon.month} ${S.moon.paksha} ${S.moon.name}` : ''}${f ? ` ${f}.` : ''} ${WX.kind}.`);
 }
 function endNight(kind) {
   S.mode = 'end'; renderHud();
@@ -5560,6 +5561,9 @@ function drawMini() {
 mini.addEventListener('click', () => showPlaces());
 mini.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); showPlaces(); } });
 document.getElementById('placesBtn').addEventListener('click', e => { e.currentTarget.blur(); showPlaces(); });
+document.getElementById('zoomIn').addEventListener('click', e => { e.currentTarget.blur(); zoomBy(1.15); });
+document.getElementById('zoomOut').addEventListener('click', e => { e.currentTarget.blur(); zoomBy(1 / 1.15); });
+document.getElementById('menuBtn').addEventListener('click', e => { e.currentTarget.blur(); if (S && S.mode === 'play') showIntro(); });
 document.getElementById('goaBtn').addEventListener('click', e => { e.currentTarget.blur(); showGoaMap(); });
 
 /* ---------- the village map: every landmark and sight, and a guide marker to walk to ---------- */
