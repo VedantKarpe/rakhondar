@@ -14,7 +14,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / 'sprites'; OUT.mkdir(exist_ok=True)
 ELEV = math.asin(0.5)
 S = 1.25 / math.cos(math.radians(45)) * 2
-ZX = (2.6 * 2) / (S * math.cos(ELEV))
+ZX = (2.6 * 2 * 1.7) / (S * math.cos(ELEV))
 RES = 1400
 # the bridge's direction, from its OpenStreetMap route (south end at Patto to the north bank)
 dx, dy = (73.83508 - 73.83756) * 107268, (15.51503 - 15.49653) * 110540

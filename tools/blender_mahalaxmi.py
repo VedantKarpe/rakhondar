@@ -15,7 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / 'sprites'; OUT.mkdir(exist_ok=True)
 ELEV = math.asin(0.5)
 S = 1.25 / math.cos(math.radians(45)) * 2
-ZX = (2.6 * 2) / (S * math.cos(ELEV))
+ZX = (2.6 * 2 * 1.7) / (S * math.cos(ELEV))
 RES = 1400
 # the hall's axis, south-west to north-east, and its size, from the outline's corners
 A = Vector((22.6, 12.7)).normalized(); B = Vector((-A.y, A.x))

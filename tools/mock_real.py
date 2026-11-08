@@ -300,7 +300,7 @@ def render(name, x0, y0, x1, y1, scale, zscale, labels):
             for (px, py, ux, uy) in along(pth['p'], 1.2):
                 line([(px - uy * 1.2, py + ux * 1.2), (px + uy * 1.2, py - ux * 1.2)], 1, (150, 136, 108), z)
     # buildings, back to front, with real outlines extruded by their levels; temples and churches stand out
-    LV = 3.2
+    LV = 3.2 * 1.7          # storeys stretched as the game draws them
     blds = [b for b in buildings if inbox(b['r'])]
     blds.sort(key=lambda b: sum(x + y for x, y in b['r']) / len(b['r']))
     rnd = random.Random(9)

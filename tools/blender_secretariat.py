@@ -14,7 +14,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / 'sprites'; OUT.mkdir(exist_ok=True)
 ELEV = math.asin(0.5)
 S = 1.25 / math.cos(math.radians(45)) * 2
-ZX = (2.6 * 2) / (S * math.cos(ELEV))
+ZX = (2.6 * 2 * 1.7) / (S * math.cos(ELEV))
 RES = 1400
 OUTLINE = [(-41.3, 12.7), (17.9, 23.8), (19.6, 17.2), (29.1, 18.2), (35.6, 13.0), (41.9, -10.2), (-25.6, -23.7), (-31.2, -2.0), (-38.4, -3.2)]
 FLOOR, FLOORS = 6.2, 2

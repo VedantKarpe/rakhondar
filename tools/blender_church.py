@@ -14,7 +14,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / 'sprites'; OUT.mkdir(exist_ok=True)
 ELEV = math.asin(0.5)
 S = 1.25 / math.cos(math.radians(45)) * 2      # px per metre across, at 2x the mock detail's 1.25
-ZX = (2.6 * 2) / (S * math.cos(ELEV))           # the mock draws heights 2.6 px/m: stretch z to match
+ZX = (2.6 * 2 * 1.7) / (S * math.cos(ELEV))           # the mock draws heights 2.6 px/m: stretch z to match
 RES = 1400
 
 

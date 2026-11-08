@@ -78,7 +78,8 @@ for jf in sorted((ROOT / 'sprites').glob('landmark_*.json')):
     lms.append({'name': base[9:], 'file': base, 'rots': rots, 'anchor': lm['anchor'], 'ppm': lm['px_per_m'], 'at': pos, 'deck': lm.get('deck_z', 0),
                 'cov': [c / TILE for c in cov['x'] + cov['y']]})
 out = {'tile': TILE, 'b': blds, 'r': roads, 'names': names, 'p': paths, 'water': polys(MR.water), 'mang': polys(MR.mangroves), 'marsh': polys(MR.marsh),
-       'eg': G, 'ew': gw, 'eh': gh, 'elev': elev, 'lm': lms}
+       'eg': G, 'ew': gw, 'eh': gh, 'elev': elev, 'lm': lms,
+       'places': [[nm, *tile(*MR.xy(la, lo))] for nm, la, lo, z in MR.LABELS]}   # neighbourhood names for the maps
 line = '/* REAL-DATA panjim */const REAL_PANJIM = ' + json.dumps(out, separators=(',', ':')) + ';'
 if '/* REAL-DATA panjim */' in src:
     src = re.sub(r'^/\* REAL-DATA panjim \*/.*$', lambda m: line, src, count=1, flags=re.M)
