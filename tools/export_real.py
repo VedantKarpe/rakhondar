@@ -46,6 +46,87 @@ for b in MR.ALL_BUILDINGS:
             if MR.inpoly(w['r'], cx, cy): church, temple = w['rel'] == 'christian', w['rel'] == 'hindu'
     r = b['r'][:-1] if b['r'][0] == b['r'][-1] else b['r']
     blds.append([flat(r), round(b['lv'], 1), 1 if church else 2 if temple else 0, round(b['area'])])
+# ---- guessed houses: OpenStreetMap misses most of Panjim's small houses, leaving its blocks as bare grass. Fill the
+# mapped residential, commercial and retail areas with plausible houses facing their streets, set back a few metres,
+# clear of every mapped building, road, path and water, and keep each one marked (the game can show which they are).
+import random
+rnd = random.Random(7)
+def zone_rings(pred):
+    out = []
+    for e in MR.els:
+        t = e.get('tags', {})
+        if e['type'] != 'node' and pred(t):
+            out += [r for r in MR.rings(e) if len(r) > 2]
+    return out
+ZONES = zone_rings(lambda t: t.get('landuse') in ('residential', 'commercial', 'retail'))
+NOGO = zone_rings(lambda t: t.get('amenity') in ('parking', 'school', 'college', 'hospital', 'grave_yard') or t.get('leisure') in ('park', 'pitch', 'garden', 'playground')
+                  or t.get('landuse') in ('grass', 'recreation_ground', 'cemetery', 'construction', 'farmland', 'orchard', 'military'))
+CELL = 25
+def grid():
+    return {}
+def put(gr, bb, item):
+    for i in range(int(bb[0] // CELL), int(bb[2] // CELL) + 1):
+        for j in range(int(bb[1] // CELL), int(bb[3] // CELL) + 1):
+            gr.setdefault((i, j), []).append(item)
+def near(gr, x, y, r=0):
+    seen = set()
+    for i in range(int((x - r) // CELL), int((x + r) // CELL) + 1):
+        for j in range(int((y - r) // CELL), int((y + r) // CELL) + 1):
+            for it in gr.get((i, j), []):
+                if id(it) not in seen: seen.add(id(it)); yield it
+bbox = lambda r: (min(p[0] for p in r), min(p[1] for p in r), max(p[0] for p in r), max(p[1] for p in r))
+zg, ng, bg, sg, wg = grid(), grid(), grid(), grid(), grid()
+for r in ZONES: put(zg, bbox(r), (r, bbox(r)))
+for r in NOGO: put(ng, bbox(r), (r, bbox(r)))
+for r in MR.water + MR.mangroves + MR.marsh: put(wg, bbox(r), (r, bbox(r)))
+for b in MR.ALL_BUILDINGS: bb = bbox(b['r']); put(bg, (bb[0] - 2, bb[1] - 2, bb[2] + 2, bb[3] + 2), (b['r'], bb))
+lines = [(r['p'], r['w'] / 2 + 1.2) for r in MR.roads] + [(p['p'], 1.6) for p in MR.ALL_PATHS]
+for pts, half in lines:
+    for a, b in zip(pts, pts[1:]):
+        put(sg, (min(a[0], b[0]) - half, min(a[1], b[1]) - half, max(a[0], b[0]) + half, max(a[1], b[1]) + half), (a, b, half))
+def segd(px, py, a, b):
+    dx, dy = b[0] - a[0], b[1] - a[1]; L2 = dx * dx + dy * dy or 1e-9
+    t = max(0, min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / L2)); return math.hypot(px - a[0] - dx * t, py - a[1] - dy * t)
+def inside_any(gr, x, y):
+    return any(bb[0] <= x <= bb[2] and bb[1] <= y <= bb[3] and MR.inpoly(r, x, y) for r, bb in near(gr, x, y))
+def clear(rect):
+    xs, ys = [p[0] for p in rect], [p[1] for p in rect]; cx, cy = sum(xs) / 4, sum(ys) / 4
+    probe = rect + [(cx, cy)] + [((rect[i][0] + rect[(i + 1) % 4][0]) / 2, (rect[i][1] + rect[(i + 1) % 4][1]) / 2) for i in range(4)]
+    if not all(inside_any(zg, x, y) for x, y in probe): return False
+    if any(inside_any(ng, x, y) or inside_any(wg, x, y) for x, y in probe): return False
+    for x, y in probe:
+        for a, b, half in near(sg, x, y, 2):
+            if segd(x, y, a, b) < half: return False
+    lo = (min(xs), min(ys), max(xs), max(ys))
+    for it in near(bg, cx, cy, 20):
+        bb = it[1]
+        if not (lo[2] < bb[0] - 1.5 or lo[0] > bb[2] + 1.5 or lo[3] < bb[1] - 1.5 or lo[1] > bb[3] + 1.5): return False
+    return True
+guessed = []
+for r in MR.roads:
+    if r['hw'] not in ('residential', 'living_street', 'unclassified', 'tertiary', 'secondary', 'service') or r['bridge']: continue
+    for side in (-1, 1):
+        rows = [0, 1] if rnd.random() < 0.7 else [0]
+        for row in rows:
+            s_off = rnd.uniform(0, 6)
+            for (px, py, ux, uy) in MR.along(r['p'], 1.0):
+                s_off -= 1.0
+                if s_off > 0: continue
+                wid, dep = rnd.uniform(7, 12), rnd.uniform(8, 12)
+                nx, ny = -uy * side, ux * side
+                back = r['w'] / 2 + rnd.uniform(2.0, 4.0) + row * (dep + rnd.uniform(2.5, 4.5))
+                cx, cy = px + nx * (back + dep / 2), py + ny * (back + dep / 2)
+                rect = [(cx + ux * sx * wid / 2 + nx * sy * dep / 2, cy + uy * sx * wid / 2 + ny * sy * dep / 2) for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+                s_off = wid + rnd.uniform(1.0, 3.0)
+                if clear(rect):
+                    lv = 1 if rnd.random() < 0.7 else 2
+                    guessed.append((rect, lv, wid * dep))
+                    bb = bbox(rect); put(bg, (bb[0] - 2, bb[1] - 2, bb[2] + 2, bb[3] + 2), (rect, bb))
+                else:
+                    s_off = 1.5
+for rect, lv, area in guessed:
+    if ok(rect): blds.append([flat(rect), lv, 0, round(area), 1])
+print(f'{len(guessed)} guessed houses in {len(ZONES)} mapped residential/commercial areas')
 HW_ = ['trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link', 'unclassified', 'residential', 'living_street', 'service']
 names = []
 roads = []
