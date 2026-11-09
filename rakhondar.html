@@ -1953,7 +1953,23 @@ function drawVehicle(g, c) {
   }
   drawCar(g, c.x, c.y, dx, dy, c.col, true);
 }
+// the Kadamba bus, modelled in Blender from a photo (tools/blender_bus.py): 24 headings, 288 px a frame
+const BUS = { img: null, ok: false, N: 24, cols: 5, F: 288, k: 0.62 };
+function busSheet() {
+  if (!BUS.img) { const im = new Image(); BUS.img = im; im.onload = () => { BUS.ok = true; }; im.src = 'sprites/bus_sheet.png'; }
+  return BUS.ok ? BUS.img : null;
+}
+function busFrame(c) {
+  const h = c.h !== undefined ? c.h : Math.atan2(c.dy, c.dx), T = 2 * Math.PI, a = (((h + ROT * Math.PI / 2) % T) + T) % T;
+  return Math.round(a / (T / BUS.N)) % BUS.N;
+}
 function drawBus(g, c, dx, dy) {
+  if (c.type === 'ktc' && realOn() && busSheet()) {
+    const i = busFrame(c), F = BUS.F, k = BUS.k, [sx, sy] = iso(c.x, c.y);
+    g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(sx + 3, sy + 3, 62, 24, 0, 0, 7); g.fill();
+    g.drawImage(BUS.img, (i % BUS.cols) * F, Math.floor(i / BUS.cols) * F, F, F, sx - F * k / 2, sy - F * k / 2, F * k, F * k);
+    return;
+  }
   const along = dx !== 0, hl = along ? 1.3 : 0.42, hw = along ? 0.42 : 1.3, ktc = c.type === 'ktc';
   const [sx, sy] = iso(c.x, c.y);
   g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(sx + 3, sy + 3, 56, 24, 0, 0, 7); g.fill();
@@ -2764,7 +2780,7 @@ function newGame() {
   bikes0 = props.filter(p => p.kind === 'bike').map(p => { map[p.y * W + p.x] = GR; return { x: p.x + 0.5, y: p.y + 0.5, hx: 1, hy: 0, fuel: 35 + rand() * 25, col: ['#d8302a', '#2f6fd0', '#f2c230', '#2a2a30'][Math.floor(rand() * 4)] }; });
   props = props.filter(p => p.kind !== 'bike');
   drawGround();
-  if (realOn()) potholes = realPotholes();
+  if (realOn()) { potholes = realPotholes(); cars0 = realTraffic(); }
   player = { x: START.x + 0.5, y: START.y + 0.5, r: 0.3, face: 1, moving: false, hx: 0.7071, hy: 0.7071 };
   spirit = { x: START.x, y: START.y, path: null, pi: 0 };
   demons = [];
@@ -2795,17 +2811,17 @@ function newGame() {
 /* ---------- the night's rescues ---------- */
 const ROLES = [
   { id: 'kid', name: 'Anvi', who: 'a little girl from the effigy crew', dest: 'home', look: { body: '#e0a33a', legs: '#c08a5a', hair: '#1a100a', h: 0.78 },
-    line: 'I went to fetch more crackers and now every lane looks the same. Can you take me home?' },
+    line: 'Aiyo, I went to fetch more crackers and now every lane looks the same, men! Can you take me home, baba?' },
   { id: 'aaji', name: 'Shantabai', who: 'an old woman with a basket of flowers', dest: 'temple', look: { body: '#8a2f5a', legs: '#8a2f5a', hair: '#cfcac0', h: 0.92, basket: true },
-    line: 'These flowers are for the early puja. My eyes are weak in the dark, baba. Will you walk me to {place}?' },
+    line: 'These flowers are for the early puja. My eyes are weak in the dark, baba. Will you walk me to {place}, no? Dev borem korum.' },
   { id: 'tio', name: 'Uncle Peter', who: 'a cheerful uncle outside the taverna', dest: 'bus', look: { body: '#3f6fa8', legs: '#3a3a44', hair: '#2a2018', h: 1, belly: true },
-    line: 'Missed the last bus, men! Just get me to the stop. The pilot will come.' },
+    line: 'Missed the last bus, men! Just get me to the stop only. The pilot will come, no?' },
   { id: 'tia', name: 'Tia Rosa', who: 'a woman holding a rosary', dest: 'chapel', look: { body: '#2f4f7a', legs: '#2f4f7a', hair: '#e0dcd2', h: 0.92 },
-    line: 'I lit candles for my husband, and now the lanes are full of strange shadows. Take me to {place}?' },
+    line: 'Aiyo, I lit candles for my husband, and now the lanes are full of strange shadows. Take me to {place}, baba?' },
   { id: 'fisher', name: 'Bostião', who: 'a fisherman with a net over his shoulder', dest: 'ferry', look: { body: '#c9733a', legs: '#5a4a3a', hair: '#1a100a', h: 1, net: true },
-    line: 'My canoe drifted off. If I reach {place}, the ferryman will take me across.' },
+    line: 'Aiyo, my canoe drifted off! If I reach {place}, the ferryman will take me across, he knows me.' },
   { id: 'boy', name: 'Rohan', who: 'a boy dragging a bamboo pole', dest: 'devli', look: { body: '#5aa05a', legs: '#3a4a6a', hair: '#1a100a', h: 0.8, pole: true },
-    line: 'My aaji says if you are ever lost, go to the Rakhondar’s devli. Do you know the way?' }
+    line: 'My aaji says if you are ever lost, go to the Rakhondar’s devli. Kuddem asa, do you know the way, no?' }
 ];
 const FAKE_ASKS = ['But keep that lamp away from me. The light hurts my eyes.', 'Let’s cut through the dark by the old well. It’s quicker, no?', 'Only, don’t take me past the holy places. I don’t like the bells.'];
 // what each villager is doing out tonight, chapter by chapter (Narkasur night uses ROLES as written)
@@ -2827,7 +2843,7 @@ const ROLE_LINES = {
     tio: { who: 'a soaked uncle holding his slippers', line: 'Missed the last bus, men! Get me to the stop before the road floods.' },
     tia: { line: 'The water is coming up the lanes. Take me to {place}, please, before it rises.' },
     fisher: { line: 'My canoe is full of rain. If I reach {place}, the ferryman will take me across.' },
-    boy: { who: 'a boy with a bamboo pole and a kopel', line: 'My aaji says if you are ever lost, go to the Rakhondar’s devli. Do you know the way?' }
+    boy: { who: 'a boy with a bamboo pole and a kopel', line: 'My aaji says if you are ever lost, go to the Rakhondar’s devli. Kuddem asa, do you know the way, no?' }
   }
 };
 const PLACE_DEFAULTS = { temple: 'the temple', chapel: 'the chapel', devli: 'the Rakhondar’s devli', bus: 'the bus stop', ferry: 'the ferry jetty' };
@@ -2901,7 +2917,7 @@ function accuse() {
   n.state = 'leave';
   S.log.push({ name: n.role.name, result: 'wronged' });
   SFX.play('sad');
-  whisper(`${n.role.name} stares at you. “How could you?” They walk off alone into the dark.`);
+  whisper(`${n.role.name} stares at you. “Kitem re? How could you say that?” They walk off alone into the dark.`);
   S.nextT = 3;
 }
 function reveal(unmasked) {
@@ -3122,7 +3138,7 @@ function update(dt) {
   if (realOn()) sp *= 0.6;   // a child in a real-sized city walks it more slowly
   if (!ride && !player.ride && player.moving && !player.creep) for (const ph of potholes) if (hyp(ph.x - player.x, ph.y - player.y) < (ph.r !== undefined ? ph.r : 0.3)) {
     sp *= 0.5;   // a pothole: you pick your feet up
-    if (!S.hints.pothole) { S.hints.pothole = 1; whisper('A pothole! Watch the road, and never ride fast over one.'); }
+    if (!S.hints.pothole) { S.hints.pothole = 1; whisper('Aiyo, a pothole! Goa roads, men. Watch your feet, and never ride fast over one.'); }
     break;
   }
   if (ride && ride.pushing) sp *= 0.55;   // pushing a dry bike: walking pace, and slower
@@ -3143,6 +3159,7 @@ function update(dt) {
   // traffic: waits for a child standing in front of it, queues behind the car ahead, slows over potholes, and
   // knocks down anyone who dashes out too close
   const busStop = exits.find(e => e.kind === 'bus');
+  if (realOn() && (S.recT = (S.recT || 0) - dt) <= 0) { S.recT = 1.2; recycleTraffic(); }
   for (const c of S.cars) {
     const mine = player.ride === c, big = c.type === 'ktc' || c.type === 'private';
     if (c.phT > 0) c.phT -= dt;
@@ -3163,7 +3180,7 @@ function update(dt) {
     driveCar(c, dt, go);
     if (c.v > 2 && !(c.phT > 0)) for (const ph of potholes) if (hyp(c.x - ph.x, c.y - ph.y) < (ph.r !== undefined ? ph.r : 0.3) + 0.1) {
       c.v *= 0.5; c.phT = 1.5;   // over a pothole: it slows right down
-      if (mine) { S.shake = 0.35; SFX.play('slam', c.x, c.y, 8); if (!S.hints.carPothole) { S.hints.carPothole = 1; whisper('Bump! The driver swears at the potholes.'); } }
+      if (mine) { S.shake = 0.35; SFX.play('slam', c.x, c.y, 8); if (!S.hints.carPothole) { S.hints.carPothole = 1; whisper('Bump! The driver mutters, “These potholes, men, every monsoon the same story!”'); } }
       break;
     }
     if (mine) {
@@ -3533,7 +3550,7 @@ function updateChapter(dt) {
   const chp = exits.find(e => e.kind === 'chapel');
   if (sacr && !S.key && hyp(sacr.x - px, sacr.y - py) < 1.3) {
     S.key = true; SFX.play('talk');
-    whisper(`Senhor Caetano, the sacristan, hands you the big iron key. “The door sticks, ${NAME}. Push it hard.”`);
+    whisper(`Senhor Caetano, the sacristan, hands you the big iron key. “The door sticks, ${NAME}. Push it hard, no?”`);
   }
   if (chp && chp.locked && S.key && hyp(chp.x - px, chp.y - py) < 1.8) {
     unlockExit(chp); SFX.play('bellNow', chp.x, chp.y, 40, 330);
@@ -3774,13 +3791,13 @@ function addPoints(n, why) {
 // the day's quests, the same for everyone on a given Goan date
 const QUESTS = {
   garbage: { giver: 'Shantabai', who: 'sweeping her yard', look: { body: '#8a2f5a', legs: '#8a2f5a', hair: '#cfcac0', h: 0.92, basket: true },
-    ask: 'Plastic everywhere after last night! Collect the bags along the lanes and put them in the bin by the road, baba.', thanks: 'Look how clean the vaddo is! The Rakhondar likes a clean village.', reward: 150 },
+    ask: 'Aiyo, plastic everywhere after last night! Collect the bags along the lanes and put them in the bin by the road, baba.', thanks: 'Look how clean the vaddo is! Dev borem korum, baba. The Rakhondar likes a clean village.', reward: 150 },
   poee: { giver: 'Mai', who: 'the baker, with a basket of hot poee', look: { body: '#c9733a', legs: '#c9733a', hair: '#1a100a', h: 0.95, basket: true },
-    ask: 'Take these hot poee to three houses before they go cold. I have marked the doors.', thanks: 'All delivered, and still warm! Here, one poee for you.', reward: 120 },
+    ask: 'Take these hot poee to three houses before they go cold, no? I have marked the doors.', thanks: 'All delivered, and still warm! Borem zalem, baba. Here, one poee for you.', reward: 120 },
   letters: { giver: 'Anton the postman', who: 'with a bag of letters', look: { body: '#c9b07a', legs: '#5a4a3a', hair: '#1a100a', h: 1 },
-    ask: 'Three letters, and no house numbers on any of them! Read me the descriptions, find each house and hand the letter in at its door.', thanks: 'Every letter at the right door! You know this vaddo better than I do.', reward: 160 },
+    ask: 'Three letters, and no house numbers on any of them, men! Read the descriptions, find each house and hand the letter in at its door.', thanks: 'Every letter at the right door! Shabaas, baba, you know this vaddo better than I do.', reward: 160 },
   hen: { giver: 'Tia Rosa', who: 'looking everywhere for her hen', look: { body: '#2f4f7a', legs: '#2f4f7a', hair: '#e0dcd2', h: 0.92 },
-    ask: 'My hen Pinky ran off again! She is somewhere in the fields. Catch her and bring her home, please.', thanks: 'Pinky! Naughty girl. Thank you, child, come for sorpotel on Sunday.', reward: 130 }
+    ask: 'Aiyo, my hen Pinky ran off again! She is somewhere in the fields. Catch her and bring her home, baba, please.', thanks: 'Pinky! Naughty girl. Dev borem korum, bhurgo, come for sorpotel on Sunday.', reward: 130 }
 };
 // quests come one after another all day: when one is done, someone else in the vaddo asks for help.
 // The order is the same for everyone on a given date; the first one each day builds the streak.
@@ -4044,11 +4061,11 @@ function drawMoon(ctx) {
 
 /* ---------- lifts and accidents: hop on a car, bus, rickshaw or pilot to get about faster; step out in front of one and it hurts ---------- */
 const LIFT = {
-  car:     { who: 'a neighbour’s car',     fare: 0, inside: true,  hail: 'A neighbour slows down. “Hop in, baba, I’m going that way.”', shout: 'Aiyo! Look before you run, baba!' },
-  ktc:     { who: 'the Kadamba bus',       fare: 2, inside: true,  hail: 'You squeeze onto the Kadamba bus. “Ticket, baba, ticket!”', shout: 'The bus driver hammers the horn. “Move!”' },
-  private: { who: 'a private bus',         fare: 2, inside: true,  hail: 'You jump on the private bus. The conductor bangs its side: “Chalo, chalo!”', shout: 'The racing bus screams its horn at you.' },
-  rick:    { who: 'an auto-rickshaw',      fare: 4, inside: true,  hail: 'The auto-wala grins. “Sit, baba. Where to?”', shout: 'The auto-wala yells: “Oye! Pagal ho kya?”' },
-  pilot:   { who: 'a motorcycle pilot',    fare: 3, inside: false, hail: 'The pilot kicks the stand. “Sit behind, baba. Hold tight!”', shout: 'The pilot swerves. “Arre baba!”' }
+  car:     { who: 'a neighbour’s car',     fare: 0, inside: true,  hail: 'A neighbour slows down. “Ya, baba, boso! I’m going that side only.”', shout: 'Aiyo! “Eyes open, baba, no? Look before you cross!”' },
+  ktc:     { who: 'the Kadamba bus',       fare: 2, inside: true,  hail: 'You squeeze onto the Kadamba bus. “Ticket, ticket! Pudhem ye, baba, pudhem ye!”', shout: 'The bus driver hammers the horn. “Sar, sar, baba! This is not a playground!”' },
+  private: { who: 'a private bus',         fare: 2, inside: true,  hail: 'You jump on the private bus. The conductor bangs its side: “Chol, chol! Panjim, Panjim, Mapusa, Mapusa!”', shout: 'The racing bus screams its horn. “Side, baba, side!”' },
+  rick:    { who: 'an auto-rickshaw',      fare: 4, inside: true,  hail: 'The auto-wala grins. “Boso, baba! Where to, no? Fixed rate, meter nahi.”', shout: 'The auto-wala yells: “Aiyo! Kitem re baba, eyes closed?”' },
+  pilot:   { who: 'a motorcycle pilot',    fare: 3, inside: false, hail: 'The pilot kicks the stand. “Boso, baba, boso! Hold tight, no?”', shout: 'The pilot swerves. “Aiyo baba! Kitem kortai?”' }
 };
 const liftOf = c => LIFT[c.type] || LIFT.car;
 const CAR_BOX = { car: [0.5, 0.3], ktc: [0.8, 0.34], private: [0.8, 0.34], rick: [0.4, 0.3], pilot: [0.36, 0.26] };   // half length and half width, in tiles
@@ -4066,7 +4083,7 @@ function hopOn(c) {
 function hopOff() {
   const c = player.ride; if (!c || c.stopReq) return;
   c.stopReq = true; c.hopT = 0;
-  whisper(c.type === 'pilot' || c.type === 'rick' ? '“Rok, rok, bhaiya!” The driver pulls over.' : 'You ask to be let off. The driver pulls over.');
+  whisper(c.type === 'pilot' || c.type === 'rick' ? '“Rav, rav, bhau, here only!” The driver pulls over.' : 'You call out, “Rav, kaka, here only!” The driver pulls over.');
 }
 function dropRider(c) {
   const n = hyp(c.dx, c.dy) || 1, lx = c.dy / n, ly = -c.dx / n, w = realOn() ? 0.55 : 0.9;   // the kerb: Goa drives on the left
@@ -4076,7 +4093,7 @@ function dropRider(c) {
   player.ride = null; c.rider = false; c.stopReq = false; c.haltT = 0.9;
   player.x = x; player.y = y; realFree(player);
   S.inv = Math.max(S.inv, 0.8);
-  whisper(c.type === 'pilot' || c.type === 'rick' ? 'You hop off. “Dhanyavad, bhaiya!”' : 'You hop off. “Thank you, kaka!”');
+  whisper(c.type === 'pilot' || c.type === 'rick' ? 'You hop off. “Dev borem korum, bhau!”' : 'You hop off. “Dev borem korum, kaka!”');
 }
 // the child against a car's body: a car that is standing is a wall; one that's moving hits
 function carVsChild(c) {
@@ -4098,7 +4115,46 @@ function carCrash(c) {
   if (bike) dismount(true);
   player.stunT = 0.9;
   hurt(c.x, c.y);
-  if (S.mode === 'play' && S.hearts > 0) whisper(`${liftOf(c).shout} ${bike ? 'The bike is thrown down and so are you.' : 'You are knocked down.'} Stay off the road when cars come.`);
+  if (S.mode === 'play' && S.hearts > 0) whisper(`${liftOf(c).shout} ${bike ? 'The bike is thrown down and so are you.' : 'You are knocked down.'} Aiyo, stay off the road when the vehicles come, baba!`);
+}
+// the real city's traffic: ~100 vehicles on the mapped streets (more on the big roads, mostly motorcycle pilots and
+// cars), a third of them starting close to the child; recycleTraffic() keeps some near them as they move about
+const TRAFFIC = [['car', 34], ['pilot', 36], ['rick', 16], ['private', 8], ['ktc', 4]];
+const PRIV_BUSES = [['SAO JOSE', '#d8302a'], ['SHREE DATTA', '#2f6fd0'], ['ROSARY', '#2fa08a'], ['LAXMI', '#e0a33a'], ['MILAGRES', '#6a3f8a']];
+function wayPoint(w, s) {
+  let k = 0; while (k < w.len.length - 1 && w.len[k] < s) k++;
+  const a = w.p[k], b = w.p[k + 1], s0 = k ? w.len[k - 1] : 0, t = Math.max(0, Math.min(1, (s - s0) / ((w.len[k] - s0) || 1e-6)));
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+function realTraffic() {
+  const N = realDriveNet(), rr = rng((W * 31 + H * 7919 + 5) | 0), out = [], cols = ['#e8e4dc', '#b8322a', '#2f4f7a', '#c9c9c9', '#3a6a4a', '#d9a62e', '#7a2f5a'];
+  const wts = N.ways.map(w => (w.w >= 12 ? 3 : w.w >= 8 ? 2 : 1) * w.len[w.len.length - 1]), tot = wts.reduce((a, b) => a + b, 0);
+  const pickWay = () => { let t = rr() * tot; for (let i = 0; i < wts.length; i++) { t -= wts[i]; if (t <= 0) return i; } return 0; };
+  const inMap = q => q[0] > 3 && q[1] > 3 && q[0] < W - 3 && q[1] < H - 3;
+  for (const [type, n] of TRAFFIC) for (let k = 0; k < n; k++) {
+    let wi = 0, s = 0, q = [0, 0];
+    for (let tries = 0; tries < 80; tries++) {
+      wi = pickWay(); const w = N.ways[wi]; s = rr() * w.len[w.len.length - 1]; q = wayPoint(w, s);
+      if (inMap(q) && hyp(q[0] - START.x, q[1] - START.y) > 6 && (k >= n * 0.33 || hyp(q[0] - START.x, q[1] - START.y) < 38)) break;
+    }
+    const pv = PRIV_BUSES[Math.floor(rr() * PRIV_BUSES.length)];
+    out.push({ x: q[0], y: q[1], dx: 1, dy: 0, tile: -1, type, col: type === 'private' ? pv[1] : type === 'car' ? cols[Math.floor(rr() * cols.length)] : '#e8e4dc', name: pv[0], rd: wi, s, dir: rr() < 0.5 ? 1 : -1, v: 2 + rr() * 2 });
+  }
+  return out;
+}
+// vehicles that have fallen far behind are put back on a street 20-40 tiles from the child, out of sight but close enough to arrive
+function recycleTraffic() {
+  const N = realDriveNet(); let moved = 0;
+  for (const c of S.cars) {
+    if (moved >= 3) break;
+    if (player.ride === c || c.haltT > 0 || hyp(c.x - player.x, c.y - player.y) < 60) continue;
+    for (let tries = 0; tries < 50; tries++) {
+      const wi = Math.floor(Math.random() * N.ways.length), w = N.ways[wi], s = Math.random() * w.len[w.len.length - 1], q = wayPoint(w, s), d = hyp(q[0] - player.x, q[1] - player.y);
+      if (d < 20 || d > 40 || q[0] < 3 || q[1] < 3 || q[0] > W - 3 || q[1] > H - 3) continue;
+      c.rd = wi; c.s = s; c.dir = Math.random() < 0.5 ? 1 : -1; c.lastK = undefined; c.x = q[0]; c.y = q[1]; c.v = 3; c.phT = 0; moved++;
+      break;
+    }
+  }
 }
 // potholes along the real streets: in clusters, more on the small roads, never near where you start
 function realPotholes() {
@@ -4164,7 +4220,7 @@ function updateBike(dt) {
   if (pu && b.fuel < 50) {
     b.fuel = 60; b.pushing = false; SFX.play('chime', pu.x, pu.y);
     if (CH.life) addPoints(-15, 'petrol');
-    whisper(`${pu.name}: the attendant fills the tank. “Full, baba. Cash or GPay?” Back on the road.`);
+    whisper(`${pu.name}: the attendant fills the tank. “Full, baba. Cash or GPay, no?” Back on the road.`);
   }
 }
 function spawnGuard() {
@@ -4270,14 +4326,15 @@ function resize() {
   vw = cv.clientWidth || innerWidth || 1; vh = cv.clientHeight || innerHeight || 1;   // a pane still opening can measure 0
   cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr);
   dark.width = cv.width; dark.height = cv.height;
-  // close in: about 7 tiles across on a phone, 10 on a desktop, times the player's own zoom
-  sc = Math.max(0.6, Math.min(2.6, vw / (2 * HW * (vw < 700 ? 7 : 10)) * zoomMul));
+  // the default zoom is one fixed size on every screen (the child about 54 px tall, as in the reference screenshot),
+  // times the player's own zoom; it no longer shrinks on a smaller window
+  sc = Math.max(0.5, Math.min(3.6, 2.15 * zoomMul));
 }
 let zoomMul = 1;
-try { zoomMul = Math.max(0.6, Math.min(1.6, +localStorage.getItem('rk-zoom') || 1)); } catch (e) {}
+try { zoomMul = Math.max(0.35, Math.min(1.6, +localStorage.getItem('rk-zoom2') || 1)); } catch (e) {}   // rk-zoom2: older saved zooms were for the old default
 function zoomBy(f) {
-  zoomMul = Math.max(0.6, Math.min(1.6, zoomMul * f));
-  try { localStorage.setItem('rk-zoom', zoomMul); } catch (e) {}
+  zoomMul = Math.max(0.35, Math.min(1.6, zoomMul * f));
+  try { localStorage.setItem('rk-zoom2', zoomMul); } catch (e) {}
   resize();
 }
 addEventListener('resize', resize);
@@ -5447,7 +5504,7 @@ function updateWalkers(dt) {
       if (w.hornT <= 0) { w.hornT = 5 + Math.random() * 6; SFX.play('poderHorn', w.x, w.y, 22); }
       if (hyp(w.x - player.x, w.y - player.y) < 1.6 && S.poderDay !== S.dayIdx) {
         S.poderDay = S.dayIdx; w.pause = 4; SFX.play('poderHorn', w.x, w.y, 22); addPoints(10, 'pao');
-        whisper(`${w.name} squeezes his horn and holds out a warm pao from the basket. “Fresh, baba! Take, take.”`);
+        whisper(`${w.name} squeezes his horn and holds out a warm pao from the basket. “Fresh, fresh, baba! Ghe, ghe, borem asa!”`);
       }
     }
     if ((w.state !== 'walk' && w.state !== 'poder') || w.alpha <= 0) continue;
@@ -5472,18 +5529,18 @@ const nearWalker = () => S && CH.life && (S.walkers || []).find(w => w.alpha > 0
 const COMPASS = ['east', 'north-east', 'north', 'north-west', 'west', 'south-west', 'south', 'south-east'];
 function directionsTo(p, from) {
   const dx = p.x - from.x, dy = p.y - from.y, d = Math.round(hyp(dx, dy) * 12 / 10) * 10;
-  if (d < 20) return 'It’s right here, just look around you!';
+  if (d < 20) return 'Aiyo, it’s right here only, look around you, baba!';
   const dir = COMPASS[(Math.round(Math.atan2(-dy, dx) * 180 / Math.PI / 45) + 8) % 8];
   // a landmark on the way, if one lies roughly between here and there
   const marks = exits.map(e => ({ x: e.x, y: e.y, what: PLACE_NAMES[e.kind] })).filter(m => m.what).concat(sights.map(sg => ({ x: sg.x + 0.5, y: sg.y + 0.5, what: sg.name })));
   const via = marks.filter(m => { const t = ((m.x - from.x) * dx + (m.y - from.y) * dy) / (dx * dx + dy * dy); const off = hyp(from.x + dx * t - m.x, from.y + dy * t - m.y); return t > 0.2 && t < 0.85 && off < 5 && m.what !== p.what; })[0];
   const lane = p.house ? (describeHouse(p.house).match(/on a lane running [a-z ]+/) || [''])[0] : '';
-  return `Go about ${d} m ${dir}${via ? `, past ${via.what}` : ''}.${lane ? ` It’s ${lane}.` : ''}`;
+  return `Go about ${d} m ${dir}${via ? `, past ${via.what}` : ''}, straight like that.${lane ? ` It’s ${lane}.` : ''} Susegad, no hurry!`;
 }
 function askWay(w) {
   if (!w) return;
   S.mode = 'paused'; w.pause = 6; w.moving = false;
-  const greet = ['Haan, tell me', 'Yes, baba?', 'Lost, are you?', 'Bolo, where to?'][Math.floor(Math.random() * 4)];
+  const greet = ['Kitem, baba?', 'Ho, tell me, no?', 'Lost, are you, re?', 'Bol, bol, where to?', 'Kosso asa, baba?', 'Aiyo, what happened, men?'][Math.floor(Math.random() * 6)];
   const opts = [];
   const q = S.quest;
   if (q && q.kind === 'letters' && q.state === 'on') for (const it of q.items) if (!it.got) opts.push({ what: `the ${it.house.family} house`, x: it.x, y: it.y, house: it.house });
