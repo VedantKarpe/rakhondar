@@ -1174,7 +1174,7 @@ function diamond(g, x, y) {
 // The ground is painted in square pieces of CHUNK px, each the first time it comes into view, and kept
 // (the most recently used few dozen) until the view turns or the village changes. A whole city's ground
 // would be too big for one canvas on a phone. Each tile's speckles come from its own seed, so pieces join up.
-const CHUNK = 1024;
+const CHUNK = 512;
 let groundChunks = new Map(), groundSeed = 1;
 function drawGround() { groundChunks = new Map(); groundSeed = (Math.random() * 1e9) | 0; miniFor = null; }
 const tileRng = (x, y, k) => rng((Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(k + 1, 83492791) ^ groundSeed) | 0);
@@ -1186,12 +1186,12 @@ function groundChunk(ci, cj) {
   const g = c.getContext('2d');
   g.translate(-ci * CHUNK, -cj * CHUNK);
   const x0 = ci * CHUNK - 90, x1 = (ci + 1) * CHUNK + 90, y0 = cj * CHUNK - 70, y1 = (cj + 1) * CHUNK + 70;
-  if (realOn()) { paintReal(g, x0 + 90, y0 + 70, x1 - 90, y1 - 70); groundChunks.set(key, c); while (groundChunks.size > 30) groundChunks.delete(groundChunks.keys().next().value); return c; }
+  if (realOn()) { paintReal(g, x0 + 90, y0 + 70, x1 - 90, y1 - 70); groundChunks.set(key, c); while (groundChunks.size > 90) groundChunks.delete(groundChunks.keys().next().value); return c; }
   const tiles = [];
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const [sx, sy] = iso(x + 0.5, y + 0.5); if (sx > x0 && sx < x1 && sy > y0 && sy < y1) tiles.push(x, y); }
   paintGround(g, tiles, (x, y) => { const [sx, sy] = iso(x, y); return sx > x0 && sx < x1 && sy > y0 && sy < y1; });
   groundChunks.set(key, c);
-  while (groundChunks.size > 20) groundChunks.delete(groundChunks.keys().next().value);
+  while (groundChunks.size > 60) groundChunks.delete(groundChunks.keys().next().value);
   return c;
 }
 function paintGround(g, tiles, near) {
@@ -2262,26 +2262,33 @@ function realSprite(b) {
   if (!b.spr) b.spr = {};
   return b.spr[k] || (b.spr[k] = bakeOn(b.bb[0], b.bb[1], b.bb[2], b.bb[3], b.top + 40, gg => drawRealBuilding(gg, b)));
 }
-// While nothing else is happening, get the two neighbouring views ready around the child, a little at a time:
-// the buildings' drawings first, then the ground pieces, so X and Z turn without a stall.
-function prewarmTurns() {
+// Get ahead of the child, a little at a time and only when a frame has time to spare: this side of the view first (the
+// buildings' drawings within 22 tiles and the ground a screen and more around, so walking or riding never meets an undrawn
+// building or ground piece), then the two sides the view can turn to, so X and Z turn without a stall.
+function prewarmTurns(budget = 6) {
   if (!S || !player || turnAnim || !realOn() || document.hidden) return;
   const R = realPrep(), keep = ROT, keepOX = OX, t0 = performance.now();
   try {
-    for (const d of [1, -1]) {
+    for (const d of [0, 1, -1]) {
       ROT = (keep + d + 4) % 4; OX = (ROT % 2 ? W : H) * HW;
+      const rad = d ? 14 : 22;
       for (const b of R.b) {
-        if (Math.abs(b.cx - player.x) > 13 || Math.abs(b.cy - player.y) > 13) continue;
-        if (!(b.spr && b.spr[ROT + (showGuessed ? 4 : 0)])) { realSprite(b); if (performance.now() - t0 > 8) return; }
+        if (Math.abs(b.cx - player.x) > rad || Math.abs(b.cy - player.y) > rad) continue;
+        if (!(b.spr && b.spr[ROT + (showGuessed ? 4 : 0)])) { realSprite(b); if (performance.now() - t0 > budget) return; }
       }
-      const [px, py] = iso(player.x, player.y), hw = vw / sc / 2 + 60, hh = vh / sc / 2 + 60;
+      const [px, py] = iso(player.x, player.y), m = d ? 60 : 300, hw = vw / sc / 2 + m, hh = vh / sc / 2 + m;
       for (let cj = Math.max(0, Math.floor((py - hh) / CHUNK)); cj <= Math.floor((py + hh) / CHUNK); cj++)
         for (let ci = Math.max(0, Math.floor((px - hw) / CHUNK)); ci <= Math.floor((px + hw) / CHUNK); ci++)
           if (!groundChunks.has(ROT + ':' + ci + ',' + cj)) { groundChunk(ci, cj); return; }
     }
   } finally { ROT = keep; OX = keepOX; }
 }
-setInterval(prewarmTurns, 150);
+let cleanN = 0;
+function cleanSprites() {   // a building's drawings (four sides) 40+ tiles from the child go; they are rebuilt if the child comes back
+  if (!S || !player || !realOn()) return;
+  for (const b of realPrep().b) if (b.spr && (Math.abs(b.cx - player.x) > 40 || Math.abs(b.cy - player.y) > 40)) b.spr = null;
+}
+setInterval(() => { prewarmTurns(8); if (++cleanN % 20 === 0) cleanSprites(); }, 250);
 function addRealStatics(add) {
   const R = realPrep(), covers = [];
   for (const lm of R.lm) {
@@ -4327,8 +4334,9 @@ function renderHud() {
 }
 
 /* ---------- drawing ---------- */
+let renderScale = 1, frameEma = 16, slowMs = 0, fastMs = 0;   // renderScale: the fraction of the screen's own resolution the game draws at
 function resize() {
-  dpr = Math.min(2, devicePixelRatio || 1);
+  dpr = Math.min(2, devicePixelRatio || 1) * renderScale;
   vw = cv.clientWidth || innerWidth || 1; vh = cv.clientHeight || innerHeight || 1;   // a pane still opening can measure 0
   cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr);
   dark.width = cv.width; dark.height = cv.height;
@@ -5616,6 +5624,9 @@ function drawFog(inView) {
   if (realOn()) {
     // the fog as one smooth sheet: the known-map image (a px a tile) laid on the ground with the view's own
     // transform and smoothed, once on the ground and once at roof height so tall buildings stay hidden too
+    let unseen = false;
+    for (let y = VIEWT[1]; y <= VIEWT[3] && !unseen; y++) for (let x = VIEWT[0]; x <= VIEWT[2]; x++) if (fog[y * W + x] < 250) { unseen = true; break; }
+    if (!unseen) return;
     if (miniFogDirty || miniFog.width !== W) bakeMiniFog(true);
     const o = iso(0, 0), ex = iso(1, 0), ey = iso(0, 1);
     for (const lift of [0, 55]) {
@@ -5922,11 +5933,19 @@ function travelTo(v) {
 
 /* ---------- loop ---------- */
 let last = performance.now(), miniT = 0, fogSaveT = 3;
+let lastNow = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (player && !(isFinite(player.x) && isFinite(player.y))) { player.x = START.x + 0.5; player.y = START.y + 0.5; }   // never lose the child to a bad number
   else if (player) { player.x = Math.max(0.6, Math.min(W - 0.6, player.x)); player.y = Math.max(0.6, Math.min(H - 0.6, player.y)); }   // nor off the map
+  const raw = Math.min(100, now - lastNow); lastNow = now;
   update(dt); render(); if (turnAnim) compositeTurn(dt); SFX.tick(dt);
+  if (!document.hidden && raw > 0) {
+    frameEma = frameEma * 0.92 + raw * 0.08;
+    if (frameEma > 27 && renderScale > 0.55) { slowMs += raw; if (slowMs > 1500) { renderScale = Math.max(0.55, renderScale * 0.85); slowMs = 0; frameEma = 20; resize(); } } else slowMs = 0;
+    if (frameEma < 15 && renderScale < 1) { fastMs += raw; if (fastMs > 8000) { renderScale = Math.min(1, renderScale * 1.12); fastMs = 0; resize(); } } else fastMs = 0;
+    if (raw < 20) prewarmTurns(4);
+  }
   if ((miniT -= dt) <= 0) { miniT = 0.12; drawMini(); }
   if ((fogSaveT -= dt) <= 0) { fogSaveT = 3; saveFog(); }
   requestAnimationFrame(frame);
