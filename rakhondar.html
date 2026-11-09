@@ -1927,7 +1927,7 @@ function drawBillboard(g, p) {
 // in the city; the old hand-drawn one stays for the villages and when the sheet isn't there (the single-file artifact)
 const PILOT = { img: null, ok: false, N: 16, F: 224, k: 0.56 };
 function pilotSheet() {
-  if (!PILOT.img) { const im = new Image(); PILOT.img = im; im.onload = () => { PILOT.ok = true; }; im.src = 'sprites/pilot_sheet.png'; }
+  if (!PILOT.img) { const im = new Image(); PILOT.img = im; im.onload = () => { PILOT.ok = true; }; im.src = spriteUrl('sprites/pilot_sheet.png'); }
   return PILOT.ok ? PILOT.img : null;
 }
 function pilotFrame(c) {   // which frame: the heading, turned with the view, in sixteenths of a turn
@@ -1956,7 +1956,7 @@ function drawVehicle(g, c) {
 // the Kadamba bus, modelled in Blender from a photo (tools/blender_bus.py): 24 headings, 288 px a frame
 const BUS = { img: null, ok: false, N: 24, cols: 5, F: 288, k: 0.62 };
 function busSheet() {
-  if (!BUS.img) { const im = new Image(); BUS.img = im; im.onload = () => { BUS.ok = true; }; im.src = 'sprites/bus_sheet.png'; }
+  if (!BUS.img) { const im = new Image(); BUS.img = im; im.onload = () => { BUS.ok = true; }; im.src = spriteUrl('sprites/bus_sheet.png'); }
   return BUS.ok ? BUS.img : null;
 }
 function busFrame(c) {
@@ -2057,6 +2057,10 @@ let REAL = null;
 let showGuessed = false;   // H: mark the houses the map doesn't have, which the game has guessed
 const RZ = HW / 20 * 2.08 * 1.7;               // px of height per metre: the mock's stretch, raised so storeys read tall
 const LM_IMG = {};
+// tools/build_artifact.py puts the sprites into the page as data (window.SPRITE_DATA), each landmark cropped and shrunk
+// with its offset and scale; served from a folder, they load as files at full size
+const spriteInfo = p => (window.SPRITE_DATA && window.SPRITE_DATA[p]) || null;
+const spriteUrl = p => { const d = spriteInfo(p); return d ? d.u : p; };
 function realOn() { return CITY && VILLAGE === VILLAGES.panjim && typeof REAL_PANJIM !== 'undefined'; }
 function realPrep() {
   if (REAL) return REAL;
@@ -2246,8 +2250,9 @@ function realLandmark(lm) {
   const key = lm.file + ROT;
   if (!(key in LM_IMG)) {
     const im = new Image(); LM_IMG[key] = null;
-    im.onload = () => { LM_IMG[key] = im; if (S && realOn()) buildStatics(); };
-    im.src = `sprites/${lm.file}${ROT ? '_r' + ROT : ''}.png`;
+    const path = `sprites/${lm.file}${ROT ? '_r' + ROT : ''}.png`;
+    im.onload = () => { im.rkMeta = spriteInfo(path); LM_IMG[key] = im; if (S && realOn()) buildStatics(); };
+    im.src = spriteUrl(path);
   }
   return LM_IMG[key];
 }
@@ -2285,7 +2290,8 @@ function addRealStatics(add) {
     const k = (HW / 20) / (lm.ppm * Math.SQRT1_2);
     lm.at.forEach(([x, y], i) => {
       const [sx, sy] = P(x, y, 0);
-      add(x, y, x + y, g => g.drawImage(im, sx - lm.anchor[0] * k, sy - lm.anchor[1] * k, im.width * k, im.height * k));
+      const m = im.rkMeta, f = m ? m.f : 1, ox = m ? m.x : 0, oy = m ? m.y : 0;   // cropped and shrunk in the single-file build
+      add(x, y, x + y, g => g.drawImage(im, sx - lm.anchor[0] * k + ox * k, sy - lm.anchor[1] * k + oy * k, im.width / f * k, im.height / f * k));
       if (i === 0) covers.push([x + lm.cov[0], x + lm.cov[1], y + lm.cov[2], y + lm.cov[3]]);
     });
   }
@@ -2527,7 +2533,7 @@ function driveReal(c, dt, go) {
   }
   let r = N.ways[c.rd], L = r.len[r.len.length - 1];
   const goal = c.rider ? objective() : null;
-  const top = ({ ktc: 4, private: 6, rick: 4.2, pilot: 5.5 }[c.type] || 5) * (c.phT > 0 ? 0.6 : 1);
+  const top = ({ ktc: 2.4, private: 3.6, rick: 2.5, pilot: 3.3 }[c.type] || 3) * (c.phT > 0 ? 0.6 : 1) * (c.rider ? 1.8 : 1);
   const switchTo = cd => { const w = N.ways[cd[0]]; c.rd = cd[0]; r = w; L = w.len[w.len.length - 1]; c.dir = cd[2]; c.s = cd[1] ? w.len[cd[1] - 1] : 0; c.lastK = undefined; };
   // at vertex v of this street, other streets may meet it: turn onto one (riders: the one that gets nearest the goal)
   const junction = (v, straight) => {
@@ -3144,7 +3150,7 @@ function update(dt) {
   if (ride && ride.pushing) sp *= 0.55;   // pushing a dry bike: walking pace, and slower
   else if (ride) {
     const surf = [ROAD, LANE, PLAZA, COURT, JETTY].includes(pTile) ? 1 : pTile === PAD ? 0.3 : 0.55;
-    const target = player.moving && ride.fuel > 0 ? 9 * surf * mag * (1 - 0.6 * wet) : 0;
+    const target = player.moving && ride.fuel > 0 ? 6 * surf * mag * (1 - 0.6 * wet) : 0;   // a bike of your own: about 2.3x walking
     ride.v += (target - ride.v) * Math.min(1, dt * (target > ride.v ? 1.8 : 2.6));
     if (!player.moving) { ix = player.hx; iy = player.hy; }
     else { const k = hyp(ix, iy) || 1; ix /= k; iy /= k; }
