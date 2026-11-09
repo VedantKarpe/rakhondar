@@ -81,6 +81,11 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   border: 0; border-radius: 999px; padding: 12px 18px; cursor: pointer;
 }
 #rideBtn kbd { font: inherit; font-weight: 400; opacity: 0.7; margin-left: 4px; }
+#liftBtn {
+  position: absolute; bottom: 72px; right: calc(max(16px, env(safe-area-inset-right, 0px)) + 150px);
+  font: 600 15px var(--body); color: var(--night); background: var(--spirit); border: 0; border-radius: 999px; padding: 10px 16px; cursor: pointer;
+}
+#liftBtn kbd { font: inherit; font-weight: 400; opacity: 0.7; margin-left: 4px; }
 #callBtn {
   position: absolute; bottom: 20px; right: max(16px, env(safe-area-inset-right, 0px));
   font: 600 15px var(--body); color: var(--night); background: var(--spirit);
@@ -189,6 +194,7 @@ button:focus-visible { outline: 2px solid var(--lamp); outline-offset: 3px; }
   <button id="callBtn" type="button">Call Rakhondar <kbd>Space</kbd></button>
   <button id="rideBtn" type="button" hidden>Ride <kbd>B</kbd></button>
   <button id="askBtn" type="button" hidden>Ask the way <kbd>E</kbd></button>
+  <button id="liftBtn" type="button" hidden>Hop on <kbd>E</kbd></button>
   <div class="talk" id="talk" hidden>
     <div class="talk-card">
       <span class="eyebrow" id="talkWho"></span>
@@ -2471,44 +2477,64 @@ const carDir = c => c.h === undefined ? [c.dx, c.dy] : [Math.cos(c.h), Math.sin(
 function realDriveNet() {
   const R = realPrep();
   if (R.net) return R.net;
-  const ways = R.roads.filter(r => r.w >= 5 && r.p.length > 1), ends = new Map(), key = (x, y) => Math.round(x * 20) + ',' + Math.round(y * 20);
-  ways.forEach((r, i) => { r.len = []; let s = 0; for (let k = 1; k < r.p.length; k++) { s += hyp(r.p[k][0] - r.p[k - 1][0], r.p[k][1] - r.p[k - 1][1]); r.len.push(s); }
-    for (const [k, e] of [[0, 0], [r.p.length - 1, 1]]) { const kk = key(...r.p[k]); if (!ends.has(kk)) ends.set(kk, []); ends.get(kk).push([i, e]); } });
-  return (R.net = { ways, ends, key });
+  const ways = R.roads.filter(r => r.w >= 5 && r.p.length > 1), nodes = new Map(), key = (x, y) => Math.round(x * 20) + ',' + Math.round(y * 20);
+  ways.forEach((r, i) => {
+    r.len = []; let s = 0;
+    for (let k = 1; k < r.p.length; k++) { s += hyp(r.p[k][0] - r.p[k - 1][0], r.p[k][1] - r.p[k - 1][1]); r.len.push(s); }
+    r.p.forEach((q, k) => { const kk = key(q[0], q[1]); if (!nodes.has(kk)) nodes.set(kk, []); nodes.get(kk).push([i, k]); });
+  });
+  return (R.net = { ways, nodes, key });
 }
 function driveReal(c, dt, go) {
   const N = realDriveNet();
   if (c.rd === undefined) {   // join the nearest street
     let best = 1e9;
     N.ways.forEach((r, i) => r.p.forEach((q, k) => { const d = hyp(q[0] - c.x, q[1] - c.y); if (d < best) { best = d; c.rd = i; c.s = k ? r.len[k - 1] : 0; } }));
-    c.dir = Math.random() < 0.5 ? 1 : -1; c.v = 0;
+    c.dir = Math.random() < 0.5 ? 1 : -1; c.v = 0; c.lastK = undefined;
   }
-  let r = N.ways[c.rd];
-  const L = r.len[r.len.length - 1];
-  const top = ({ ktc: 1.5, private: 2.4, rick: 1.4, pilot: 2.1 }[c.type] || 1.8);
-  c.v += ((go ? top : 0) - c.v) * Math.min(1, dt * (go ? 1.2 : 4));
+  let r = N.ways[c.rd], L = r.len[r.len.length - 1];
+  const goal = c.rider ? objective() : null;
+  const top = ({ ktc: 4, private: 6, rick: 4.2, pilot: 5.5 }[c.type] || 5) * (c.phT > 0 ? 0.6 : 1);
+  const switchTo = cd => { const w = N.ways[cd[0]]; c.rd = cd[0]; r = w; L = w.len[w.len.length - 1]; c.dir = cd[2]; c.s = cd[1] ? w.len[cd[1] - 1] : 0; c.lastK = undefined; };
+  // at vertex v of this street, other streets may meet it: turn onto one (riders: the one that gets nearest the goal)
+  const junction = (v, straight) => {
+    const here = N.nodes.get(N.key(r.p[v][0], r.p[v][1])) || [], cands = [];
+    for (const [wi, vi] of here) { if (wi === c.rd) continue; const w = N.ways[wi]; if (vi < w.p.length - 1) cands.push([wi, vi, 1]); if (vi > 0) cands.push([wi, vi, -1]); }
+    if (!cands.length) return false;
+    if (goal) {
+      const ahead = (wi, vi, dir) => { const w = N.ways[wi]; let m = 1e9; for (let q = vi; q >= 0 && q < w.p.length; q += dir) m = Math.min(m, hyp(w.p[q][0] - goal.x, w.p[q][1] - goal.y)); return m; };
+      let best = null, bd = straight ? ahead(c.rd, v, c.dir) - 0.5 : 1e9;   // keep straight on unless a turn gets clearly nearer
+      for (const cd of cands) { const d = ahead(cd[0], cd[1], cd[2]); if (d < bd) { bd = d; best = cd; } }
+      if (!best) return false;
+      switchTo(best); return true;
+    }
+    if (straight && Math.random() > 0.3) return false;
+    switchTo(cands[Math.floor(Math.random() * cands.length)]); return true;
+  };
   c.s += c.v * dt * c.dir;
-  if (c.s < 0 || c.s > L) {   // the end of this way: carry on along a street that meets it, mostly not straight back
-    const endPt = c.s > L ? r.p[r.p.length - 1] : r.p[0], here = N.ends.get(N.key(...endPt)) || [];
-    const opts = here.filter(([i]) => i !== c.rd);
-    if (opts.length) {
-      const [i, e] = opts[Math.floor(Math.random() * opts.length)], over = c.s > L ? c.s - L : -c.s;
-      c.rd = i; r = N.ways[i]; const L2 = r.len[r.len.length - 1];
-      c.dir = e === 0 ? 1 : -1; c.s = e === 0 ? Math.min(L2, over) : Math.max(0, L2 - over);
-    } else { c.dir = -c.dir; c.s = Math.max(0, Math.min(L, c.s)); }
+  if (c.s < 0 || c.s > L) {
+    if (!junction(c.s > L ? r.p.length - 1 : 0, false)) { c.dir = -c.dir; c.s = Math.max(0, Math.min(L, c.s)); }
   }
+  const seg = () => { let k = 0; while (k < r.len.length - 1 && r.len[k] < c.s) k++; return k; };
+  let k = seg();
+  if (c.lastK !== undefined && k !== c.lastK && junction(c.dir > 0 ? k : k + 1, true)) k = seg();
+  c.lastK = k;
   // the point at distance s along the way, and the way's direction there
-  let k = 0; while (k < r.len.length - 1 && r.len[k] < c.s) k++;
   const a = r.p[k], b = r.p[k + 1], s0 = k ? r.len[k - 1] : 0, sl = r.len[k] - s0 || 1e-6, t = Math.max(0, Math.min(1, (c.s - s0) / sl));
-  let dx = (b[0] - a[0]) / sl * c.dir, dy = (b[1] - a[1]) / sl * c.dir;
+  const dx = (b[0] - a[0]) / sl * c.dir, dy = (b[1] - a[1]) / sl * c.dir;
   const lane = r.w / 4 / 20;   // keep left, as Goa drives
   const px = a[0] + (b[0] - a[0]) * t + dy * lane, py = a[1] + (b[1] - a[1]) * t - dx * lane;
+  if (px < 1.5 || py < 1.5 || px > W - 1.5 || py > H - 1.5) { c.dir = -c.dir; c.s = Math.max(0, Math.min(L, c.s + c.v * dt * c.dir * 3)); c.lastK = undefined; c.v *= 0.7; }   // the map's edge: turn back
   const want = Math.atan2(dy, dx);
   if (c.h === undefined) c.h = want;
   let dh = want - c.h; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
-  c.h += dh * Math.min(1, dt * 5);
-  // ease toward the lane point rather than jumping, so corners and lane changes are smooth
-  if (c.x === undefined || hyp(px - c.x, py - c.y) > 3) { c.x = px; c.y = py; } else { c.x += (px - c.x) * Math.min(1, dt * 8); c.y += (py - c.y) * Math.min(1, dt * 8); }
+  c.h += dh * Math.min(1, dt * (5 + c.v));
+  // slow for a sharp bend, then ease up to speed
+  const target = go ? top * (1 - 0.55 * Math.min(1, Math.abs(dh) / 0.9)) : 0;
+  c.v += (target - c.v) * Math.min(1, dt * (go ? 1.2 : 4));
+  // follow the lane point closely (the faster, the tighter), without jumping at corners
+  const ease = Math.min(1, dt * (8 + 4 * c.v));
+  if (c.x === undefined || hyp(px - c.x, py - c.y) > 3) { c.x = px; c.y = py; } else { c.x += (px - c.x) * ease; c.y += (py - c.y) * ease; }
   c.dx = Math.cos(c.h); c.dy = Math.sin(c.h);
 }
 function driveCar(c, dt, go) {
@@ -2721,6 +2747,7 @@ function newGame() {
   bikes0 = props.filter(p => p.kind === 'bike').map(p => { map[p.y * W + p.x] = GR; return { x: p.x + 0.5, y: p.y + 0.5, hx: 1, hy: 0, fuel: 35 + rand() * 25, col: ['#d8302a', '#2f6fd0', '#f2c230', '#2a2a30'][Math.floor(rand() * 4)] }; });
   props = props.filter(p => p.kind !== 'bike');
   drawGround();
+  if (realOn()) potholes = realPotholes();
   player = { x: START.x + 0.5, y: START.y + 0.5, r: 0.3, face: 1, moving: false, hx: 0.7071, hy: 0.7071 };
   spirit = { x: START.x, y: START.y, path: null, pi: 0 };
   demons = [];
@@ -2952,6 +2979,7 @@ addEventListener('keydown', e => {
   if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
   if (k === ' ' && !e.repeat) callSpirit();
   if (k === 'e' && S && S.mode === 'talk') { e.preventDefault(); trust(); return; }
+  if (k === 'e' && !e.repeat && S && S.mode === 'play' && (player.ride || (nearCar() && !nearWalker()))) { e.preventDefault(); player.ride ? hopOff() : hopOn(nearCar()); return; }
   if (k === 'e' && !e.repeat && S && S.mode === 'play' && nearWalker()) { e.preventDefault(); askWay(nearWalker()); return; }
   if (k === 'q' && S && S.mode === 'talk') { e.preventDefault(); accuse(); return; }
   if (k === 'b' && !e.repeat) toggleBike();
@@ -2974,6 +3002,7 @@ const endJoy = e => { if (e.pointerId === joy.id) { joy.id = null; joy.dx = joy.
 cv.addEventListener('pointerup', endJoy); cv.addEventListener('pointercancel', endJoy);
 document.getElementById('callBtn').addEventListener('click', callSpirit);
 document.getElementById('rideBtn').addEventListener('click', e => { toggleBike(); e.currentTarget.blur(); });
+document.getElementById('liftBtn').addEventListener('click', e => { e.currentTarget.blur(); if (S && S.mode === 'play') player.ride ? hopOff() : hopOn(nearCar()); });
 document.getElementById('btnTrust').addEventListener('click', trust);
 document.getElementById('btnBanish').addEventListener('click', accuse);
 
@@ -3070,10 +3099,15 @@ function update(dt) {
   if (player.moving) { const hm = hyp(ix, iy); player.hx = ix / hm; player.hy = iy / hm; }
   const pTile = at(Math.floor(player.x), Math.floor(player.y));
   // creeping (Shift, or a short drag) is slow but quiet enough to pass a sleeping dog
-  const ride = player.bike, wet = flood[Math.floor(player.y) * W + Math.floor(player.x)];
+  const ride = player.bike, wet = flood[Math.floor(player.y) * W + Math.floor(player.x)] || 0;
   player.creep = !ride && (keys.has('shift') || (joy.id !== null && mag < 0.55));
   let sp = 4.3 * (pTile === PAD ? 0.6 : 1) * (player.creep ? 0.5 : 1) * (1 - 0.55 * wet);
   if (realOn()) sp *= 0.6;   // a child in a real-sized city walks it more slowly
+  if (!ride && !player.ride && player.moving && !player.creep) for (const ph of potholes) if (hyp(ph.x - player.x, ph.y - player.y) < (ph.r !== undefined ? ph.r : 0.3)) {
+    sp *= 0.5;   // a pothole: you pick your feet up
+    if (!S.hints.pothole) { S.hints.pothole = 1; whisper('A pothole! Watch the road, and never ride fast over one.'); }
+    break;
+  }
   if (ride && ride.pushing) sp *= 0.55;   // pushing a dry bike: walking pace, and slower
   else if (ride) {
     const surf = [ROAD, LANE, PLAZA, COURT, JETTY].includes(pTile) ? 1 : pTile === PAD ? 0.3 : 0.55;
@@ -3084,17 +3118,44 @@ function update(dt) {
     sp = ride.v;
     if (ride.v > 0.4) ride.fuel = Math.max(0, ride.fuel - dt);
   }
-  if (S.burnT < 0 && S.fallT <= 0) moveEnt(player, ix * sp * dt, iy * sp * dt);
+  if (player.stunT > 0) { player.stunT -= dt; ix = iy = 0; }   // knocked down by a car
+  if (S.burnT < 0 && S.fallT <= 0 && !player.ride && !(player.stunT > 0)) moveEnt(player, ix * sp * dt, iy * sp * dt);
   if (ride) updateBike(dt);
 
   updateWalkers(dt);
-  // traffic on the main road waits for a child standing in front of it
+  // traffic: waits for a child standing in front of it, queues behind the car ahead, slows over potholes, and
+  // knocks down anyone who dashes out too close
+  const busStop = exits.find(e => e.kind === 'bus');
   for (const c of S.cars) {
-    const ax = player.x - c.x, ay = player.y - c.y, ahead = ax * c.dx + ay * c.dy, side = Math.abs(ax * c.dy - ay * c.dx);
-    const busStop = exits.find(e => e.kind === 'bus');
-    if ((c.type === 'ktc' || c.type === 'private') && busStop && hyp(c.x - busStop.x, c.y - busStop.y) < 1.6 && !(c.stopT < 0)) { c.stopT = (c.stopT || 3) - dt; if (c.stopT <= 0) c.stopT = -6; }
+    const mine = player.ride === c, big = c.type === 'ktc' || c.type === 'private';
+    if (c.phT > 0) c.phT -= dt;
+    if (big && busStop && hyp(c.x - busStop.x, c.y - busStop.y) < 1.6 && !(c.stopT < 0)) { c.stopT = (c.stopT || 3) - dt; if (c.stopT <= 0) c.stopT = -6; }
     else if (c.stopT < 0) c.stopT = Math.min(0, c.stopT + dt);
-    driveCar(c, dt, !(side < 0.9 && ahead > 0 && ahead < (c.type === 'ktc' || c.type === 'private' ? 3.2 : 2.4)) && !(c.stopT > 0));
+    let go = !(c.stopT > 0);
+    if (!player.ride) {
+      const ax = player.x - c.x, ay = player.y - c.y, ahead = ax * c.dx + ay * c.dy, side = Math.abs(ax * c.dy - ay * c.dx);
+      if (side < (realOn() ? 0.5 : 0.9) && ahead > 0 && ahead < 1.2 + c.v * 0.5 + (big ? 0.8 : 0)) go = false;
+    }
+    if (c.haltT > 0) { c.haltT -= dt; go = false; }
+    if (mine && c.stopReq) go = false;
+    if (go) for (const o of S.cars) {   // keep behind the car in front
+      if (o === c) continue;
+      const ox = o.x - c.x, oy = o.y - c.y, ah = ox * c.dx + oy * c.dy, lat = Math.abs(ox * c.dy - oy * c.dx);
+      if (ah > 0.05 && ah < 0.9 + c.v * 0.3 && lat < 0.3 && o.dx * c.dx + o.dy * c.dy > 0.5) { go = false; break; }
+    }
+    driveCar(c, dt, go);
+    if (c.v > 2 && !(c.phT > 0)) for (const ph of potholes) if (hyp(c.x - ph.x, c.y - ph.y) < (ph.r !== undefined ? ph.r : 0.3) + 0.1) {
+      c.v *= 0.5; c.phT = 1.5;   // over a pothole: it slows right down
+      if (mine) { S.shake = 0.35; SFX.play('slam', c.x, c.y, 8); if (!S.hints.carPothole) { S.hints.carPothole = 1; whisper('Bump! The driver swears at the potholes.'); } }
+      break;
+    }
+    if (mine) {
+      player.x = c.x; player.y = c.y; player.hx = c.dx; player.hy = c.dy; player.moving = false;
+      const g = objective();
+      if (g && hyp(g.x - c.x, g.y - c.y) < 9) { if (!c.nudged) { c.nudged = true; whisper('Your stop is close. Press E to hop off.'); } }
+      else if (!g || hyp(g.x - c.x, g.y - c.y) > 14) c.nudged = false;
+      if (c.stopReq) { c.hopT = (c.hopT || 0) + dt; if (c.v < 0.6 || c.hopT > 2.5) dropRider(c); }
+    } else if (!player.ride) carVsChild(c);
     if (c.type === 'private' && Math.random() < dt * 0.15 && hyp(c.x - player.x, c.y - player.y) < 10) SFX.play('horn', c.x, c.y, 18);
   }
   for (const b of S.boats) wander(b, WATER, 0.7, dt, 0.7);
@@ -3104,6 +3165,7 @@ function update(dt) {
   visitSights();
   if (S.guide && hyp(S.guide.x - player.x, S.guide.y - player.y) < 1.6) { SFX.play('chime'); whisper(`You have reached ${S.guide.what}.`); S.guide = null; }
   S.inv -= dt; S.flash = Math.max(0, S.flash - dt * 1.6);
+  if (player.ride) S.inv = Math.max(S.inv, 0.3);   // safe inside a vehicle
 
   // diyas: light them as you pass; lit diyas and holy places refill the lamp
   let refuel = holy().some(e => hyp(player.x - e.x, player.y - e.y) < 3);
@@ -3360,7 +3422,7 @@ function updateChapter(dt) {
   }
 
   // potholes: hit one fast on a bike and it throws you
-  if (player.bike && player.bike.v > 4) for (const ph of potholes) if (hyp(ph.x - px, ph.y - py) < 0.35 * ph.s + 0.15) {
+  if (player.bike && player.bike.v > 4) for (const ph of potholes) if (hyp(ph.x - px, ph.y - py) < (ph.r !== undefined ? ph.r : 0.35 * ph.s + 0.15)) {
     dismount(false); S.shake = 0.4; SFX.play('slam', px, py, 10);
     whisper(rainAmt() > 0.3 ? 'That puddle was a pothole! You go flying off the bike.' : 'Pothole! You go flying off the bike. Slow down on these roads.');
     break;
@@ -3963,6 +4025,85 @@ function drawMoon(ctx) {
   ctx.fill(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
 }
 
+/* ---------- lifts and accidents: hop on a car, bus, rickshaw or pilot to get about faster; step out in front of one and it hurts ---------- */
+const LIFT = {
+  car:     { who: 'a neighbour’s car',     fare: 0, inside: true,  hail: 'A neighbour slows down. “Hop in, baba, I’m going that way.”', shout: 'Aiyo! Look before you run, baba!' },
+  ktc:     { who: 'the Kadamba bus',       fare: 2, inside: true,  hail: 'You squeeze onto the Kadamba bus. “Ticket, baba, ticket!”', shout: 'The bus driver hammers the horn. “Move!”' },
+  private: { who: 'a private bus',         fare: 2, inside: true,  hail: 'You jump on the private bus. The conductor bangs its side: “Chalo, chalo!”', shout: 'The racing bus screams its horn at you.' },
+  rick:    { who: 'an auto-rickshaw',      fare: 4, inside: true,  hail: 'The auto-wala grins. “Sit, baba. Where to?”', shout: 'The auto-wala yells: “Oye! Pagal ho kya?”' },
+  pilot:   { who: 'a motorcycle pilot',    fare: 3, inside: false, hail: 'The pilot kicks the stand. “Sit behind, baba. Hold tight!”', shout: 'The pilot swerves. “Arre baba!”' }
+};
+const liftOf = c => LIFT[c.type] || LIFT.car;
+const CAR_BOX = { car: [0.5, 0.3], ktc: [0.8, 0.34], private: [0.8, 0.34], rick: [0.4, 0.3], pilot: [0.36, 0.26] };   // half length and half width, in tiles
+const nearCar = () => S && S.mode === 'play' && !player.bike && !player.ride && S.fallT <= 0 && S.cars.find(c => hyp(c.x - player.x, c.y - player.y) < (realOn() ? 1.7 : 2));
+function hopOn(c) {
+  if (!c || player.ride || player.bike || !S || S.mode !== 'play') return;
+  const L = liftOf(c);
+  player.ride = c; c.rider = true; c.stopReq = false; c.haltT = 0; c.hopT = 0; c.nudged = false; c.stopT = 0;
+  if (L.fare && CH.life) addPoints(-L.fare, 'fare');
+  SFX.play('horn', c.x, c.y, 12);
+  S.inv = Math.max(S.inv, 0.5);
+  const first = !S.hints.liftOff; S.hints.liftOff = 1;
+  whisper(L.hail + (first ? ' Press E to hop off.' : ''));
+}
+function hopOff() {
+  const c = player.ride; if (!c || c.stopReq) return;
+  c.stopReq = true; c.hopT = 0;
+  whisper(c.type === 'pilot' || c.type === 'rick' ? '“Rok, rok, bhaiya!” The driver pulls over.' : 'You ask to be let off. The driver pulls over.');
+}
+function dropRider(c) {
+  const n = hyp(c.dx, c.dy) || 1, lx = c.dy / n, ly = -c.dx / n, w = realOn() ? 0.55 : 0.9;   // the kerb: Goa drives on the left
+  const spots = [[c.x + lx * w, c.y + ly * w], [c.x - lx * w, c.y - ly * w], [c.x + lx * w * 1.8, c.y + ly * w * 1.8], [c.x, c.y]];
+  const ok = ([x, y]) => x > 1 && y > 1 && x < W - 1 && y < H - 1 && !blocked(x, y, 0.15) && !(REAL_TILES && !onRealRoad(x, y) && realSolid(x, y, RBODY));
+  const [x, y] = spots.find(ok) || spots[3];
+  player.ride = null; c.rider = false; c.stopReq = false; c.haltT = 0.9;
+  player.x = x; player.y = y; realFree(player);
+  S.inv = Math.max(S.inv, 0.8);
+  whisper(c.type === 'pilot' || c.type === 'rick' ? 'You hop off. “Dhanyavad, bhaiya!”' : 'You hop off. “Thank you, kaka!”');
+}
+// the child against a car's body: a car that is standing is a wall; one that's moving hits
+function carVsChild(c) {
+  const rx = player.x - c.x, ry = player.y - c.y, hn = hyp(c.dx, c.dy) || 1, ux = c.dx / hn, uy = c.dy / hn;
+  const lg = rx * ux + ry * uy, lt = rx * uy - ry * ux, K = realOn() ? 1 : 1.9, [hl, hw] = CAR_BOX[c.type] || CAR_BOX.car;
+  const penL = hl * K + 0.08 - Math.abs(lg), penT = hw * K + 0.08 - Math.abs(lt);
+  if (penL <= 0 || penT <= 0) return;
+  if (c.v > 1 || (player.bike && player.bike.v > 2)) return carCrash(c);
+  if (penL < penT) { player.x += ux * Math.sign(lg || 1) * penL; player.y += uy * Math.sign(lg || 1) * penL; }
+  else { player.x += uy * Math.sign(lt || 1) * penT; player.y -= ux * Math.sign(lt || 1) * penT; }
+}
+function carCrash(c) {
+  if (S.inv > 0) return;
+  const bike = player.bike;
+  c.haltT = 2.6; c.v *= 0.15;
+  S.shake = 0.8;
+  SFX.play('horn', c.x, c.y, 24); SFX.play('slam', c.x, c.y, 14);
+  alarm(c.x, c.y, 8);   // the crash carries: shadows come to see
+  if (bike) dismount(true);
+  player.stunT = 0.9;
+  hurt(c.x, c.y);
+  if (S.mode === 'play' && S.hearts > 0) whisper(`${liftOf(c).shout} ${bike ? 'The bike is thrown down and so are you.' : 'You are knocked down.'} Stay off the road when cars come.`);
+}
+// potholes along the real streets: in clusters, more on the small roads, never near where you start
+function realPotholes() {
+  const R = realPrep(), out = [], rr = rng((W * 7919 + H * 31) | 0);
+  for (const r of R.roads) {
+    if (r.bridge || r.atal || r.w < 6 || r.p.length < 2) continue;
+    for (let i = 1; i < r.p.length; i++) {
+      const a = r.p[i - 1], b = r.p[i], L = hyp(b[0] - a[0], b[1] - a[1]);
+      if (!L) continue;
+      for (let s = rr() * 6; s < L; s += 6 + rr() * 10) {
+        if (rr() > (r.main ? 0.35 : 0.6)) continue;
+        const t = s / L, off = (rr() - 0.5) * r.w / 20 * 0.7;
+        const x = a[0] + (b[0] - a[0]) * t - (b[1] - a[1]) / L * off, y = a[1] + (b[1] - a[1]) * t + (b[0] - a[0]) / L * off;
+        if (hyp(x - START.x, y - START.y) < 4 || at(Math.floor(x), Math.floor(y)) === WATER) continue;
+        const n = 1 + (rr() < 0.4 ? 1 : 0) + (rr() < 0.15 ? 1 : 0);
+        for (let q = 0; q < n; q++) { const sz = 0.35 + rr() * 0.35; out.push({ x: x + (rr() - 0.5) * 0.3, y: y + (rr() - 0.5) * 0.2, s: sz, r: 0.09 + sz * 0.12 }); }
+      }
+    }
+  }
+  return out.slice(0, 260);
+}
+
 /* ---------- motorbikes ---------- */
 const nearBike = () => S.bikes.find(b => hyp(b.x - player.x, b.y - player.y) < 1.3);
 function toggleBike() {
@@ -4082,11 +4223,16 @@ function setObjective() {
   else if (S.dest.need && S.dest.wait > 0) t = `${S.dest.kind === 'bus' ? 'The pilot is coming' : 'The ferry is crossing'} · ${Math.ceil(S.dest.need - S.dest.wait)}s`;
   else t = `Walk ${n.role.name} to ${S.dest.label}`;
   if (player.bike) t += player.bike.pushing ? ' · Out of petrol: push it to a pump' : ` · Petrol ${Math.round(player.bike.fuel / 0.6)}%`;
+  if (player.ride) t += ` · Riding ${liftOf(player.ride).who}`;
   t = `${clockText()} · ${t}`;
   if (S.guide) t = `Going to ${S.guide.what} · ${Math.round(hyp(S.guide.x - player.x, S.guide.y - player.y) * 12)} m · ${t}`;
   const rb = document.getElementById('rideBtn'), showRide = !!player.bike || !!nearBike();
   const rideLabel = player.bike ? 'Get off ' : 'Ride ';
   if (rb.hidden === showRide) rb.hidden = !showRide;
+  const lb = document.getElementById('liftBtn'), showLift = !!player.ride || !!nearCar();
+  if (lb.hidden === showLift) lb.hidden = !showLift;
+  const liftLabel = player.ride ? 'Hop off ' : 'Hop on ';
+  if (lb.firstChild && lb.firstChild.textContent !== liftLabel) lb.firstChild.textContent = liftLabel;
   const ab = document.getElementById('askBtn'), showAsk = !!nearWalker() && S.mode === 'play';
   if (ab.hidden === showAsk) ab.hidden = !showAsk;
   if (rb.firstChild && rb.firstChild.textContent !== rideLabel) rb.firstChild.textContent = rideLabel;
@@ -4406,12 +4552,13 @@ function render() {
   // standing things, back to front
   const list = [];
   for (const s of statics) if (inView(s.sx, s.sy)) list.push(s);
-  list.push({ mob: { x: player.x, y: player.y }, key: depth(player.x, player.y), draw: g => drawChild(g, 1) });
+  if (!player.ride) list.push({ mob: { x: player.x, y: player.y }, key: depth(player.x, player.y), draw: g => drawChild(g, 1) });
+  else if (!liftOf(player.ride).inside) list.push({ mob: { x: player.x, y: player.y }, key: depth(player.x, player.y) + 0.01, draw: g => { g.save(); g.translate(0, -10); drawChild(g, 1); g.restore(); } });
   for (const d of demons) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ mob: { x: d.x, y: d.y, k: 0.9 }, key: depth(d.x, d.y), draw: g => drawDemon(g, d) }); }   // monsters loom larger than the people
   for (const c of S.cars) { const [sx, sy] = iso(c.x, c.y); if (inView(sx, sy)) list.push({ mob: { x: c.x, y: c.y }, key: depth(c.x, c.y), draw: g => drawVehicle(g, c) }); }
   for (const wk of S.walkers || []) { if (wk.alpha <= 0.02) continue; const [sx, sy] = iso(wk.x, wk.y); if (inView(sx, sy)) list.push({ mob: { x: wk.x, y: wk.y }, key: depth(wk.x, wk.y), draw: g => wk.state === 'poder' ? drawPoder(g, wk) : drawPerson(g, wk) }); }
   for (const pk of S.packs || []) for (const d of pk.dogs) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ mob: { x: d.x, y: d.y }, key: depth(d.x, d.y), draw: g => drawDog(g, d) }); }
-  if (S.npc) list.push({ mob: { x: S.npc.x, y: S.npc.y }, key: depth(S.npc.x, S.npc.y), draw: g => { if (S.npc.pillion) { g.save(); g.translate(0, -8); drawPerson(g, S.npc); g.restore(); } else drawPerson(g, S.npc); } });
+  if (S.npc && !(player.ride && hyp(S.npc.x - player.x, S.npc.y - player.y) < 3)) list.push({ mob: { x: S.npc.x, y: S.npc.y }, key: depth(S.npc.x, S.npc.y), draw: g => { if (S.npc.pillion) { g.save(); g.translate(0, -8); drawPerson(g, S.npc); g.restore(); } else drawPerson(g, S.npc); } });
   for (const b of S.bikes) { const [sx, sy] = iso(b.x, b.y); if (inView(sx, sy)) list.push({ mob: { x: b.x, y: b.y }, key: depth(b.x, b.y), draw: g => drawBike(g, b.x, b.y, b.hx, b.hy, b.col) }); }
   for (const d of S.dogs) { const [sx, sy] = iso(d.x, d.y); if (inView(sx, sy)) list.push({ mob: { x: d.x, y: d.y }, key: depth(d.x, d.y), draw: g => drawDog(g, d) }); }
   if (sacr) list.push({ mob: { x: sacr.x, y: sacr.y }, key: depth(sacr.x, sacr.y), draw: g => { drawPerson(g, sacr); if (!S.key) { const [sx, sy] = iso(sacr.x, sacr.y); g.strokeStyle = '#d9c27a'; g.lineWidth = 1.5; g.beginPath(); g.arc(sx + 9, sy - 18, 3, 0, 7); g.stroke(); line(g, [sx + 9, sy - 15], [sx + 9, sy - 8], '#d9c27a', 1.5); } } });
@@ -4654,7 +4801,8 @@ function render() {
     }
   }
   // the child shows through anything standing in front of them (at the same size as the child)
-  if (realOn()) { const [sx, sy] = iso(player.x, player.y); ctx.save(); ctx.translate(sx, sy); ctx.scale(0.5, 0.5); ctx.translate(-sx, -sy); drawChild(ctx, 0.3); ctx.restore(); }
+  if (player.ride) { /* inside a vehicle: nothing to show through */ }
+  else if (realOn()) { const [sx, sy] = iso(player.x, player.y); ctx.save(); ctx.translate(sx, sy); ctx.scale(0.5, 0.5); ctx.translate(-sx, -sy); drawChild(ctx, 0.3); ctx.restore(); }
   else drawChild(ctx, 0.3);
   if (S.boss) {
     const [bx, by] = iso(S.boss.x, S.boss.y);
@@ -5694,6 +5842,7 @@ let last = performance.now(), miniT = 0, fogSaveT = 3;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (player && !(isFinite(player.x) && isFinite(player.y))) { player.x = START.x + 0.5; player.y = START.y + 0.5; }   // never lose the child to a bad number
+  else if (player) { player.x = Math.max(0.6, Math.min(W - 0.6, player.x)); player.y = Math.max(0.6, Math.min(H - 0.6, player.y)); }   // nor off the map
   update(dt); render(); if (turnAnim) compositeTurn(dt); SFX.tick(dt);
   if ((miniT -= dt) <= 0) { miniT = 0.12; drawMini(); }
   if ((fogSaveT -= dt) <= 0) { fogSaveT = 3; saveFog(); }
