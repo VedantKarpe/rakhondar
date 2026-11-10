@@ -149,7 +149,7 @@ for j in range(gh):
         tx, ty = i * G, j * G
         la, lo = LAT - (ty - H / 2) / ky, LON + (tx - W / 2) / kx
         mx, my = MR.xy(la, lo)
-        elev.append(round(MR.height(mx, my)) if 0 <= mx <= MR.W_M and 0 <= my <= MR.H_M else 0)
+        elev.append(round(MR.height(mx, my)))   # past the edge of the SRTM grid the nearest edge height carries on (no cliff to zero)
 lms = []
 for jf in sorted((ROOT / 'sprites').glob('landmark_*.json')):
     lm = json.load(open(jf))

@@ -62,7 +62,7 @@ cyl((0, 0, 0), (0, 0, MAST), 1.0, WHITE, 12)
 cyl((0, 0, MAST), (0, 0, MAST + 4), 0.6, WHITE, 10)
 bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, MAST - 10)); o = bpy.context.active_object; o.scale = (2.6, 1.0, 22); o.data.materials.append(WHITE); own(o)
 # the stay cables: a fan from the top of the mast down to the deck, both ways along the bridge
-CABLE = mat('#dcd8cc', 0.4)
+CABLE = mat('#f2c81e', 0.4)   # the stay cables are yellow (checked against a photograph)
 for way in (-1, 1):
     for k in range(1, 9):
         cyl((0, 0, MAST - 1.5 - k * 1.6), (0, way * SPAN * k / 8, 0.6), 0.12, CABLE, 4)

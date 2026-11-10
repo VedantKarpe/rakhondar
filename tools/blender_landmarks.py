@@ -4,7 +4,7 @@
 
 RK_MODEL picks the landmark, RK_ROT (0-3) the side of the view. The outlines are exact (from data/panjim.osm.json);
 storeys, colours, roofs and front details are impressions in each building's manner, to check against photographs:
-  imb        Institute Menezes Braganza (way 316043006): two whitewashed storeys, ochre bands, arcade, hipped roof
+  imb        Institute Menezes Braganza (way 316043006): two yellow storeys with white trim, a tiled awning, arcade, hipped roof (checked against a photograph)
   postoffice Panjim Head Post Office (way 1155877316): two storeys of Goan red with white trim, hipped tile roof
   maruti     Maruti Temple, Altinho (way 1155891473): a tiled hall under a tiered saffron tower and golden kalash
   sebastian  Chapel of St. Sebastian, Fontainhas (way 1428309377): a white chapel, gabled front with a belfry
@@ -154,14 +154,15 @@ WHITE, TRIM, LAT, TILE, SHUT, GLASS, DARK, GOLD = '#f7f4ec', '#e2dccf', '#a85a34
 
 if MODEL in ('imb', 'postoffice'):
     FH, FL = 5.2, 2
-    wall, band = ('#f5f1e6', '#d9a441') if MODEL == 'imb' else ('#b8432e', '#f4efe4')
+    wall, band = ('#e0a52e', '#f7f4ec') if MODEL == 'imb' else ('#b8432e', '#f4efe4')   # the Institute is yellow with white trim (checked against a photograph)
     WH = FH * FL + 1
     prism(OUTLINE, 0, 1.0, LAT)
     prism(OUTLINE, 1.0, WH, wall)
     prism(grow(OUTLINE, 1.008), WH - 0.9, WH, band)
     prism(grow(OUTLINE, 1.008), FH + 0.6, FH + 1.1, band)
     hip_roof(grow(OUTLINE, 1.04), WH, 4.5, 0.55, TILE)
-    windows(FL, FH, 1.0, 5.0, TRIM if MODEL == 'imb' else '#f4efe4', SHUT if MODEL == 'imb' else '#2f4a3a', alt=GLASS)
+    windows(FL, FH, 1.0, 5.0, '#f7f4ec', '#34424f' if MODEL == 'imb' else '#2f4a3a', alt=GLASS)
+    if MODEL == 'imb': prism(grow(OUTLINE, 1.03), FH + 0.1, FH + 0.55, TILE)   # the tiled awning over the ground-floor windows
     # the arcaded entrance on the long side facing the street, with a pediment
     for k in range(-2, 3):
         ubox(k * 3 - 0.45, k * 3 + 0.45, V0 - 3.4, V0 - 2.6, 1.0, FH + 0.6, band if MODEL == 'postoffice' else WHITE)

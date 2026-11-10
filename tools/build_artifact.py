@@ -22,7 +22,7 @@ def quant(im):
 
 
 data = {}
-for name in ('pilot_sheet', 'bus_sheet'):
+for name in ('pilot_sheet', 'bus_sheet', 'child_sheet'):
     im = Image.open(ROOT / 'sprites' / f'{name}.png').convert('RGBA')
     data[f'sprites/{name}.png'] = {'u': uri(quant(im)), 'x': 0, 'y': 0, 'f': 1}
 for fn in sorted((ROOT / 'sprites').glob('landmark_*.png')):
