@@ -14,7 +14,7 @@ src = (ROOT / 'tools' / f'blender_{name}.py').read_text(encoding='utf-8')
 cut = src.index('\nsc = bpy.context.scene')
 g = {'__file__': str(ROOT / 'tools' / f'blender_{name}.py'), '__name__': 'rk_export'}
 exec(compile(src[:cut], f'blender_{name}.py', 'exec'), g)
-root = g.get('root')
+root = g.get('root') or g.get('ROOTOBJ')
 if root is not None: root.scale = (1, 1, 1)
 for o in bpy.data.objects:
     if o.type not in ('MESH', 'EMPTY'): bpy.data.objects.remove(o, do_unlink=True)

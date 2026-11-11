@@ -50,6 +50,13 @@ async function start() {
     return !lmBox.some(([x0, x1, y0, y1]) => cx > x0 && cx < x1 && cy > y0 && cy < y1);
   }) };
   const blds = buildBuildings(plain, g); scene.add(blds.group);
+  // the landmarks' own outlines stay solid, though their plain blocks are not drawn
+  for (const [f] of d.b) {
+    if (plain.b.some(b => b[0] === f)) continue;
+    const p: [number, number][] = []; for (let i = 0; i < f.length; i += 2) p.push([f[i] * T, f[i + 1] * T]);
+    const xs = p.map(q => q[0]), zs = p.map(q => q[1]);
+    blds.list.push({ p, bb: [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)], base: 0, top: 30 });
+  }
   const bi = new BuildingIndex(blds.list);
   for (const l of d.lm) for (const [x, y] of l.at) {
     const m = rawModel(l.name); if (!m) continue;
