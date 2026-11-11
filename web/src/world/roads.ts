@@ -23,7 +23,7 @@ function ribbon(line: [number, number][], width: number, g: Ground, lift: number
     const a = pl[Math.max(0, i - 1)], b = pl[Math.min(pl.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
     const nx = -(b[1] - a[1]) / L, nz = (b[0] - a[0]) / L, [x, z] = pl[i];
     for (const s of [-1, 1]) {
-      const X = x + nx * h * s, Z = z + nz * h * s, y = deck !== null ? deck : g.heightAt(X, Z) + lift;
+      const X = x + nx * h * s, Z = z + nz * h * s, y = deck !== null ? deck : Math.max(0.6, g.heightAt(X, Z)) + lift;   // a street never dips under the river at the bank
       P.push(X, y, Z);
     }
     if (i) { const k = base + (i - 1) * 2; I.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }

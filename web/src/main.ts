@@ -50,9 +50,9 @@ async function start() {
   scene.add(hemi, sun, sun.target);
   scene.fog = new THREE.Fog(0xdcdcd4, 300, 1500);   // the humid haze that greys the far shore and Altinho
 
-  scene.add(buildTerrain(d, g), buildWater(d));
   const roads = buildRoads(d, g); scene.add(roads.group);
   const si = new StreetIndex(roads.segs);
+  scene.add(buildTerrain(d, g, (X, Z) => { const s = si.at(X, Z); return !!s && s.deck === null; }), buildWater(d));
   // the landmarks: their Blender models stand on their map points, in place of the plain blocks there
   const lmBox = d.lm.flatMap(l => l.at.map(([x, y]) => [x + l.cov[0], x + l.cov[1], y + l.cov[2], y + l.cov[3]]));
   const plain = { ...d, b: d.b.filter(([f]) => {

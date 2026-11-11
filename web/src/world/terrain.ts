@@ -14,7 +14,7 @@ const SUB = 4;   // ground vertices per tile edge: 5 m apart, so the shore can c
 function landField(g: Ground): Float32Array {
   const { W, H } = g; let f = new Float32Array(W * H);
   for (let i = 0; i < W * H; i++) f[i] = g.wet[i] ? 0 : 1;
-  for (let pass = 0; pass < 2; pass++) {
+  for (let pass = 0; pass < 0; pass++) {   // no blur: interpolating the raw tiles already rounds the corners, and keeps one-tile creeks open
     const o = new Float32Array(W * H);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       let sum = 0, n = 0;
@@ -26,7 +26,7 @@ function landField(g: Ground): Float32Array {
   return f;
 }
 
-export function buildTerrain(d: PanjimData, g: Ground): THREE.Mesh {
+export function buildTerrain(d: PanjimData, g: Ground, solidAt: (X: number, Z: number) => boolean = () => false): THREE.Mesh {
   const { W, H } = d, field = landField(g);
   const landAt = (tx: number, ty: number) => {   // bilinear, tx/ty in tiles, sampled at tile centres
     const x = Math.max(0, Math.min(W - 1.001, tx - 0.5)), y = Math.max(0, Math.min(H - 1.001, ty - 0.5)), i = x | 0, j = y | 0, u = x - i, v = y - j;
@@ -41,7 +41,7 @@ export function buildTerrain(d: PanjimData, g: Ground): THREE.Mesh {
   const SAND: [number, number, number] = [0.80, 0.70, 0.48];
   for (let v = 0; v < pos.count; v++) {
     const X = pos.getX(v), Z = pos.getZ(v), tx = X / T, ty = Z / T;
-    const land = landAt(tx, ty), k = smooth(0.4, 0.6, land);
+    const land = solidAt(X, Z) ? 1 : landAt(tx, ty), k = smooth(0.42, 0.58, land);   // the bank is built up under riverside streets
     const hl = Math.max(0.6, g.heightAt(X, Z));
     pos.setY(v, -2.2 + (hl + 2.2) * k);
     const i = Math.min(W - 1, Math.floor(tx)), j = Math.min(H - 1, Math.floor(ty));
@@ -51,7 +51,7 @@ export function buildTerrain(d: PanjimData, g: Ground): THREE.Mesh {
     const lat = c === TILE_COL.G || c === TILE_COL.L || c === TILE_COL.R ? Math.max(0, Math.sin(tx * 0.31 + Math.sin(ty * 0.17) * 2) * Math.sin(ty * 0.23 + tx * 0.05) - 0.35) * 0.9 : 0;
     let r0 = c[0] + (0.55 - c[0]) * lat, g0 = c[1] + (0.36 - c[1]) * lat, b0 = c[2] + (0.22 - c[2]) * lat;
     // a band of sand or mud along the water's edge
-    const beach = 1 - smooth(0.55, 0.8, land);
+    const beach = (1 - smooth(0.58, 0.85, land)) * 0.85;
     r0 += (SAND[0] - r0) * beach; g0 += (SAND[1] - g0) * beach; b0 += (SAND[2] - b0) * beach;
     col[v * 3] = r0 * hk * jit; col[v * 3 + 1] = g0 * hk * jit; col[v * 3 + 2] = b0 * hk * jit;
   }
