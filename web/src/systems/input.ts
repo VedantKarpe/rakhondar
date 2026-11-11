@@ -1,9 +1,10 @@
 // Keyboard, mouse and touch: which way the child should walk (in screen terms), how the view is being turned and zoomed.
 export class Input {
   private keys = new Set<string>();
-  private drag: { x: number } | null = null;
+  private drag: { x: number; y: number } | null = null;
   private touch: { id: number; x: number; y: number; dx: number; dy: number } | null = null;
   turnDelta = 0;          // radians of turn from dragging since last read
+  tiltDelta = 0;          // radians of tilt from dragging up and down since last read
   zoomDelta = 0;          // zoom steps since last read (+ in, - out)
   onKey: (k: string) => void = () => {};
 
@@ -18,14 +19,15 @@ export class Input {
     addEventListener('blur', () => this.keys.clear());
     el.addEventListener('contextmenu', e => e.preventDefault());
     el.addEventListener('pointerdown', e => {
-      if (e.pointerType === 'mouse' && (e.button === 2 || e.button === 1)) { this.drag = { x: e.clientX }; el.setPointerCapture(e.pointerId); }
-      else if (e.pointerType !== 'mouse' || e.button === 0) { this.touch = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, dy: 0 }; el.setPointerCapture(e.pointerId); }
+      // a mouse drag with any button turns (left-right) and tilts (up-down) the view; a finger walks the child
+      if (e.pointerType === 'mouse') { this.drag = { x: e.clientX, y: e.clientY }; el.setPointerCapture(e.pointerId); }
+      else { this.touch = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, dy: 0 }; el.setPointerCapture(e.pointerId); }
     });
     el.addEventListener('pointermove', e => {
-      if (this.drag) { this.turnDelta += (e.clientX - this.drag.x) * 0.007; this.drag.x = e.clientX; }
+      if (this.drag) { this.turnDelta += (e.clientX - this.drag.x) * 0.007; this.tiltDelta += (e.clientY - this.drag.y) * 0.004; this.drag.x = e.clientX; this.drag.y = e.clientY; }
       if (this.touch && e.pointerId === this.touch.id) { this.touch.dx = e.clientX - this.touch.x; this.touch.dy = e.clientY - this.touch.y; }
     });
-    const up = (e: PointerEvent) => { if (this.drag && (e.button === 2 || e.button === 1)) this.drag = null; if (this.touch && e.pointerId === this.touch.id) this.touch = null; };
+    const up = (e: PointerEvent) => { if (this.drag && e.pointerType === 'mouse') this.drag = null; if (this.touch && e.pointerId === this.touch.id) this.touch = null; };
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
     el.addEventListener('wheel', e => { e.preventDefault(); this.zoomDelta += e.deltaY < 0 ? 1 : -1; }, { passive: false });
   }

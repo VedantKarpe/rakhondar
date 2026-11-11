@@ -199,6 +199,7 @@ async function start() {
 
     // the view: held keys turn it steadily, the mouse turns it as it is dragged, it zooms in steps
     rig.turn(input.heldTurn() * 2.2 * dt + input.turnDelta); input.turnDelta = 0;
+    if (input.tiltDelta) { rig.tiltBy(input.tiltDelta); input.tiltDelta = 0; }
     if (input.zoomDelta) { rig.zoom(input.zoomDelta); input.zoomDelta = 0; }
     rig.update(dt, child.obj.position, app.clientWidth / Math.max(1, app.clientHeight));
     // the sun follows the child so its shadows are always sharp where you are
