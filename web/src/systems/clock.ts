@@ -21,31 +21,44 @@ export class Clock {
   readonly lamps = new THREE.Group();
   private spots: THREE.Vector3[] = [];
   private heads: THREE.InstancedMesh;
+  private tubes: THREE.InstancedMesh;
   private pool: THREE.PointLight[] = [];
 
   constructor(net: Network, g: Ground) {
     this.lamps.name = 'street lights';
-    // a tubelight every ~45 m along each street, on its left side
+    // a light every 30 m along each street, on its left side: the old cast-iron globe lamps on the main streets, and on
+    // the ordinary streets the grey concrete pole with a curved arm and a white tubelight hanging over the road
+    const iron: THREE.Matrix4[] = [], tube: THREE.Matrix4[] = [];
     for (let e = 0; e < net.edges.length; e++) {
-      const E = net.edges[e];
+      const E = net.edges[e], main = E.width >= 12;
       for (let s = 10; s < E.len; s += 30) {
-        const p = net.at(e, s), off = E.width / 2 + 1.5, x = p.x + p.dz * off, z = p.z - p.dx * off;
-        this.spots.push(new THREE.Vector3(x, (E.deck ?? g.heightAt(x, z)), z));
+        const p = net.at(e, s), off = E.width / 2 + 1.5, x = p.x + p.dz * off, z = p.z - p.dx * off, y = E.deck ?? g.heightAt(x, z);
+        const ang = Math.atan2(-p.dx, -p.dz);   // turns the arm (local +X) toward the road
+        const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ang), new THREE.Vector3(1, 1, 1));
+        if (main) { iron.push(m); this.spots.push(new THREE.Vector3(x, y + 9, z)); }
+        else { tube.push(m); this.spots.push(new THREE.Vector3(x - p.dz * 2.4, y + 8.4, z + p.dx * 2.4)); }
       }
     }
-    // Panjim's old cast-iron lamp posts: a black fluted pole on a wide foot, a lantern cap and a white globe
     const ironGeo = mergeGeometries([
       new THREE.CylinderGeometry(0.45, 0.6, 1.2, 8).translate(0, 0.6, 0),
       new THREE.CylinderGeometry(0.14, 0.22, 7, 8).translate(0, 4.6, 0),
       new THREE.CylinderGeometry(0.3, 0.3, 0.3, 8).translate(0, 8.2, 0),
       new THREE.ConeGeometry(0.75, 0.6, 8).translate(0, 9.8, 0),
     ])!;
-    const pole = new THREE.InstancedMesh(ironGeo, new THREE.MeshLambertMaterial({ color: 0x1d1e21 }), this.spots.length);
-    this.heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.62, 12, 8).translate(0, 9.0, 0), new THREE.MeshBasicMaterial({ color: 0xd8d6d0 }), this.spots.length);
-    const m = new THREE.Matrix4();
-    this.spots.forEach((p, i) => { m.makeTranslation(p.x, p.y, p.z); pole.setMatrixAt(i, m); this.heads.setMatrixAt(i, m); });
-    this.lamps.add(pole, this.heads);
-    for (let i = 0; i < 6; i++) { const l = new THREE.PointLight(0xffe2a8, 0, 30, 1.4); this.pool.push(l); this.lamps.add(l); }
+    const tubeGeo = mergeGeometries([
+      new THREE.CylinderGeometry(0.16, 0.26, 9, 6).translate(0, 4.5, 0),                      // the concrete pole
+      new THREE.CylinderGeometry(0.07, 0.07, 2.8, 5).rotateZ(Math.PI / 2 - 0.25).translate(1.3, 9.2, 0),   // the arm, rising a little
+      new THREE.BoxGeometry(0.5, 0.18, 1.5).translate(2.5, 9.45, 0),                          // the fixture's cover
+    ])!;
+    const add = (geo: THREE.BufferGeometry, color: number, list: THREE.Matrix4[]) => { const im = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color }), list.length); list.forEach((m, i) => im.setMatrixAt(i, m)); im.castShadow = true; this.lamps.add(im); };
+    add(ironGeo, 0x1d1e21, iron); add(tubeGeo, 0x9a9a96, tube);
+    // the lit parts: globes on the iron lamps, long white tubes under the fixtures
+    this.heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.62, 12, 8).translate(0, 9.0, 0), new THREE.MeshBasicMaterial({ color: 0xd8d6d0 }), iron.length);
+    iron.forEach((m, i) => this.heads.setMatrixAt(i, m));
+    this.tubes = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.1, 0.1, 1.3, 6).rotateX(Math.PI / 2).translate(2.5, 9.3, 0), new THREE.MeshBasicMaterial({ color: 0xd8d8d8 }), tube.length);
+    tube.forEach((m, i) => this.tubes.setMatrixAt(i, m));
+    this.lamps.add(this.heads, this.tubes);
+    for (let i = 0; i < 6; i++) { const l = new THREE.PointLight(0xf0f4ff, 0, 30, 1.4); this.pool.push(l); this.lamps.add(l); }
   }
 
   get night(): boolean { return this.min < 6 * 60 || this.min > 18 * 60 + 40; }
@@ -65,10 +78,11 @@ export class Clock {
     if (scene.fog) (scene.fog as THREE.Fog).color.copy(scene.background as THREE.Color);
     const on = k > 0.55;
     (this.heads.material as THREE.MeshBasicMaterial).color.set(on ? 0xfff2cc : 0xd8d6d0);
+    (this.tubes.material as THREE.MeshBasicMaterial).color.set(on ? 0xf2fbff : 0xd8d8d8);
     // the nearest few lamps cast real light
     if (on) {
       const near = this.spots.map(p => ({ p, d: Math.hypot(p.x - cx, p.z - cz) })).filter(a => a.d < 120).sort((a, b) => a.d - b.d);
-      this.pool.forEach((l, i) => { const a = near[i]; if (a) { l.position.set(a.p.x, a.p.y + 8.4, a.p.z); l.intensity = 90; } else l.intensity = 0; });
+      this.pool.forEach((l, i) => { const a = near[i]; if (a) { l.position.set(a.p.x, a.p.y - 0.4, a.p.z); l.intensity = 90; } else l.intensity = 0; });
     } else this.pool.forEach(l => (l.intensity = 0));
   }
 
