@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Rakhondar · Panjim (3D)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Mukta:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --ink: #ece4cf; --night: #0a1020; --lamp: #f2b441; --spirit: #9fe8d6; --muted: #9a9484; }
+    html, body { margin: 0; height: 100%; background: #0a1020; overflow: hidden; font-family: Mukta, system-ui, sans-serif; color: var(--ink); }
+    #app { position: fixed; inset: 0; }
+    #app canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    .hud { position: fixed; pointer-events: none; font-size: 13px; text-shadow: 0 1px 2px rgba(0, 0, 0, .7); }
+    #stats { top: 12px; left: 14px; line-height: 1.4; }
+    #stats b { color: var(--lamp); font-size: 18px; }
+    #help { bottom: 12px; left: 14px; color: var(--muted); max-width: 60ch; }
+    #place { top: 12px; left: 50%; transform: translateX(-50%); font-size: 15px; background: rgba(10, 16, 32, .6); padding: 4px 12px; border-radius: 6px; }
+    .btns { position: fixed; right: 14px; bottom: 14px; display: flex; gap: 8px; }
+    .btns button { font: 600 15px Mukta, sans-serif; color: var(--ink); background: rgba(10, 16, 32, .75); border: 1px solid rgba(236, 228, 207, .3); border-radius: 999px; width: 44px; height: 44px; cursor: pointer; touch-action: manipulation; }
+    #loading { position: fixed; inset: 0; display: grid; place-items: center; font-size: 18px; background: #0a1020; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="loading">Loading Panjim…</div>
+  <div class="hud" id="stats"></div>
+  <div class="hud" id="place"></div>
+  <div class="hud" id="help">WASD / arrows: walk · Shift: run · Q/E or Z/X (hold) or right-drag: turn the view · wheel or +/−: zoom · N: day/night</div>
+  <div class="btns"><button id="bL" aria-label="Turn left">⟲</button><button id="bR" aria-label="Turn right">⟳</button><button id="bOut" aria-label="Zoom out">−</button><button id="bIn" aria-label="Zoom in">+</button></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
