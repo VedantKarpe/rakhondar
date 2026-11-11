@@ -2241,12 +2241,16 @@ function paintReal(g, x0, y0, x1, y1) {
 // one real building: its own outline, walls facing the view, a row of windows a floor, a tiled ridge or a flat terrace
 function drawRealBuilding(g, b) {
   const top = b.top, floors = Math.max(1, Math.round(b.lv)), fh = top / floors, shade = (c, k) => '#' + [1, 3, 5].map(i => Math.round(parseInt(c.substr(i, 2), 16) * k).toString(16).padStart(2, '0')).join('');
-  const faces = b.edges.map(e => { const [u, v] = rotV(e.nx, e.ny); return { e, u, v, d: depth((e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2) }; }).filter(f => f.u + f.v > 0.02).sort((p, q) => p.d - q.d);
+  const faces = b.edges.map(e => {
+    const mx = (e.a[0] + e.b[0]) / 2, my = (e.a[1] + e.b[1]) / 2, d = depth(mx, my), dn = depth(mx + e.nx * 0.05, my + e.ny * 0.05) - d;
+    const s0 = isoFlat(mx, my), s1 = isoFlat(mx + e.nx * 0.05, my + e.ny * 0.05);
+    return { e, front: dn > 0.0005, lit: s1[0] < s0[0], d };   // front: its outside points at the viewer; lit: it faces left, toward the light
+  }).filter(f => f.front).sort((p, q) => p.d - q.d);
   g.lineJoin = 'round';
-  for (const { e, u, v } of faces) {
+  for (const { e, lit } of faces) {
     const q = [P(e.a[0], e.a[1], 0), P(e.b[0], e.b[1], 0), P(e.b[0], e.b[1], top), P(e.a[0], e.a[1], top)];
     g.beginPath(); q.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath();
-    g.fillStyle = shade(b.col, v > u ? 0.95 : 0.74); g.fill(); g.strokeStyle = INK; g.lineWidth = 0.7; g.stroke();
+    g.fillStyle = shade(b.col, lit ? 0.95 : 0.74); g.fill(); g.strokeStyle = INK; g.lineWidth = 0.7; g.stroke();
     if (b.kind === 1) continue;
     const n = Math.floor(e.L / 3.4), ux = (e.b[0] - e.a[0]), uy = (e.b[1] - e.a[1]), hw = 0.55 / e.L;
     for (let f = 0; f < floors; f++) {
@@ -2277,9 +2281,9 @@ function drawRealBuilding(g, b) {
     for (const { q, q2 } of faces2) {
       const end = s => ((s[0] - b.cx) * ux + (s[1] - b.cy) * uy > 0 ? r1 : r0);
       const pts = [P(q[0], q[1], top), P(q2[0], q2[1], top), P(end(q2)[0], end(q2)[1], top + rh), P(end(q)[0], end(q)[1], top + rh)];
-      const mid = rotV((q[0] + q2[0]) / 2 - b.cx, (q[1] + q2[1]) / 2 - b.cy);
+      const mz = depth((q[0] + q2[0]) / 2, (q[1] + q2[1]) / 2) > depth(b.cx, b.cy);   // the roof slope on the near side
       g.beginPath(); pts.forEach((s, i) => i ? g.lineTo(s[0], s[1]) : g.moveTo(s[0], s[1])); g.closePath();
-      g.fillStyle = mid[0] + mid[1] > 0 ? '#963e24' : '#b85432'; g.fill(); g.strokeStyle = '#46190c'; g.lineWidth = 0.6; g.stroke();
+      g.fillStyle = mz ? '#963e24' : '#b85432'; g.fill(); g.strokeStyle = '#46190c'; g.lineWidth = 0.6; g.stroke();
     }
   } else if (!b.kind) {
     g.beginPath(); p.forEach((q, i) => { const s = P(q[0], q[1], top + 2); i ? g.lineTo(s[0], s[1]) : g.moveTo(s[0], s[1]); }); g.closePath();
@@ -2355,6 +2359,7 @@ function addRealStatics(add) {
   for (const b of R.b) {
     if (covers.some(c => b.cx >= c[0] && b.cx <= c[1] && b.cy >= c[2] && b.cy <= c[3])) continue;
     add(b.cx, b.cy, b.cx + b.cy, g => blit(g, realSprite(b)));
+    statics[statics.length - 1].bld = b;
   }
 }
 
@@ -4756,9 +4761,11 @@ function render() {
     const a = sgrid.get(gx * 8192 + gy);
     if (!a) continue;
     if (!VD) { for (const s of a) if (inView(s.sx, s.sy)) list.push(s); continue; }
-    for (const s of a) {   // the view is turned: each standing thing keeps its drawing and moves to where it now stands
+    for (const s of a) {   // the view is turned: buildings are drawn afresh at the turned angle; other standing things keep their drawing and move with the ground
       const q = iso(s.fx, s.fy);
-      if (inView(q[0], q[1])) list.push({ key: depth(s.fx, s.fy) + s.bias, draw: g => { g.save(); g.translate(q[0] - s.sx, q[1] - s.sy); s.draw(g); g.restore(); } });
+      if (!inView(q[0], q[1])) continue;
+      if (s.bld) { const bl = s.bld; list.push({ key: depth(s.fx, s.fy) + s.bias, draw: g => { TERR_FIX = bl.lift || 0; try { drawRealBuilding(g, bl); } finally { TERR_FIX = null; } } }); }
+      else list.push({ key: depth(s.fx, s.fy) + s.bias, draw: g => { g.save(); g.translate(q[0] - s.sx, q[1] - s.sy); s.draw(g); g.restore(); } });
     }
   }
   if (!player.ride) list.push({ mob: { x: player.x, y: player.y }, key: depth(player.x, player.y), draw: g => drawChild(g, 1) });
@@ -6089,7 +6096,7 @@ function travelTo(v) {
 let last = performance.now(), miniT = 0, fogSaveT = 3;
 let lastNow = 0;
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;   // never backwards
   if (player && !(isFinite(player.x) && isFinite(player.y))) { player.x = START.x + 0.5; player.y = START.y + 0.5; }   // never lose the child to a bad number
   else if (player) { player.x = Math.max(0.6, Math.min(W - 0.6, player.x)); player.y = Math.max(0.6, Math.min(H - 0.6, player.y)); }   // nor off the map
   const raw = Math.min(100, now - lastNow); lastNow = now;
