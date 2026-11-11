@@ -23,6 +23,7 @@ import { loadModels, rawModel } from './world/models';
 import { Boats } from './entities/boats';
 import { Pumps } from './entities/pumps';
 import { Bikes } from './entities/bikes';
+import { toonify } from './world/toon';
 import { buildPromenade } from './world/promenade';
 
 async function start() {
@@ -31,8 +32,9 @@ async function start() {
 
   const app = document.getElementById('app')!;
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  // draw at least 1.5x the screen's pixels (2x on phones) so edges come out smooth
+  renderer.setPixelRatio(Math.min(2, Math.max(1.5, devicePixelRatio)));
+  renderer.toneMapping = THREE.NoToneMapping;   // flat, bold cartoon colour (no film grading)
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   app.appendChild(renderer.domElement);
 
@@ -143,6 +145,11 @@ async function start() {
   document.getElementById('loading')!.remove();
   hud.whisper(quests.cur!.intro, 8);
 
+  // the cartoon look: cel shading everywhere, ink outlines on everything solid but the ground, streets and buildings
+  const flat = new Set(['roads', 'buildings', 'trees-none']);
+  const outlined = scene.children.filter(o => !flat.has(o.name) && o.type === 'Group');
+  toonify(scene, outlined, o => { let p: THREE.Object3D | null = o; while (p) { if (flat.has(p.name)) return true; p = p.parent; } return false; });
+  let inkT = 0;
   const clock = new THREE.Clock();
   let mapT = 0;
   (window as unknown as { rk: unknown }).rk = { scene, renderer, rig, child, day, traffic, people, monsters, quests, st, get pos() { return [px, pz]; }, set pos(v: number[]) { px = v[0]; pz = v[1]; } };
@@ -206,12 +213,15 @@ async function start() {
     // the sun crosses from east (morning) to west (evening), low early and late
     const sa = Math.max(0.2, Math.min(Math.PI - 0.2, (day.min - 360) / 720 * Math.PI)), sh = Math.max(0.25, Math.sin(sa));
     sun.position.set(px + Math.cos(sa) * 260, py + sh * 260, pz + 80); sun.target.position.set(px, py, pz);
-    const camD = rig.camera.position.distanceTo(child.obj.position); const fog = scene.fog as THREE.Fog; fog.near = camD * 1.1; fog.far = camD * 3.2;
+    const camD = rig.camera.position.distanceTo(child.obj.position); const fog = scene.fog as THREE.Fog; fog.near = camD * 1.1; fog.far = camD * 6;
     let near = '', nd = 1e9;
     for (const p of places) { const dd = Math.hypot(p.X - px, p.Z - pz); if (dd < nd) { nd = dd; near = p.n; } }
     map.reveal(px, pz, 6);
     mapT -= dt;
     if (mapT <= 0) { mapT = 0.1; map.draw(px, pz, rig.yaw, quests.cur?.spots.filter(s => !s.done) ?? [], night); }
+    // vehicles, people, demons and quest markers come and go: give the new ones the cartoon look too
+    inkT -= dt;
+    if (inkT <= 0) { inkT = 0.5; for (const gr of [traffic.group, people.group, monsters.group, quests.group]) toonify(gr, [gr], () => false); }
     renderer.render(scene, rig.camera);
     const t = quests.target;
     const hint = t && !quests.cur?.litter ? `${Math.round(Math.hypot(t.x - px, t.z - pz) / 10) * 10} m` : '';
