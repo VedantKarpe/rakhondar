@@ -68,7 +68,7 @@ export class Clock {
     // the nearest few lamps cast real light
     if (on) {
       const near = this.spots.map(p => ({ p, d: Math.hypot(p.x - cx, p.z - cz) })).filter(a => a.d < 120).sort((a, b) => a.d - b.d);
-      this.pool.forEach((l, i) => { const a = near[i]; if (a) { l.position.set(a.p.x, a.p.y + 8.4, a.p.z); l.intensity = 260; } else l.intensity = 0; });
+      this.pool.forEach((l, i) => { const a = near[i]; if (a) { l.position.set(a.p.x, a.p.y + 8.4, a.p.z); l.intensity = 90; } else l.intensity = 0; });
     } else this.pool.forEach(l => (l.intensity = 0));
   }
 

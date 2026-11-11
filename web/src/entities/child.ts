@@ -45,6 +45,6 @@ export class Child {
     this.legL.rotation.z = s; this.legR.rotation.z = -s; this.armL.rotation.z = -s * 0.8;
     this.obj.rotation.y = -this.heading;
     if (this.model) { this.model.position.y = Math.abs(Math.sin(this.t)) * (speed > 0.1 ? 0.35 : 0); this.model.rotation.z = s * 0.08; }
-    this.lamp.intensity = night ? 450 : 0;
+    this.lamp.intensity = night ? 200 : 0;
   }
 }
