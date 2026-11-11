@@ -91,6 +91,13 @@ export class Ground {
     return (c[k] * (1 - tx) + c[k + 1] * tx) * (1 - ty) + (c[k + w] * (1 - tx) + c[k + w + 1] * tx) * ty;
   }
 
+  /** 0 on water, 1 on land, blending smoothly between tile centres: the drawn shoreline is where this is 0.5. */
+  landAt(X: number, Z: number): number {
+    const W = this.W, H = this.H, x = Math.max(0, Math.min(W - 1.001, X / T - 0.5)), y = Math.max(0, Math.min(H - 1.001, Z / T - 0.5));
+    const i = x | 0, j = y | 0, u = x - i, v = y - j, L = (a: number, b: number) => 1 - this.wet[(j + b) * W + i + a];
+    return (L(0, 0) * (1 - u) + L(1, 0) * u) * (1 - v) + (L(0, 1) * (1 - u) + L(1, 1) * u) * v;
+  }
+
   isWet(X: number, Z: number): boolean {
     const x = Math.floor(X / T), y = Math.floor(Z / T);
     return x < 0 || y < 0 || x >= this.W || y >= this.H || this.wet[y * this.W + x] === 1;
