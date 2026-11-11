@@ -18,6 +18,13 @@ export class Movement {
 
   /** Move (x, z) by (dx, dz), sliding along walls; returns the new position. */
   step(x: number, z: number, dx: number, dz: number): [number, number] {
+    // already outside the walkable area (carried past the map's edge on a vehicle, or dropped on water)? then any
+    // step that brings you back in, or that stays on a street, is allowed, so you can never be stuck there
+    if (!this.free(x, z)) {
+      const out = (X: number, Z: number) => Math.max(0, T - X, T - Z, X - (this.g.W - 1) * T, Z - (this.g.H - 1) * T);
+      const nx = x + dx, nz = z + dz;
+      if (out(nx, nz) < out(x, z) || this.si.at(nx, nz) || this.free(nx, nz)) return [nx, nz];
+    }
     if (this.free(x + dx, z + dz)) return [x + dx, z + dz];
     for (const a of [0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4]) {
       const c = Math.cos(a), s = Math.sin(a), mx = (dx * c - dz * s) * c, mz = (dx * s + dz * c) * c;

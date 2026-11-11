@@ -108,7 +108,7 @@ async function start() {
     if (bikes.riding) { bikes.park(px, pz); hud.whisper('Parked. Lock it, no? Somebody will take it otherwise.', 2); return; }
     const bk = traffic.riding ? null : bikes.near(px, pz);
     if (bk) { bikes.mount(bk); hud.whisper(bk.kind === 'scooter' ? 'Vroom! Keys were in it only. Go slow near the church, men.' : 'Tring tring! Pedal, baba, pedal!', 3); return; }
-    if (traffic.riding) { const o = traffic.hopOff(); if (o && move.free(o.x, o.z)) { px = o.x; pz = o.z; } }
+    if (traffic.riding) { const o = traffic.hopOff(); if (o && move.free(o.x, o.z)) { px = o.x; pz = o.z; } else { px = Math.max(T * 1.5, Math.min((d.W - 1.5) * T, px)); pz = Math.max(T * 1.5, Math.min((d.H - 1.5) * T, pz)); } }
     else if (!traffic.hopOn(px, pz)) hud.whisper('No vehicle near. Stand beside the road and wait for a pilot.', 3);
   };
   const banish = () => {
@@ -155,7 +155,7 @@ async function start() {
   const flat = new Set(['roads', 'buildings', 'trees-none']);
   const outlined = scene.children.filter(o => !flat.has(o.name) && o.type === 'Group');
   toonify(scene, outlined, o => { let p: THREE.Object3D | null = o; while (p) { if (flat.has(p.name)) return true; p = p.parent; } return false; });
-  let inkT = 0;
+  let inkT = 0, edgeT = 0;
   const clock = new THREE.Clock();
   let mapT = 0;
   (window as unknown as { rk: unknown }).rk = { scene, renderer, rig, child, day, traffic, people, monsters, quests, st, get pos() { return [px, pz]; }, set pos(v: number[]) { px = v[0]; pz = v[1]; } };
@@ -172,7 +172,12 @@ async function start() {
       if (speed > 0) {
         const w = rig.screenToGround(m.x, m.y), L = Math.hypot(w.x, w.z) || 1;
         child.heading = Math.atan2(w.z, w.x);
+        const ox = px, oz = pz;
         [px, pz] = move.step(px, pz, (w.x / L) * speed * dt, (w.z / L) * speed * dt);
+        // walked into the edge of the map: say so, rather than seeming stuck
+        const nearEdge = px < T * 4 || pz < T * 4 || px > (d.W - 4) * T || pz > (d.H - 4) * T;
+        edgeT -= dt;
+        if (nearEdge && Math.hypot(px - ox, pz - oz) < 0.01 && edgeT <= 0) { edgeT = 6; hud.whisper('Porvorim is that side, bhurgea. Our Panjim ends here; turn back, no?', 3); }
       }
       // thrown by a vehicle
       if (Math.abs(knockX) + Math.abs(knockZ) > 0.1) {
