@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-export type ModelName = 'pilot' | 'bus' | 'child';
+export type ModelName = string;
+export const LANDMARKS = ['church', 'secretariat', 'mahalaxmi', 'atalsetu', 'imb', 'postoffice', 'maruti', 'sebastian', 'donbosco', 'kadamba'];
 const cache = new Map<ModelName, THREE.Group>();
 
 async function loadOne(name: ModelName): Promise<THREE.Group> {
@@ -35,7 +36,7 @@ async function loadOne(name: ModelName): Promise<THREE.Group> {
 }
 
 export async function loadModels(): Promise<void> {
-  await Promise.all((['pilot', 'bus', 'child'] as ModelName[]).map(async n => { try { cache.set(n, await loadOne(n)); } catch (e) { console.warn('model', n, e); } }));
+  await Promise.all(['pilot', 'bus', 'child', ...LANDMARKS].map(async n => { try { cache.set(n, await loadOne(n)); } catch (e) { console.warn('model', n, e); } }));
 }
 
 /** A copy of a model, sized so it is `height` metres tall (or `length` long), standing on y = 0. */
@@ -47,3 +48,6 @@ export function model(name: ModelName, size: { height?: number; length?: number 
   c.scale.setScalar(k); c.position.set(-(b.min.x + b.max.x) / 2 * k, -b.min.y * k, -(b.min.z + b.max.z) / 2 * k);
   g.add(c); return g;
 }
+
+/** A copy of a model as it was built: metres, its origin where the Blender script put it (for landmarks, their map point). */
+export function rawModel(name: ModelName): THREE.Group | null { const t = cache.get(name); return t ? t.clone(true) : null; }

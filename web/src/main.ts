@@ -19,7 +19,7 @@ import { Clock } from './systems/clock';
 import { Quests } from './systems/quests';
 import { Minimap } from './ui/minimap';
 import { sfx, unlockAudio } from './systems/sfx';
-import { loadModels } from './world/models';
+import { loadModels, rawModel } from './world/models';
 
 async function start() {
   const [d] = await Promise.all([loadPanjim(), loadModels()]);
@@ -43,8 +43,19 @@ async function start() {
   scene.add(buildTerrain(d, g), buildWater(d));
   const roads = buildRoads(d, g); scene.add(roads.group);
   const si = new StreetIndex(roads.segs);
-  const blds = buildBuildings(d, g); scene.add(blds.group);
+  // the landmarks: their Blender models stand on their map points, in place of the plain blocks there
+  const lmBox = d.lm.flatMap(l => l.at.map(([x, y]) => [x + l.cov[0], x + l.cov[1], y + l.cov[2], y + l.cov[3]]));
+  const plain = { ...d, b: d.b.filter(([f]) => {
+    let cx = 0, cy = 0; for (let i = 0; i < f.length; i += 2) { cx += f[i]; cy += f[i + 1]; } cx /= f.length / 2; cy /= f.length / 2;
+    return !lmBox.some(([x0, x1, y0, y1]) => cx > x0 && cx < x1 && cy > y0 && cy < y1);
+  }) };
+  const blds = buildBuildings(plain, g); scene.add(blds.group);
   const bi = new BuildingIndex(blds.list);
+  for (const l of d.lm) for (const [x, y] of l.at) {
+    const m = rawModel(l.name); if (!m) continue;
+    const X = x * T, Z = y * T, deck = si.at(X, Z)?.deck;
+    m.position.set(X, deck ?? g.heightAt(X, Z), Z); m.traverse(o => { o.receiveShadow = true; }); scene.add(m);
+  }
   scene.add(buildTrees(d, g, bi, si));
 
   const child = new Child(); scene.add(child.obj);
