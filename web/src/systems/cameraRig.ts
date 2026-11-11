@@ -29,7 +29,8 @@ export class CameraRig {
   /** A screen direction (x right, y down) as a world direction on the ground. */
   screenToGround(x: number, y: number): { x: number; z: number } {
     // screen right = the camera's right; screen down = toward the camera along the ground
-    const rx = -Math.sin(this.yaw), rz = Math.cos(this.yaw), dx = Math.cos(this.yaw), dz = Math.sin(this.yaw);
+    // the camera looks along -(cos yaw, sin yaw); its right is that direction crossed with up: (sin yaw, -cos yaw)
+    const rx = Math.sin(this.yaw), rz = -Math.cos(this.yaw), dx = Math.cos(this.yaw), dz = Math.sin(this.yaw);
     return { x: rx * x + dx * y, z: rz * x + dz * y };
   }
 }
