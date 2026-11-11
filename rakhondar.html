@@ -339,7 +339,13 @@ const lerp2 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 /* ---------- isometric drawing helpers ---------- */
 // map (x, y) turned to view (u, v), and a map direction turned the same way
 const rotXY = (x, y) => ROT === 0 ? [x, y] : ROT === 1 ? [H - y, x] : ROT === 2 ? [W - x, H - y] : [y, W - x];
-const rotV = (dx, dy) => ROT === 0 ? [dx, dy] : ROT === 1 ? [-dy, dx] : ROT === 2 ? [-dx, -dy] : [dy, -dx];
+const rotV0 = (dx, dy) => ROT === 0 ? [dx, dy] : ROT === 1 ? [-dy, dx] : ROT === 2 ? [-dx, -dy] : [dy, -dx];
+const rotV = (dx, dy) => {
+  const q = rotV0(dx, dy);
+  if (!VD) return q;
+  const sm = q[0] + q[1], df = q[0] - q[1], s2 = sm * VC + df * VS, d2 = df * VC - sm * VS;   // turn in the (toward the viewer, across) plane
+  return [(s2 + d2) / 2, (s2 - d2) / 2];
+};
 const unrotV = (du, dv) => ROT === 0 ? [du, dv] : ROT === 1 ? [dv, -du] : ROT === 2 ? [-du, -dv] : [-dv, du];
 // Terrain: in the real city the ground has height. TERR is a grid of lifts in px at the tile corners (null where the
 // ground is flat); every map point is drawn that much higher, so streets, people and vehicles climb the hills.
@@ -2375,7 +2381,8 @@ function buildStatics0() {
   if (miniFor !== map) { bakeMini(); miniFor = map; }   // the mini map is north-up: turning the view doesn't change it
   statics = [];
   // the depth key is given as x + y in map terms; turn it with the view (offsets along the diagonal stay small)
-  const add = (x, y, key, draw, rim) => { const [sx, sy] = iso(x, y); statics.push({ sx, sy, fx: x, fy: y, key: depth(x, y) + (key - x - y), bias: key - x - y, draw, rim }); };
+  let curHouse = null;   // set while a house's standing thing is added
+  const add = (x, y, key, draw, rim) => { const [sx, sy] = iso(x, y); statics.push({ sx, sy, fx: x, fy: y, key: depth(x, y) + (key - x - y), bias: key - x - y, draw, rim, hs: curHouse }); };
   const real = realOn();
   REAL_TILES = real;
   if (real) { TERR = realTerrain(); TERR_MAX = realPrep().terrMax; } else { TERR = null; TERR_MAX = 0; }
@@ -2384,6 +2391,7 @@ function buildStatics0() {
   const small = (x, y, fn, k = 0.55) => g => { const [sx, sy] = iso(x, y); g.save(); g.translate(sx, sy); g.scale(k, k); g.translate(-sx, -sy); fn(g); g.restore(); };
   if (real) addRealStatics(add);
   for (const h of houses) {
+    curHouse = h;
     if (real && h.town) continue;   // the real city's own outlines stand in for the town's tile buildings
     // a 3D house draws its shared tinted image straight; only hand-drawn houses are baked one by one
     if (h.town) {
@@ -2401,6 +2409,7 @@ function buildStatics0() {
     add(h.x + h.w / 2, h.y + h.h / 2, h.x + h.w / 2 + h.y + h.h / 2, g => blit(g, spr), g => { for (const [a, b] of h.rim) line(g, a, b, 'rgba(175,200,255,.32)', 1.5); });
   }
   const TS = real ? 0.6 : 1;   // trees too stand smaller in the real city
+  curHouse = null;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = y * W + x, t = map[i];
     if (t === TREE || t === MANG) {
@@ -4765,7 +4774,8 @@ function render() {
       const q = iso(s.fx, s.fy);
       if (!inView(q[0], q[1])) continue;
       if (s.bld) { const bl = s.bld; list.push({ key: depth(s.fx, s.fy) + s.bias, draw: g => { TERR_FIX = bl.lift || 0; try { drawRealBuilding(g, bl); } finally { TERR_FIX = null; } } }); }
-      else list.push({ key: depth(s.fx, s.fy) + s.bias, draw: g => { g.save(); g.translate(q[0] - s.sx, q[1] - s.sy); s.draw(g); g.restore(); } });
+      else if (s.hs) { const h = s.hs; list.push({ key: depth(s.fx, s.fy) + s.bias, draw: g => { const on = houseSprites; houseSprites = false; try { drawHouse(g, h); } finally { houseSprites = on; } } }); }   // the hand-drawn house: it can be drawn at any angle
+      else list.push({ key: depth(s.fx, s.fy) + s.bias, draw: g => { g.save(); g.translate(q[0] - s.sx, q[1] - s.sy); unturned(() => s.draw(g)); g.restore(); } });
     }
   }
   if (!player.ride) list.push({ mob: { x: player.x, y: player.y }, key: depth(player.x, player.y), draw: g => drawChild(g, 1) });
