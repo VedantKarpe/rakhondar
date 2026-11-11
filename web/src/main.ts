@@ -22,6 +22,8 @@ import { sfx, unlockAudio } from './systems/sfx';
 import { loadModels, rawModel } from './world/models';
 import { Boats } from './entities/boats';
 import { Pumps } from './entities/pumps';
+import { Bikes } from './entities/bikes';
+import { buildPromenade } from './world/promenade';
 
 async function start() {
   const [d] = await Promise.all([loadPanjim(), loadModels()]);
@@ -82,6 +84,8 @@ async function start() {
   const day = new Clock(net, g); scene.add(day.lamps);
   const quests = new Quests(d, net, g, px, pz); scene.add(quests.group);
   const map = new Minimap(d);
+  scene.add(buildPromenade(d, g, bi));
+  const bikes = new Bikes(net, g, (x, z) => move.free(x, z) && !si.at(x, z)); scene.add(bikes.group);
   const boats = new Boats(g); scene.add(boats.group);
   const pumps = new Pumps(net, g, (x, z) => !bi.solid(x, z, 9) && !g.isWet(x, z) && !si.at(x, z)); scene.add(pumps.group);
   const home: [number, number] = [px, pz];
@@ -94,6 +98,9 @@ async function start() {
     hud.whisper(p ? people.talk(px, pz, quests.target) : 'Nobody here to ask, baba. Go near someone and ask.');
   };
   const lift = () => {
+    if (bikes.riding) { bikes.park(px, pz); hud.whisper('Parked. Lock it, no? Somebody will take it otherwise.', 2); return; }
+    const bk = traffic.riding ? null : bikes.near(px, pz);
+    if (bk) { bikes.mount(bk); hud.whisper(bk.kind === 'scooter' ? 'Vroom! Keys were in it only. Go slow near the church, men.' : 'Tring tring! Pedal, baba, pedal!', 3); return; }
     if (traffic.riding) { const o = traffic.hopOff(); if (o && move.free(o.x, o.z)) { px = o.x; pz = o.z; } }
     else if (!traffic.hopOn(px, pz)) hud.whisper('No vehicle near. Stand beside the road and wait for a pilot.', 3);
   };
@@ -148,7 +155,7 @@ async function start() {
     } else {
       // walk: screen directions turned to the ground under the current view
       const m = input.move(), run = input.has('shift') ? 2 : 1;
-      speed = Math.hypot(m.x, m.y) * 32 * run;
+      speed = Math.hypot(m.x, m.y) * 32 * run * bikes.boost;
       if (speed > 0) {
         const w = rig.screenToGround(m.x, m.y), L = Math.hypot(w.x, w.z) || 1;
         child.heading = Math.atan2(w.z, w.x);
@@ -160,7 +167,9 @@ async function start() {
         knockX *= 1 - Math.min(1, dt * 4); knockZ *= 1 - Math.min(1, dt * 4);
       }
     }
-    const py = traffic.riding ? traffic.riding.obj.position.y + 2.2 : move.standY(px, pz);
+    const gy = move.standY(px, pz);
+    const py = traffic.riding ? traffic.riding.obj.position.y + 2.2 : bikes.riding ? gy + 1.3 : gy;
+    bikes.follow(px, gy + 0.15, pz, child.heading, performance.now() / 1000);
     child.obj.position.set(px, py, pz);
     const lampLit = st.lamp && st.oil > 0;
     child.update(dt, speed, night && lampLit);
