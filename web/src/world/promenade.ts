@@ -20,26 +20,35 @@ export function buildPromenade(d: PanjimData, g: Ground, bi: BuildingIndex): THR
       const [ax, az] = line[i - 1], [bx, bz] = line[i], len = Math.hypot(bx - ax, bz - az);
       if (len < 2) continue;
       const tx = (bx - ax) / len, tz = (bz - az) / len, nx = -tz, nz = tx, half = w * 0.75 + 1.5;
-      for (let s = 0; s < len; s += 3) {
-        const cx = ax + tx * s, cz = az + tz * s;
-        // which side is the river, and how far: march out from the road's edge
-        for (const sd of [-1, 1]) {
-          let edge = -1;
-          for (let k = 2; k <= 30; k += 1) if (g.isWet(cx + nx * sd * (half + k), cz + nz * sd * (half + k))) { edge = k; break; }
-          if (edge < 5) continue;                                  // no water within 30 m, or too narrow a strip
-          const wx = cx + nx * sd * half, wz = cz + nz * sd * half, ex = cx + nx * sd * (half + edge - 1.5), ez = cz + nz * sd * (half + edge - 1.5);
+      // only the Mandovi waterfront: city stretch, river to the north of the street (the map's open water, not creeks)
+      const mx = (ax + bx) / 2 / T, mz = (az + bz) / 2 / T;
+      if (mx < 55 || mx > 135 || mz > 32) continue;
+      const river = (X: number, Z: number) => { const tx = Math.floor(X / T), ty = Math.floor(Z / T); return ty < 0 || (d.rows[ty]?.[tx] === 'W'); };
+      for (const sd of [-1, 1]) {
+        // one distance to the water for the whole piece of street (the median), so the walk has a clean straight edge
+        const found: number[] = [];
+        for (let s = 0; s < len; s += 3) {
+          const cx = ax + tx * s, cz = az + tz * s;
+          for (let k = 2; k <= 30; k++) if (river(cx + nx * sd * (half + k), cz + nz * sd * (half + k))) { found.push(k); break; }
+        }
+        const n = Math.ceil(len / 3);
+        if (found.length < n * 0.6) continue;
+        found.sort((p, q) => p - q);
+        const edge = found[Math.floor(found.length / 2)];
+        if (edge < 5) continue;
+        const sx = ax + nx * sd * half, sz = az + nz * sd * half, ex0 = ax + nx * sd * (half + edge - 1.5), ez0 = az + nz * sd * (half + edge - 1.5);
+        const y = Math.max(0.6, g.heightAt(sx, sz)) + 0.3, b = walk.length / 3;
+        walk.push(sx, y, sz, sx + tx * len, y, sz + tz * len, ex0 + tx * len, y, ez0 + tz * len, ex0, y, ez0);
+        walkI.push(b, b + 1, b + 2, b, b + 2, b + 3);
+        const ang = -Math.atan2(tz, tx);
+        for (let s = 1.5, seg = 0; s < len; s += 3, seg++) {
+          const ex = ex0 + tx * s, ez = ez0 + tz * s, wx = sx + tx * s, wz = sz + tz * s;
           if (bi.solid((wx + ex) / 2, (wz + ez) / 2, 1)) continue;
-          const y = Math.max(0.6, g.heightAt(wx, wz)) + 0.3, b = walk.length / 3;
-          // a quad of brick walk 3 m long, from the road's edge to the balustrade
-          const l2x = tx * 1.6, l2z = tz * 1.6;
-          walk.push(wx - l2x, y, wz - l2z, wx + l2x, y, wz + l2z, ex + l2x, y, ez + l2z, ex - l2x, y, ez - l2z);
-          walkI.push(b, b + 1, b + 2, b, b + 2, b + 3);
-          const ang = -Math.atan2(tz, tx), seg = Math.round(s / 3);
           copes.push(mat(ex, y + 1.05, ez, ang));
           for (const o of [-1, 0, 1]) balus.push(mat(ex + tx * o * 0.9, y + 0.55, ez + tz * o * 0.9, ang));
           if (seg % 3 === 0) posts.push(mat(ex, y + 0.6, ez, ang));
           if (seg % 9 === 4) benches.push(mat(ex - nx * sd * 2.2, y + 0.25, ez - nz * sd * 2.2, ang));
-          if (seg % 10 === 0 && flagN++ < 400) flags.push(mat(wx + nx * sd * 1.2, y, wz + nz * sd * 1.2, ang));
+          if (seg % 8 === 0 && flagN++ < 300) flags.push(mat(ex - nx * sd * 1.2, y, ez - nz * sd * 1.2, ang));
         }
       }
     }
