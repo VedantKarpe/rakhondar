@@ -352,10 +352,17 @@ function terr(x, y) {
   const fx = x < 0 ? 0 : x > W - 0.001 ? W - 0.001 : x, fy = y < 0 ? 0 : y > H - 0.001 ? H - 0.001 : y, i = fx | 0, j = fy | 0, tx = fx - i, ty = fy - j, w = W + 1, k = j * w + i;
   return (TERR[k] * (1 - tx) + TERR[k + 1] * tx) * (1 - ty) + (TERR[k + w] * (1 - tx) + TERR[k + w + 1] * tx) * ty;
 }
-const isoFlat = (x, y) => { const [u, v] = rotXY(x, y); return [(u - v) * HW + OX, (u + v) * HH]; };
-const iso = (x, y) => { const [u, v] = rotXY(x, y); return [(u - v) * HW + OX, (u + v) * HH - terr(x, y)]; };
-const P = (x, y, z) => { const [u, v] = rotXY(x, y); return [(u - v) * HW + OX, (u + v) * HH - z - terr(x, y)]; };
-const depth = (x, y) => { const [u, v] = rotXY(x, y); return u + v; };
+// Turning the view: the view has four sides (ROT), each with its own drawings, and between them it turns smoothly. VD is
+// how far (radians, within 45 degrees either way) the ground is turned from side ROT, about the child: (VPX, VPY) on
+// the flat ground in px, (VU, VV) in the side's own map axes. Every point drawn through iso or P turns with it; the
+// baked drawings (ground pieces, buildings) are made unturned and moved or turned as they are drawn.
+let VD = 0, VC = 1, VS = 0, VPX = 0, VPY = 0, VU = 0, VV = 0;
+const isoRaw = (x, y) => { const [u, v] = rotXY(x, y); return [(u - v) * HW + OX, (u + v) * HH]; };   // unturned, unlifted
+const isoFlat = (x, y) => { const q = isoRaw(x, y); if (VD) { const X = q[0] - VPX, Y = q[1] - VPY; q[0] = VPX + X * VC - 2 * Y * VS; q[1] = VPY + Y * VC + 0.5 * X * VS; } return q; };
+const iso = (x, y) => { const q = isoFlat(x, y); q[1] -= terr(x, y); return q; };
+const P = (x, y, z) => { const q = isoFlat(x, y); q[1] -= z + terr(x, y); return q; };
+function unturned(fn) { const d = VD; VD = 0; try { return fn(); } finally { VD = d; } }   // for making the baked drawings
+const depth = (x, y) => { const [u, v] = rotXY(x, y); if (!VD) return u + v; const a = u - VU, b = v - VV; return VU + VV + a * (VC + VS) + b * (VC - VS); };
 // map tiles under a screen rectangle (world px), as [x0, y0, x1, y1]; the per-frame passes walk only these
 let VIEWT = [0, 0, 0, 0];
 function viewTiles(l, t, r, b) {
@@ -488,14 +495,16 @@ function dome(g, cx, cy, r, z, h, light, darkc) {
 }
 // bake the thing standing on footprint (x0, y0)-(x1, y1), up to z px tall, from the current view
 function bakeOn(x0, y0, x1, y1, z, fn) {
-  const c = [P(x0, y0, 0), P(x1, y0, 0), P(x0, y1, 0), P(x1, y1, 0)];
-  const xs = c.map(p => p[0]), ys = c.map(p => p[1]);
-  return bake(Math.min(...xs) - 30, Math.min(...ys) - z, Math.max(...xs) + 30, Math.max(...ys) + 12, fn);
+  return unturned(() => {
+    const c = [P(x0, y0, 0), P(x1, y0, 0), P(x0, y1, 0), P(x1, y1, 0)];
+    const xs = c.map(p => p[0]), ys = c.map(p => p[1]);
+    return bake(Math.min(...xs) - 30, Math.min(...ys) - z, Math.max(...xs) + 30, Math.max(...ys) + 12, fn);
+  });
 }
 function bake(l, t, r, b, fn) {
   const c = document.createElement('canvas');
   c.width = Math.ceil((r - l) * BAKE); c.height = Math.ceil((b - t) * BAKE);
-  const g = c.getContext('2d'); g.scale(BAKE, BAKE); g.translate(-l, -t); fn(g);
+  const g = c.getContext('2d'); g.scale(BAKE, BAKE); g.translate(-l, -t); unturned(() => fn(g));
   return { c, l, t, w: r - l, h: b - t };
 }
 const blit = (g, s) => g.drawImage(s.c, s.l, s.t, s.w, s.h);
@@ -1195,6 +1204,10 @@ function groundChunk(ci, cj) {
   const key = ROT + ':' + ci + ',' + cj;
   let c = groundChunks.get(key);
   if (c) { groundChunks.delete(key); groundChunks.set(key, c); return c; }
+  return unturned(() => paintChunk(ci, cj, key));
+}
+function paintChunk(ci, cj, key) {
+  let c;
   c = document.createElement('canvas'); c.width = c.height = CHUNK;
   const g = c.getContext('2d');
   g.translate(-ci * CHUNK, -cj * CHUNK);
@@ -1944,7 +1957,7 @@ function pilotSheet() {
   return PILOT.ok ? PILOT.img : null;
 }
 function pilotFrame(c) {   // which frame: the heading, turned with the view, in sixteenths of a turn
-  const h = c.h !== undefined ? c.h : Math.atan2(c.dy, c.dx), T = 2 * Math.PI, a = (((h + ROT * Math.PI / 2) % T) + T) % T;
+  const h = c.h !== undefined ? c.h : Math.atan2(c.dy, c.dx), T = 2 * Math.PI, a = (((h + ROT * Math.PI / 2 + VD) % T) + T) % T;
   return Math.round(a / (T / PILOT.N)) % PILOT.N;
 }
 function drawVehicle(g, c) {
@@ -1973,7 +1986,7 @@ function busSheet() {
   return BUS.ok ? BUS.img : null;
 }
 function busFrame(c) {
-  const h = c.h !== undefined ? c.h : Math.atan2(c.dy, c.dx), T = 2 * Math.PI, a = (((h + ROT * Math.PI / 2) % T) + T) % T;
+  const h = c.h !== undefined ? c.h : Math.atan2(c.dy, c.dx), T = 2 * Math.PI, a = (((h + ROT * Math.PI / 2 + VD) % T) + T) % T;
   return Math.round(a / (T / BUS.N)) % BUS.N;
 }
 function drawBus(g, c, dx, dy) {
@@ -2133,7 +2146,7 @@ function realHeight(x, y) {   // metres above the water at tile (x, y)
 // is a feature's box near the screen rectangle (world px)?
 function realNear(bb, x0, y0, x1, y1, pad = 40) {
   if (bb.rot !== ROT || bb.ox !== OX) {
-    const c = [isoFlat(bb[0], bb[1]), isoFlat(bb[2], bb[1]), isoFlat(bb[0], bb[3]), isoFlat(bb[2], bb[3])];
+    const c = [isoRaw(bb[0], bb[1]), isoRaw(bb[2], bb[1]), isoRaw(bb[0], bb[3]), isoRaw(bb[2], bb[3])];
     bb.rot = ROT; bb.ox = OX; bb.sb = [Math.min(...c.map(q => q[0])), Math.min(...c.map(q => q[1])) - TERR_MAX, Math.max(...c.map(q => q[0])), Math.max(...c.map(q => q[1]))];
   }
   const q = bb.sb;
@@ -2302,8 +2315,9 @@ function realSprite(b) {
 // buildings' drawings within 22 tiles and the ground a screen and more around, so walking or riding never meets an undrawn
 // building or ground piece), then the two sides the view can turn to, so X and Z turn without a stall.
 function prewarmTurns(budget = 6) {
-  if (!S || !player || turnAnim || !realOn() || document.hidden) return;
-  const R = realPrep(), keep = ROT, keepOX = OX, t0 = performance.now();
+  if (!S || !player || !realOn() || document.hidden) return;
+  const R = realPrep(), keep = ROT, keepOX = OX, keepVD = VD, t0 = performance.now();
+  VD = 0;
   try {
     for (const d of [0, 1, -1]) {
       ROT = (keep + d + 4) % 4; OX = (ROT % 2 ? W : H) * HW;
@@ -2317,7 +2331,7 @@ function prewarmTurns(budget = 6) {
         for (let ci = Math.max(0, Math.floor((px - hw) / CHUNK)); ci <= Math.floor((px + hw) / CHUNK); ci++)
           if (!groundChunks.has(ROT + ':' + ci + ',' + cj)) { groundChunk(ci, cj); return; }
     }
-  } finally { ROT = keep; OX = keepOX; }
+  } finally { ROT = keep; OX = keepOX; VD = keepVD; }
 }
 let cleanN = 0;
 function cleanSprites() {   // a building's drawings (four sides) 40+ tiles from the child go; they are rebuilt if the child comes back
@@ -2346,11 +2360,17 @@ function addRealStatics(add) {
 
 // every standing object gets a depth key (x + y of its middle) and is drawn back to front
 let miniFor = null;
-function buildStatics() {
+let staticsCache = {};
+function buildStatics() { staticsCache = {}; unturned(buildStatics0); staticsCache[ROT] = statics; }
+function turnStatics() {   // the view has crossed to another side: its standing things, kept from last time or made now
+  const keep = staticsCache;
+  if (keep[ROT]) statics = keep[ROT]; else { buildStatics(); keep[ROT] = statics; staticsCache = keep; }
+}
+function buildStatics0() {
   if (miniFor !== map) { bakeMini(); miniFor = map; }   // the mini map is north-up: turning the view doesn't change it
   statics = [];
   // the depth key is given as x + y in map terms; turn it with the view (offsets along the diagonal stay small)
-  const add = (x, y, key, draw, rim) => { const [sx, sy] = iso(x, y); statics.push({ sx, sy, fx: x, fy: y, key: depth(x, y) + (key - x - y), draw, rim }); };
+  const add = (x, y, key, draw, rim) => { const [sx, sy] = iso(x, y); statics.push({ sx, sy, fx: x, fy: y, key: depth(x, y) + (key - x - y), bias: key - x - y, draw, rim }); };
   const real = realOn();
   REAL_TILES = real;
   if (real) { TERR = realTerrain(); TERR_MAX = realPrep().terrMax; } else { TERR = null; TERR_MAX = 0; }
@@ -3075,13 +3095,16 @@ addEventListener('keydown', e => {
   if (k === 'g' && !e.repeat && S && S.mode === 'play') showGoaMap();
   if (k === 'p' && !e.repeat && S && S.mode === 'play') showPlaces();
   if (k === 'escape' && S && S.mode === 'play') { showIntro(); return; }
-  if ((k === 'z' || k === 'x') && S && S.mode !== 'talk') turnView(k === 'z' ? -1 : 1);
+  if ((k === 'z' || k === 'x') && !e.repeat && S && S.mode === 'play') { if (VA === null) VA = VAT = ROT * QT; turnTap = { k, t: performance.now(), base: Math.round(VAT / QT) }; }
   if (k === '=' || k === '+') zoomBy(1.1);
   if (k === '-' || k === '_') zoomBy(1 / 1.1);
   if (k === 'm' && !e.repeat) SFX.toggle(); else SFX.init();
   keys.add(k);
 });
-addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+addEventListener('keyup', e => {
+  const k = e.key.toLowerCase(); keys.delete(k);
+  if (turnTap && turnTap.k === k) { if (performance.now() - turnTap.t < 230) VAT = (turnTap.base + (k === 'x' ? 1 : -1)) * QT; turnTap = null; }   // a tap: a quarter turn
+});
 addEventListener('blur', () => keys.clear());
 cv.addEventListener('pointerdown', e => { SFX.init(); joy.id = e.pointerId; joy.ox = e.clientX; joy.oy = e.clientY; joy.dx = joy.dy = 0; cv.setPointerCapture(e.pointerId); });
 cv.addEventListener('pointermove', e => { if (e.pointerId === joy.id) { joy.dx = e.clientX - joy.ox; joy.dy = e.clientY - joy.oy; } });
@@ -3230,14 +3253,15 @@ function update(dt) {
     let go = !(c.stopT > 0);
     if (!player.ride) {
       const ax = player.x - c.x, ay = player.y - c.y, ahead = ax * c.dx + ay * c.dy, side = Math.abs(ax * c.dy - ay * c.dx);
-      if (side < (realOn() ? 0.5 : 0.9) && ahead > 0 && ahead < 1.2 + c.v * 0.5 + (big ? 0.8 : 0)) go = false;
+      if (side < (realOn() ? 0.7 : 0.9) && ahead > 0 && ahead < 1.8 + c.v * 0.8 + (big ? 0.8 : 0)) go = false;   // sees the child from further off and brakes sooner
     }
     if (c.haltT > 0) { c.haltT -= dt; go = false; }
     if (mine && c.stopReq) go = false;
     if (go) for (const o of S.cars) {   // keep behind the car in front
       if (o === c) continue;
       const ox = o.x - c.x, oy = o.y - c.y, ah = ox * c.dx + oy * c.dy, lat = Math.abs(ox * c.dy - oy * c.dx);
-      if (ah > 0.05 && ah < 0.9 + c.v * 0.3 && lat < 0.3 && o.dx * c.dx + o.dy * c.dy > 0.5) { go = false; break; }
+      const same = o.dx * c.dx + o.dy * c.dy > 0.5;
+      if (ah > 0.05 && ah < 1.1 + c.v * 0.4 && lat < 0.3 && (same || S.cars.indexOf(o) < ci)) { go = false; break; }   // behind one going the same way; at a crossing the later one waits
     }
     driveCar(c, dt, go);
     if (c.v > 2 && !(c.phT > 0)) for (const ph of potholes) if (hyp(c.x - ph.x, c.y - ph.y) < (ph.r !== undefined ? ph.r : 0.3) + 0.1) {
@@ -4163,7 +4187,7 @@ function carVsChild(c) {
   const lg = rx * ux + ry * uy, lt = rx * uy - ry * ux, K = realOn() ? 1 : 1.9, [hl, hw] = CAR_BOX[c.type] || CAR_BOX.car;
   const penL = hl * K + 0.08 - Math.abs(lg), penT = hw * K + 0.08 - Math.abs(lt);
   if (penL <= 0 || penT <= 0) return;
-  if (c.v > 1 || (player.bike && player.bike.v > 2)) return carCrash(c);
+  if (c.v > 1.8 || (player.bike && player.bike.v > 2.5)) return carCrash(c);   // only a vehicle still moving at speed knocks you down
   if (penL < penT) { player.x += ux * Math.sign(lg || 1) * penL; player.y += uy * Math.sign(lg || 1) * penL; }
   else { player.x += uy * Math.sign(lt || 1) * penT; player.y -= ux * Math.sign(lt || 1) * penT; }
 }
@@ -4181,7 +4205,7 @@ function carCrash(c) {
 }
 // the real city's traffic: ~100 vehicles on the mapped streets (more on the big roads, mostly motorcycle pilots and
 // cars), a third of them starting close to the child; recycleTraffic() keeps some near them as they move about
-const TRAFFIC = [['car', 34], ['pilot', 36], ['rick', 16], ['private', 8], ['ktc', 4]];
+const TRAFFIC = [['car', 16], ['pilot', 16], ['rick', 8], ['private', 4], ['ktc', 3]];
 const PRIV_BUSES = [['SAO JOSE', '#d8302a'], ['SHREE DATTA', '#2f6fd0'], ['ROSARY', '#2fa08a'], ['LAXMI', '#e0a33a'], ['MILAGRES', '#6a3f8a']];
 function wayPoint(w, s) {
   let k = 0; while (k < w.len.length - 1 && w.len[k] < s) k++;
@@ -4433,7 +4457,7 @@ function kidSheet() {
 }
 function drawChild(g, alpha) {
   if (!player.bike && realOn() && kidSheet()) {   // on foot in the city: the modelled child, turned to the way they face, stepping as they walk
-    const [sx, sy] = iso(player.x, player.y), T = 2 * Math.PI, a = (((Math.atan2(player.hy, player.hx) + ROT * Math.PI / 2) % T) + T) % T, i = Math.round(a / (T / KID.N)) % KID.N;
+    const [sx, sy] = iso(player.x, player.y), T = 2 * Math.PI, a = (((Math.atan2(player.hy, player.hx) + ROT * Math.PI / 2 + VD) % T) + T) % T, i = Math.round(a / (T / KID.N)) % KID.N;
     const pose = player.moving ? [1, 2, 3, 2][Math.floor(S.t * 9) % 4] : 0, F = KID.F, k = KID.k;
     g.globalAlpha = alpha;
     if (alpha === 1) { g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(sx, sy, 10, 5, 0, 0, 7); g.fill(); }
@@ -4540,14 +4564,26 @@ function drawBell(g) {
 // The ground plane turns exactly (an affine map); buildings lean a little mid-turn and settle when it ends.
 const turnSnap = document.createElement('canvas'), turnNew = document.createElement('canvas');
 let turnAnim = null, turnPivot = [0, 0];
-function turnView(d) {
-  if (!S || turnAnim) return;
-  turnSnap.width = cv.width; turnSnap.height = cv.height; turnSnap.getContext('2d').drawImage(cv, 0, 0);
-  ROT = (ROT + d + 4) % 4; OX = (ROT % 2 ? W : H) * HW;
-  if (!realOn()) drawGround();   // the real city keeps its ground pieces per side of the view
-  buildStatics();
-  try { localStorage.setItem('rk-rot', ROT); } catch (e) {}
-  turnAnim = { d, t: 0, pivot: turnPivot.slice() };
+// VA is the view's angle in radians (a quarter turn a side), VAT where it is heading. Holding Z or X keeps it turning,
+// dragging with the right mouse button turns it with the mouse, a tap or a button gives a quarter turn; left alone it
+// eases to the nearest side, where the drawings made for that side fit exactly.
+let VA = null, VAT = 0, turnTap = null;
+const QT = Math.PI / 2;
+function turnView(d) { if (!S) return; if (VA === null) VA = VAT = ROT * QT; VAT = (Math.round(VAT / QT) + d) * QT; }
+function viewStep(dt) {
+  if (!S || !player) return;
+  if (VA === null) VA = VAT = ROT * QT;
+  const held = S.mode === 'play' ? (keys.has('x') ? 1 : 0) - (keys.has('z') ? 1 : 0) : 0;
+  if (held) VAT += held * 2.4 * dt;
+  else if (!turnDrag) VAT += (Math.round(VAT / QT) * QT - VAT) * Math.min(1, dt * 7);   // settle on the nearest side
+  VA += (VAT - VA) * Math.min(1, dt * 12);
+  const base = Math.round(VA / QT), rot = ((base % 4) + 4) % 4, d = VA - base * QT;
+  if (rot !== ROT) {
+    ROT = rot; OX = (ROT % 2 ? W : H) * HW;
+    turnStatics();
+    try { localStorage.setItem('rk-rot', ROT); } catch (e) {}
+  }
+  VD = Math.abs(d) < 0.0015 ? 0 : d; VC = Math.cos(VD); VS = Math.sin(VD);
 }
 // screen transform that turns the ground plane by theta around the view's vertical axis
 function groundTurn(th) {
@@ -4574,13 +4610,12 @@ function compositeTurn(dt) {
 try { const r = +localStorage.getItem('rk-rot'); if (r >= 0 && r < 4) { ROT = r; OX = (ROT % 2 ? W : H) * HW; } } catch (e) {}
 let turnDrag = null;
 cv.addEventListener('contextmenu', e => e.preventDefault());
-cv.addEventListener('mousedown', e => { if (e.button === 2) turnDrag = { x: e.clientX }; });
+cv.addEventListener('mousedown', e => { if (e.button === 2 || e.button === 1) { e.preventDefault(); if (VA === null) VA = VAT = ROT * QT; turnDrag = { x: e.clientX }; } });
 addEventListener('mousemove', e => {
   if (!turnDrag) return;
-  const dx = e.clientX - turnDrag.x;
-  if (Math.abs(dx) > 70) { turnView(dx > 0 ? 1 : -1); turnDrag.x = e.clientX; }
+  VAT += (e.clientX - turnDrag.x) * 0.007; turnDrag.x = e.clientX;   // the view follows the mouse: about 220 px a quarter turn
 });
-addEventListener('mouseup', e => { if (e.button === 2) turnDrag = null; });
+addEventListener('mouseup', e => { if (e.button === 2 || e.button === 1) turnDrag = null; });
 // mouse look-ahead: point at the edge of the screen and the view leans that way, up to a third of the screen
 const look = { x: 0, y: 0, tx: 0, ty: 0 };
 addEventListener('mousemove', e => {
@@ -4590,6 +4625,7 @@ addEventListener('mousemove', e => {
 document.addEventListener('mouseleave', () => { look.tx = look.ty = 0; });
 let sgFor = null, sgrid = new Map();
 function render() {
+  { const q = isoRaw(player.x, player.y), uv = rotXY(player.x, player.y); VPX = q[0]; VPY = q[1]; VU = uv[0]; VV = uv[1]; }   // the view turns about the child
   const [px, py] = iso(player.x, player.y);
   const shake = S.shake * 10;
   look.x += (look.tx - look.x) * 0.08; look.y += (look.ty - look.y) * 0.08;
@@ -4605,10 +4641,19 @@ function render() {
   toWorld(ctx);
 
   // the ground pieces under the view (each drawn a hair larger, so no seam shows between them)
-  for (let cj = Math.max(0, Math.floor(camY / CHUNK)); cj <= Math.min(Math.floor(GROUND_H / CHUNK), Math.floor((camY + vh / sc) / CHUNK)); cj++)
-    for (let ci = Math.max(0, Math.floor(camX / CHUNK)); ci <= Math.min(Math.floor(GROUND_W / CHUNK), Math.floor((camX + vw / sc) / CHUNK)); ci++)
+  // gx0..gy1: the part of the unturned ground the view can see (all of it, when the view is turned)
+  let gx0 = camX, gy0 = camY, gx1 = camX + vw / sc, gy1 = camY + vh / sc;
+  if (VD) {
+    const un = (X, Y) => [px + (X - px) * VC + 2 * (Y - py) * VS, py + (Y - py) * VC - 0.5 * (X - px) * VS];
+    const cs = [un(gx0, gy0), un(gx1, gy0), un(gx0, gy1), un(gx1, gy1)];
+    gx0 = Math.min(...cs.map(q => q[0])); gx1 = Math.max(...cs.map(q => q[0])); gy0 = Math.min(...cs.map(q => q[1])); gy1 = Math.max(...cs.map(q => q[1]));
+    ctx.save(); ctx.transform(VC, 0.5 * VS, -2 * VS, VC, px - px * VC + 2 * py * VS, py - py * VC - 0.5 * px * VS);   // the ground pieces, turned about the child
+  }
+  for (let cj = Math.max(0, Math.floor(gy0 / CHUNK)); cj <= Math.min(Math.floor(GROUND_H / CHUNK), Math.floor(gy1 / CHUNK)); cj++)
+    for (let ci = Math.max(0, Math.floor(gx0 / CHUNK)); ci <= Math.min(Math.floor(GROUND_W / CHUNK), Math.floor(gx1 / CHUNK)); ci++)
       ctx.drawImage(groundChunk(ci, cj), ci * CHUNK, cj * CHUNK, CHUNK + 1, CHUNK + 1);
-  VIEWT = viewTiles(camX - 120, camY - 140, camX + vw / sc + 120, camY + vh / sc + 260);
+  if (VD) ctx.restore();
+  VIEWT = viewTiles(gx0 - 120, gy0 - 140, gx1 + 120, gy1 + 260);
 
   // water the tide or the flood has let onto the fields and lanes
   for (let y = VIEWT[1]; y <= VIEWT[3]; y++) for (let x = VIEWT[0]; x <= VIEWT[2]; x++) {
@@ -4707,9 +4752,14 @@ function render() {
     sgFor = statics; sgrid = new Map();
     for (const s of statics) { const k = Math.floor(s.sx / 256) * 8192 + Math.floor(s.sy / 256); let a = sgrid.get(k); if (!a) sgrid.set(k, a = []); a.push(s); }
   }
-  for (let gx = Math.floor(L / 256); gx <= Math.floor(R / 256); gx++) for (let gy = Math.floor(Tp / 256); gy <= Math.floor(B / 256); gy++) {
+  for (let gx = Math.floor((gx0 - 160) / 256); gx <= Math.floor((gx1 + 160) / 256); gx++) for (let gy = Math.floor((gy0 - 80 - TERR_MAX) / 256); gy <= Math.floor((gy1 + 260) / 256); gy++) {
     const a = sgrid.get(gx * 8192 + gy);
-    if (a) for (const s of a) if (inView(s.sx, s.sy)) list.push(s);
+    if (!a) continue;
+    if (!VD) { for (const s of a) if (inView(s.sx, s.sy)) list.push(s); continue; }
+    for (const s of a) {   // the view is turned: each standing thing keeps its drawing and moves to where it now stands
+      const q = iso(s.fx, s.fy);
+      if (inView(q[0], q[1])) list.push({ key: depth(s.fx, s.fy) + s.bias, draw: g => { g.save(); g.translate(q[0] - s.sx, q[1] - s.sy); s.draw(g); g.restore(); } });
+    }
   }
   if (!player.ride) list.push({ mob: { x: player.x, y: player.y }, key: depth(player.x, player.y), draw: g => drawChild(g, 1) });
   else if (!liftOf(player.ride).inside) list.push({ mob: { x: player.x, y: player.y }, key: depth(player.x, player.y) + 0.01, draw: g => {
@@ -6043,7 +6093,8 @@ function frame(now) {
   if (player && !(isFinite(player.x) && isFinite(player.y))) { player.x = START.x + 0.5; player.y = START.y + 0.5; }   // never lose the child to a bad number
   else if (player) { player.x = Math.max(0.6, Math.min(W - 0.6, player.x)); player.y = Math.max(0.6, Math.min(H - 0.6, player.y)); }   // nor off the map
   const raw = Math.min(100, now - lastNow); lastNow = now;
-  update(dt); render(); if (turnAnim) compositeTurn(dt); SFX.tick(dt);
+  viewStep(dt);
+  update(dt); render(); SFX.tick(dt);
   if (!document.hidden && raw > 0) {
     frameEma = frameEma * 0.92 + raw * 0.08;
     if (frameEma > 27 && renderScale > 0.55) { slowMs += raw; if (slowMs > 1500) { renderScale = Math.max(0.55, renderScale * 0.85); slowMs = 0; frameEma = 20; resize(); } } else slowMs = 0;
