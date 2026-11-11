@@ -20,6 +20,8 @@ import { Quests } from './systems/quests';
 import { Minimap } from './ui/minimap';
 import { sfx, unlockAudio } from './systems/sfx';
 import { loadModels, rawModel } from './world/models';
+import { Boats } from './entities/boats';
+import { Pumps } from './entities/pumps';
 
 async function start() {
   const [d] = await Promise.all([loadPanjim(), loadModels()]);
@@ -79,6 +81,8 @@ async function start() {
   const day = new Clock(net, g); scene.add(day.lamps);
   const quests = new Quests(d, net, g, px, pz); scene.add(quests.group);
   const map = new Minimap(d);
+  const boats = new Boats(g); scene.add(boats.group);
+  const pumps = new Pumps(net, g, (x, z) => !bi.solid(x, z, 9) && !g.isWet(x, z) && !si.at(x, z)); scene.add(pumps.group);
   const home: [number, number] = [px, pz];
 
   const rig = new CameraRig(), input = new Input(renderer.domElement), hud = new Hud();
@@ -143,7 +147,7 @@ async function start() {
     } else {
       // walk: screen directions turned to the ground under the current view
       const m = input.move(), run = input.has('shift') ? 2 : 1;
-      speed = Math.hypot(m.x, m.y) * 14 * run;
+      speed = Math.hypot(m.x, m.y) * 20 * run;
       if (speed > 0) {
         const w = rig.screenToGround(m.x, m.y), L = Math.hypot(w.x, w.z) || 1;
         child.heading = Math.atan2(w.z, w.x);
@@ -166,6 +170,9 @@ async function start() {
     const hit = traffic.update(dt, px, pz, night);
     if (hit && !traffic.riding) { knockX = hit.kx; knockZ = hit.kz; st.courage = Math.max(0, st.courage - 15); hurtT = 0.6; }
     people.update(dt, px, pz, night);
+    boats.update(dt, day.dark);
+    const pumpLine = pumps.update(dt, px, pz, st.oil);
+    if (pumpLine) { st.oil = 100; sfx.pick(); hud.whisper(pumpLine, 4); }
     const hurt = monsters.update(dt, px, pz, night, lampLit, (x, z) => day.litAt(x, z));
     if (hurt > 0) { st.courage = Math.max(0, st.courage - hurt); if (hurtT <= 0) { sfx.hurt(); hurtT = 0.4; } }
     // the lamp burns oil at night and refills by day; standing in light restores courage
