@@ -1,5 +1,5 @@
-// Rakhondar in three.js: Panjim from the map data, the child, the turning view. A prototype to compare with the
-// canvas game; game systems (traffic, people, quests, monsters, fog) come next.
+// Rakhondar in three.js: Panjim from the map data, the child, the turning view, and the game: traffic and lifts,
+// townspeople, the day and its street lights, the night's demons, tasks, the minimap with fog of war.
 import * as THREE from 'three';
 import { loadPanjim, Ground, T } from './world/data';
 import { buildTerrain, buildWater } from './world/terrain';
@@ -11,6 +11,14 @@ import { Input } from './systems/input';
 import { CameraRig } from './systems/cameraRig';
 import { Movement } from './systems/movement';
 import { Hud } from './ui/hud';
+import { Network } from './world/network';
+import { Traffic } from './entities/traffic';
+import { People } from './entities/people';
+import { Monsters } from './entities/monsters';
+import { Clock } from './systems/clock';
+import { Quests } from './systems/quests';
+import { Minimap } from './ui/minimap';
+import { sfx, unlockAudio } from './systems/sfx';
 
 async function start() {
   const d = await loadPanjim();
@@ -44,42 +52,125 @@ async function start() {
   let px = 92 * T, pz = 34 * T;
   if (!move.free(px, pz)) for (let r = 2; r < 200 && !move.free(px, pz); r += 2) { px = 92 * T + r; }
 
+  const net = new Network(d, g);
+  const traffic = new Traffic(net, g); scene.add(traffic.group);
+  const people = new People(net, g); scene.add(people.group);
+  const monsters = new Monsters(g, move); scene.add(monsters.group);
+  const day = new Clock(net, g); scene.add(day.lamps);
+  const quests = new Quests(d, net, g, px, pz); scene.add(quests.group);
+  const map = new Minimap(d);
+  const home: [number, number] = [px, pz];
+
   const rig = new CameraRig(), input = new Input(renderer.domElement), hud = new Hud();
-  let night = false;
-  input.onKey = k => { if (k === 'n') night = !night; };
-  const btn = (id: string, f: () => void) => document.getElementById(id)!.addEventListener('click', e => { (e.currentTarget as HTMLElement).blur(); f(); });
+  const st = { courage: 100, oil: 100, points: 0, lamp: true };
+  let knockX = 0, knockZ = 0, hurtT = 0;
+  const talk = () => {
+    const p = people.near(px, pz);
+    hud.whisper(p ? people.talk(px, pz, quests.target) : 'Nobody here to ask, baba. Go near someone and ask.');
+  };
+  const lift = () => {
+    if (traffic.riding) { const o = traffic.hopOff(); if (o && move.free(o.x, o.z)) { px = o.x; pz = o.z; } }
+    else if (!traffic.hopOn(px, pz)) hud.whisper('No vehicle near. Stand beside the road and wait for a pilot.', 3);
+  };
+  const banish = () => {
+    if (!day.night) { hud.whisper('No demons in the daytime, men. Relax.', 2); return; }
+    if (st.oil < 8) { hud.whisper('Your lamp has no oil left! Find a street light, quick.', 3); return; }
+    if (monsters.banishNear(px, pz)) { st.oil -= 8; st.points += 15; sfx.banish(); hud.whisper('Begone! The demon melts into the dark.', 2); }
+    else hud.whisper('No demon close enough.', 2);
+  };
+  const call = () => {
+    if (st.points < 50) { hud.whisper('You need 50 points of good deeds to call Rakhondar.', 3); return; }
+    st.points -= 50; monsters.call(); sfx.spirit(); hud.whisper('Rakhondar rises beside you, staff glowing. The demons flee!', 4);
+  };
+  input.onKey = k => {
+    unlockAudio();
+    if (k === 'n') day.min = day.night ? 7 * 60 : 19 * 60 + 30;
+    if (k === 't') talk();
+    if (k === 'f') lift();
+    if (k === ' ') banish();
+    if (k === 'r') call();
+    if (k === 'l') st.lamp = !st.lamp;
+    if (k === 'm') document.getElementById('map')!.click();
+  };
+  addEventListener('pointerdown', unlockAudio);
+  traffic.onEvent = (kind, text) => {
+    if (kind === 'honk') { if (Math.random() < 0.5) sfx.honk(); return; }
+    if (kind === 'crash') sfx.crash();
+    if (text) hud.whisper(text, 4);
+  };
+  const btn = (id: string, f: () => void) => document.getElementById(id)!.addEventListener('click', e => { (e.currentTarget as HTMLElement).blur(); unlockAudio(); f(); });
   btn('bL', () => rig.turn(-Math.PI / 2)); btn('bR', () => rig.turn(Math.PI / 2)); btn('bIn', () => rig.zoom(2)); btn('bOut', () => rig.zoom(-2));
+  btn('bTalk', talk); btn('bLift', lift); btn('bBan', banish); btn('bCall', call);
 
   const places = d.places.map(([n, x, y]) => ({ n, X: x * T, Z: y * T }));
   const resize = () => { renderer.setSize(app.clientWidth, app.clientHeight, false); };
   addEventListener('resize', resize); resize();
   document.getElementById('loading')!.remove();
+  hud.whisper(quests.cur!.intro, 8);
 
   const clock = new THREE.Clock();
-  (window as unknown as { rk: unknown }).rk = { scene, renderer, rig, child, get pos() { return [px, pz]; }, set pos(v: number[]) { px = v[0]; pz = v[1]; } };
+  let mapT = 0;
+  (window as unknown as { rk: unknown }).rk = { scene, renderer, rig, child, day, traffic, people, monsters, quests, st, get pos() { return [px, pz]; }, set pos(v: number[]) { px = v[0]; pz = v[1]; } };
   const frame = (dt: number) => {
-    // walk: screen directions turned to the ground under the current view
-    const m = input.move(), run = input.has('shift') ? 2 : 1, speed = Math.hypot(m.x, m.y) * 14 * run;
-    if (speed > 0) {
-      const w = rig.screenToGround(m.x, m.y), L = Math.hypot(w.x, w.z) || 1;
-      child.heading = Math.atan2(w.z, w.x);
-      [px, pz] = move.step(px, pz, (w.x / L) * speed * dt, (w.z / L) * speed * dt);
+    const night = day.night;
+    let speed = 0;
+    if (traffic.riding) {
+      // riding: the child sits on the vehicle
+      const v = traffic.riding; px = v.x; pz = v.z; child.heading = Math.atan2(v.hz, v.hx);
+    } else {
+      // walk: screen directions turned to the ground under the current view
+      const m = input.move(), run = input.has('shift') ? 2 : 1;
+      speed = Math.hypot(m.x, m.y) * 14 * run;
+      if (speed > 0) {
+        const w = rig.screenToGround(m.x, m.y), L = Math.hypot(w.x, w.z) || 1;
+        child.heading = Math.atan2(w.z, w.x);
+        [px, pz] = move.step(px, pz, (w.x / L) * speed * dt, (w.z / L) * speed * dt);
+      }
+      // thrown by a vehicle
+      if (Math.abs(knockX) + Math.abs(knockZ) > 0.1) {
+        [px, pz] = move.step(px, pz, knockX * dt, knockZ * dt);
+        knockX *= 1 - Math.min(1, dt * 4); knockZ *= 1 - Math.min(1, dt * 4);
+      }
     }
-    const py = move.standY(px, pz);
+    const py = traffic.riding ? traffic.riding.obj.position.y + 2.2 : move.standY(px, pz);
     child.obj.position.set(px, py, pz);
-    child.update(dt, speed, night);
+    const lampLit = st.lamp && st.oil > 0;
+    child.update(dt, speed, night && lampLit);
+    child.obj.rotation.z = hurtT > 0 ? Math.sin(hurtT * 30) * 0.15 : 0; hurtT = Math.max(0, hurtT - dt);
+
+    day.update(dt, scene, hemi, sun, px, pz);
+    const hit = traffic.update(dt, px, pz, night);
+    if (hit && !traffic.riding) { knockX = hit.kx; knockZ = hit.kz; st.courage = Math.max(0, st.courage - 15); hurtT = 0.6; }
+    people.update(dt, px, pz, night);
+    const hurt = monsters.update(dt, px, pz, night, lampLit, (x, z) => day.litAt(x, z));
+    if (hurt > 0) { st.courage = Math.max(0, st.courage - hurt); if (hurtT <= 0) { sfx.hurt(); hurtT = 0.4; } }
+    // the lamp burns oil at night and refills by day; standing in light restores courage
+    if (night && lampLit) st.oil = Math.max(0, st.oil - dt * 0.35);
+    if (!night) st.oil = Math.min(100, st.oil + dt * 2);
+    if (day.litAt(px, pz) && hurt === 0) st.courage = Math.min(100, st.courage + dt * (night ? 3 : 1));
+    if (st.courage <= 0) {
+      hud.whisper('Too scared! You run home to Aunty. "Aiyo baba, rest a little, then go."', 6);
+      if (traffic.riding) traffic.hopOff();
+      st.courage = 70; [px, pz] = home;
+    }
+    const q = quests.update(dt, px, pz);
+    if (q) { st.points += q.pts; const big = q.msg.length > 40; (big ? sfx.done : sfx.pick)(); hud.whisper(q.msg, big ? 9 : 2); }
+
     // the view: held keys turn it steadily, the mouse turns it as it is dragged, it zooms in steps
     rig.turn(input.heldTurn() * 2.2 * dt + input.turnDelta); input.turnDelta = 0;
     if (input.zoomDelta) { rig.zoom(input.zoomDelta); input.zoomDelta = 0; }
     rig.update(dt, child.obj.position, app.clientWidth / Math.max(1, app.clientHeight));
     // the sun follows the child so its shadows are always sharp where you are
     sun.position.set(px - 120, py + 260, pz - 60); sun.target.position.set(px, py, pz);
-    hemi.intensity = night ? 0.25 : 1.1; sun.intensity = night ? 0.15 : 2.2;
-    hemi.color.set(night ? 0x5a6aa0 : 0xdfeaf5); scene.background = new THREE.Color(night ? 0x0a1020 : 0x9cc3d8);
     let near = '', nd = 1e9;
     for (const p of places) { const dd = Math.hypot(p.X - px, p.Z - pz); if (dd < nd) { nd = dd; near = p.n; } }
+    map.reveal(px, pz, 6);
+    mapT -= dt;
+    if (mapT <= 0) { mapT = 0.1; map.draw(px, pz, rig.yaw, quests.cur?.spots.filter(s => !s.done) ?? [], night); }
     renderer.render(scene, rig.camera);
-    hud.update(dt, renderer, nd < 400 ? near : '', night);
+    const t = quests.target;
+    const hint = t && !quests.cur?.litter ? `${Math.round(Math.hypot(t.x - px, t.z - pz) / 10) * 10} m` : '';
+    hud.update(dt, renderer, { courage: st.courage, oil: st.oil, points: st.points, time: day.label + (night ? ' · night' : ''), placeName: nd < 400 ? near : '', objective: quests.objective, riding: !!traffic.riding, hint });
   };
   (window as unknown as { rkFrame: (dt: number) => void }).rkFrame = frame;   // for tests: run one frame by hand
   renderer.setAnimationLoop(() => frame(Math.min(0.05, clock.getDelta())));

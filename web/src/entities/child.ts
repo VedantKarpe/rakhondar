@@ -39,6 +39,6 @@ export class Child {
     const s = speed > 0.1 ? Math.sin(this.t) * 0.55 : 0;
     this.legL.rotation.z = s; this.legR.rotation.z = -s; this.armL.rotation.z = -s * 0.8;
     this.obj.rotation.y = -this.heading;
-    this.lamp.intensity = night ? 900 : 0;
+    this.lamp.intensity = night ? 450 : 0;
   }
 }

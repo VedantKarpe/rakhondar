@@ -18,6 +18,26 @@
     #place { top: 12px; left: 50%; transform: translateX(-50%); font-size: 15px; background: rgba(10, 16, 32, .6); padding: 4px 12px; border-radius: 6px; }
     .btns { position: fixed; right: 14px; bottom: 14px; display: flex; gap: 8px; }
     .btns button { font: 600 15px Mukta, sans-serif; color: var(--ink); background: rgba(10, 16, 32, .75); border: 1px solid rgba(236, 228, 207, .3); border-radius: 999px; width: 44px; height: 44px; cursor: pointer; touch-action: manipulation; }
+    #stats .bar { display: inline-block; width: 110px; height: 8px; margin-left: 6px; background: rgba(255,255,255,.15); border-radius: 4px; overflow: hidden; vertical-align: middle; }
+    #stats .bar i { display: block; height: 100%; }
+    #objective { top: 44px; left: 50%; transform: translateX(-50%); max-width: min(90vw, 60ch); text-align: center; color: var(--lamp); font-weight: 600; }
+    #say { left: 50%; bottom: 76px; transform: translateX(-50%); max-width: min(90vw, 56ch); background: rgba(10,16,32,.82); padding: 8px 14px; border-radius: 8px; font-size: 15px; white-space: pre-line; opacity: 0; transition: opacity .4s; }
+    #perf { top: 12px; right: 14px; color: var(--muted); font-size: 11px; }
+    #map { position: fixed; right: 14px; top: 32px; width: 170px; height: 170px; border-radius: 50%; border: 2px solid rgba(236,228,207,.4); cursor: pointer; transition: all .25s; }
+    #map.big { border-radius: 10px; width: min(92vw, 900px); height: min(70vh, 480px); right: 50%; transform: translateX(50%); top: 70px; z-index: 5; }
+    .act { position: fixed; left: 14px; bottom: 44px; display: flex; gap: 8px; }
+    .act button { font: 600 13px Mukta, sans-serif; color: var(--ink); background: rgba(10,16,32,.75); border: 1px solid rgba(236,228,207,.3); border-radius: 999px; padding: 0 12px; height: 40px; cursor: pointer; touch-action: manipulation; }
+    @media (max-width: 700px) { #help { display: none; } #map { width: 120px; height: 120px; } .act { bottom: 70px; } }
+    #stats .bar { display: inline-block; width: 110px; height: 8px; margin-left: 6px; background: rgba(255,255,255,.15); border-radius: 4px; overflow: hidden; vertical-align: middle; }
+    #stats .bar i { display: block; height: 100%; }
+    #objective { top: 44px; left: 50%; transform: translateX(-50%); max-width: min(90vw, 60ch); text-align: center; color: var(--lamp); font-weight: 600; }
+    #say { left: 50%; bottom: 76px; transform: translateX(-50%); max-width: min(90vw, 56ch); background: rgba(10,16,32,.82); padding: 8px 14px; border-radius: 8px; font-size: 15px; white-space: pre-line; opacity: 0; transition: opacity .4s; }
+    #perf { top: 12px; right: 14px; color: var(--muted); font-size: 11px; }
+    #map { position: fixed; right: 14px; top: 32px; width: 170px; height: 170px; border-radius: 50%; border: 2px solid rgba(236,228,207,.4); cursor: pointer; transition: all .25s; }
+    #map.big { border-radius: 10px; width: min(92vw, 900px); height: min(70vh, 480px); right: 50%; transform: translateX(50%); top: 70px; z-index: 5; }
+    .act { position: fixed; left: 14px; bottom: 44px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .act button { font: 600 13px Mukta, sans-serif; color: var(--ink); background: rgba(10,16,32,.75); border: 1px solid rgba(236,228,207,.3); border-radius: 999px; padding: 0 12px; height: 40px; cursor: pointer; touch-action: manipulation; }
+    @media (max-width: 700px) { #help { display: none; } #map { width: 120px; height: 120px; } .act { bottom: 70px; } }
     #loading { position: fixed; inset: 0; display: grid; place-items: center; font-size: 18px; background: #0a1020; }
   </style>
 </head>
@@ -26,7 +46,17 @@
   <div id="loading">Loading Panjim…</div>
   <div class="hud" id="stats"></div>
   <div class="hud" id="place"></div>
-  <div class="hud" id="help">WASD / arrows: walk · Shift: run · Q/E or Z/X (hold) or right-drag: turn the view · wheel or +/−: zoom · N: day/night</div>
+  <div class="hud" id="objective"></div>
+  <div class="hud" id="say"></div>
+  <div class="hud" id="perf"></div>
+  <canvas id="map" title="Map of Panjim (tap to open)"></canvas>
+  <div class="hud" id="objective"></div>
+  <div class="hud" id="say"></div>
+  <div class="hud" id="perf"></div>
+  <canvas id="map" title="Map of Panjim (tap to open)"></canvas>
+  <div class="hud" id="help">WASD: walk · Shift: run · Q/E, Z/X or right-drag: turn · wheel/±: zoom · T: talk · F: lift · Space: banish · R: call Rakhondar · L: lamp · M: map · N: skip to night/day</div>
+  <div class="act"><button id="bTalk">Talk</button><button id="bLift">Lift</button><button id="bBan">Banish</button><button id="bCall">Rakhondar</button></div>
+  <div class="act"><button id="bTalk">Talk</button><button id="bLift">Lift</button><button id="bBan">Banish</button><button id="bCall">Rakhondar</button></div>
   <div class="btns"><button id="bL" aria-label="Turn left">⟲</button><button id="bR" aria-label="Turn right">⟳</button><button id="bOut" aria-label="Zoom out">−</button><button id="bIn" aria-label="Zoom in">+</button></div>
   <script type="module" src="/src/main.ts"></script>
 </body>
