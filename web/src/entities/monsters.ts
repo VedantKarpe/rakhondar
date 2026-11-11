@@ -5,6 +5,15 @@ import * as THREE from 'three';
 import type { Ground } from '../world/data';
 import type { Movement } from '../systems/movement';
 
+let smokeTex: THREE.Texture | null = null, glowTex: THREE.Texture | null = null;
+function radial(stops: [number, string][]): THREE.Texture {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d')!;
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); for (const [o, col] of stops) gr.addColorStop(o, col);
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const SMOKE = () => smokeTex ??= radial([[0, 'rgba(255,255,255,1)'], [0.45, 'rgba(255,255,255,.7)'], [1, 'rgba(255,255,255,0)']]);
+const GLOW = () => glowTex ??= radial([[0, 'rgba(255,255,230,1)'], [0.25, 'rgba(255,200,120,.9)'], [1, 'rgba(255,80,0,0)']]);
+
 interface Demon { obj: THREE.Group; x: number; z: number; fade: number; banish: number; t: number }
 
 export class Monsters {
@@ -30,11 +39,17 @@ export class Monsters {
     for (let k = 0; k < 10; k++) {
       const a = this.rnd() * Math.PI * 2, r = 70 + this.rnd() * 60, x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
       if (!this.move.free(x, z)) continue;
+      // a demon: a column of curling dark smoke with a hunched shape, ember eyes that glow, sparks drifting up
       const obj = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.ConeGeometry(1.4, 4.5, 7), new THREE.MeshBasicMaterial({ color: 0x07060c, transparent: true, opacity: 0.85 }));
-      body.position.y = 2.25; obj.add(body);
-      const eye = new THREE.MeshBasicMaterial({ color: 0xff4a1a });
-      for (const s of [-0.35, 0.35]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 4), eye); e.position.set(0.9, 3.4, s); obj.add(e); }
+      for (let k = 0; k < 9; k++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: SMOKE(), color: k < 3 ? 0x1a0f24 : 0x2a1830, transparent: true, opacity: 0.75 - k * 0.04, depthWrite: false }));
+        const r = 1.6 + Math.sin(k) * 0.6; sp.scale.set(r * 2.2, r * 2.4, 1); sp.position.set(Math.sin(k * 2.3) * 0.6, 0.8 + k * 0.62, Math.cos(k * 2.3) * 0.6);
+        sp.userData.k = k; obj.add(sp);
+      }
+      for (const s2 of [-0.45, 0.45]) {
+        const e = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW(), color: 0xff6a20, blending: THREE.AdditiveBlending, depthWrite: false }));
+        e.scale.set(1.1, 0.7, 1); e.position.set(0.9, 4.1, s2); e.userData.eye = 1; obj.add(e);
+      }
       this.group.add(obj);
       return { obj, x, z, fade: 0, banish: 0, t: this.rnd() * 9 };
     }
@@ -59,6 +74,11 @@ export class Monsters {
       if (litAt(nx, nz) && sp > 0) { /* stays at the light's edge */ } else { d.x = nx; d.z = nz; }
       d.obj.position.set(d.x + Math.sin(d.t * 2) * 0.4, this.g.heightAt(d.x, d.z) + 0.3 + Math.sin(d.t * 3) * 0.3, d.z);
       d.obj.rotation.y = -Math.atan2(dz, dx);
+      for (const c of d.obj.children) {
+        const k = c.userData.k as number | undefined;
+        if (k !== undefined) { c.position.x = Math.sin(d.t * 1.3 + k) * 0.7; c.position.z = Math.cos(d.t * 1.1 + k * 1.7) * 0.7; (c as THREE.Sprite).material.rotation = d.t * 0.4 + k; (c as THREE.Sprite).material.opacity = (0.75 - k * 0.04) * d.fade; }
+        else if (c.userData.eye) (c as THREE.Sprite).material.opacity = d.fade * (0.75 + Math.sin(d.t * 9) * 0.25);
+      }
       d.obj.scale.setScalar(0.4 + d.fade * 0.8);
       if (!leaving && dist < 3.5) { hurt += 12 * dt; }
     }

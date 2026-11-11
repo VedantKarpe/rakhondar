@@ -3,8 +3,24 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Ground, T, pts, inPoly, type PanjimData } from './data';
+import { BAY, facadeTexture, facadeMaterial } from './facade';
 
-const PALETTE = [0xf2c230, 0xe0763a, 0x2f6fd0, 0xe8e0cc, 0x2fa08a, 0xe8a33a, 0xd0344a, 0xe07a8a, 0x4a8fe0];
+/** How lit the windows are (0 by day, 1 at night); the clock sets it. */
+export const windowsLit = { value: 0 };
+
+/** Texture coordinates: walls run along the wall in bays and up in storeys from `base`; roofs get a plain spot. */
+function wallUV(geo: THREE.BufferGeometry, base: number) {
+  const p = geo.attributes.position, n = geo.attributes.normal, uv = new Float32Array(p.count * 2);
+  for (let i = 0; i < p.count; i++) {
+    const nx = n.getX(i), ny = n.getY(i), nz = n.getZ(i);
+    if (Math.abs(ny) > 0.5) { uv[i * 2] = 0.01; uv[i * 2 + 1] = 0.6; continue; }
+    uv[i * 2] = (p.getX(i) * -nz + p.getZ(i) * nx) / BAY; uv[i * 2 + 1] = (p.getY(i) - base) / BAY;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+// Goan house colours: ochre, indigo blue, pink, sea green, Goan red, lime yellow, sky blue, cream (a touch weathered)
+const PALETTE = [0xe8b84a, 0x3d6fb8, 0xe48aa0, 0x3f9a7c, 0xb8463a, 0xd9cf5a, 0x6aa7d8, 0xede2c4, 0xe07a3a, 0x8a5fb0];
 const STOREY = 3.4;           // metres a storey
 export interface Building { p: [number, number][]; bb: [number, number, number, number]; base: number; top: number }
 
@@ -58,21 +74,21 @@ export function buildBuildings(d: PanjimData, g: Ground): { group: THREE.Group; 
     const shape = new THREE.Shape(p.map(([x, z]) => new THREE.Vector2(x, -z)));
     const geo = new THREE.ExtrudeGeometry(shape, { depth: h + 1.5, bevelEnabled: false });   // 1.5 m below the plot so slopes never show a gap
     geo.rotateX(-Math.PI / 2); geo.translate(0, base - 1.5, 0);
-    geo.deleteAttribute('uv');
+    wallUV(geo, base);
     const wall = kind === 1 ? white : kind === 2 ? ochre : new THREE.Color(PALETTE[(idx * 7 + p.length) % PALETTE.length]);
-    const tiled = !kind && area < 600 && p.length <= 6;
+    const tiled = !kind && area < 1400 && p.length <= 8;
     colorGeo(geo, wall, kind === 1 ? white : tiled ? roofTile : roofFlat);
     geos.push(geo);
-    if (tiled) { const r = hipRoof(p, base + h, Math.min(3.2, Math.sqrt(area) * 0.22), roofTile); r.deleteAttribute('uv'); geos.push(r); }
+    if (tiled) { const r = hipRoof(p, base + h, Math.min(3.2, Math.sqrt(area) * 0.22), roofTile); wallUV(r, 0); geos.push(r); }
     let x0 = 1e9, z0 = 1e9, x1 = -1e9, z1 = -1e9;
     for (const [x, z] of p) { x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z); }
     list.push({ p, bb: [x0, z0, x1, z1], base, top: base + h });
   });
   const merged = mergeGeometries(geos, false)!;
   for (const gg of geos) gg.dispose();
-  const mesh = new THREE.Mesh(merged, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const mesh = new THREE.Mesh(merged, facadeMaterial(facadeTexture(), windowsLit));
   mesh.castShadow = true; mesh.receiveShadow = true;
-  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(merged, 35), new THREE.LineBasicMaterial({ color: 0x1a1410, transparent: true, opacity: 0.55 }));
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(merged, 35), new THREE.LineBasicMaterial({ color: 0x1a1410, transparent: true, opacity: 0.35 }));
   const group = new THREE.Group(); group.name = 'buildings'; group.add(mesh, edges);
   return { group, list };
 }

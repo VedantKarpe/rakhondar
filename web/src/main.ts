@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { loadPanjim, Ground, T } from './world/data';
 import { buildTerrain, buildWater } from './world/terrain';
 import { buildRoads, StreetIndex } from './world/roads';
-import { buildBuildings, BuildingIndex } from './world/buildings';
+import { buildBuildings, BuildingIndex, windowsLit } from './world/buildings';
 import { buildTrees } from './world/trees';
 import { Child } from './entities/child';
 import { Input } from './systems/input';
@@ -28,12 +28,13 @@ async function start() {
   const app = document.getElementById('app')!;
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   app.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x9cc3d8);
-  const hemi = new THREE.HemisphereLight(0xdfeaf5, 0x4a5a30, 1.1);
+  const hemi = new THREE.HemisphereLight(0xcfe3f5, 0x6a5a38, 1.1);
   const sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -160, right: 160, top: 160, bottom: -160, near: 1, far: 900 });
@@ -103,6 +104,8 @@ async function start() {
   };
   input.onKey = k => {
     unlockAudio();
+    if (k === '[' || k === 'pagedown') rig.tiltBy(-0.1);
+    if (k === ']' || k === 'pageup') rig.tiltBy(0.1);
     if (k === 'n') day.min = day.night ? 7 * 60 : 19 * 60 + 30;
     if (k === 't') talk();
     if (k === 'f') lift();
@@ -119,6 +122,7 @@ async function start() {
   };
   const btn = (id: string, f: () => void) => document.getElementById(id)!.addEventListener('click', e => { (e.currentTarget as HTMLElement).blur(); unlockAudio(); f(); });
   btn('bL', () => rig.turn(-Math.PI / 2)); btn('bR', () => rig.turn(Math.PI / 2)); btn('bIn', () => rig.zoom(2)); btn('bOut', () => rig.zoom(-2));
+  btn('bTiltD', () => rig.tiltBy(-0.12)); btn('bTiltU', () => rig.tiltBy(0.12));
   btn('bTalk', talk); btn('bLift', lift); btn('bBan', banish); btn('bCall', call);
 
   const places = d.places.map(([n, x, y]) => ({ n, X: x * T, Z: y * T }));
@@ -158,6 +162,7 @@ async function start() {
     child.obj.rotation.z = hurtT > 0 ? Math.sin(hurtT * 30) * 0.15 : 0; hurtT = Math.max(0, hurtT - dt);
 
     day.update(dt, scene, hemi, sun, px, pz);
+    windowsLit.value = Math.max(0, day.dark * 1.6 - 0.6);
     const hit = traffic.update(dt, px, pz, night);
     if (hit && !traffic.riding) { knockX = hit.kx; knockZ = hit.kz; st.courage = Math.max(0, st.courage - 15); hurtT = 0.6; }
     people.update(dt, px, pz, night);

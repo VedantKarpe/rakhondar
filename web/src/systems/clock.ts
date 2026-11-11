@@ -50,13 +50,13 @@ export class Clock {
     const k = this.dark;
     scene.background = lerpCol(this.min);
     hemi.intensity = 1.1 - 0.85 * k; hemi.color.set(0xdfeaf5).lerp(new THREE.Color(0x5a6aa0), k);
-    sun.intensity = 2.2 * (1 - k) + 0.12 * k; sun.color.set(0xfff1d6).lerp(new THREE.Color(0x8fa6d8), k);
+    sun.intensity = 2.2 * (1 - k) + 0.12 * k; sun.color.set(0xffe2b0).lerp(new THREE.Color(0x8fa6d8), k);
     const on = k > 0.55;
     (this.heads.material as THREE.MeshBasicMaterial).color.set(on ? 0xeafaff : 0x555555);
     // the nearest few lamps cast real light
     if (on) {
       const near = this.spots.map(p => ({ p, d: Math.hypot(p.x - cx, p.z - cz) })).filter(a => a.d < 120).sort((a, b) => a.d - b.d);
-      this.pool.forEach((l, i) => { const a = near[i]; if (a) { l.position.set(a.p.x, a.p.y + 8.6, a.p.z); l.intensity = 700; } else l.intensity = 0; });
+      this.pool.forEach((l, i) => { const a = near[i]; if (a) { l.position.set(a.p.x, a.p.y + 8.6, a.p.z); l.intensity = 260; } else l.intensity = 0; });
     } else this.pool.forEach(l => (l.intensity = 0));
   }
 
