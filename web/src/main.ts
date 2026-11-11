@@ -147,7 +147,7 @@ async function start() {
     } else {
       // walk: screen directions turned to the ground under the current view
       const m = input.move(), run = input.has('shift') ? 2 : 1;
-      speed = Math.hypot(m.x, m.y) * 20 * run;
+      speed = Math.hypot(m.x, m.y) * 32 * run;
       if (speed > 0) {
         const w = rig.screenToGround(m.x, m.y), L = Math.hypot(w.x, w.z) || 1;
         child.heading = Math.atan2(w.z, w.x);
