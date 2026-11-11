@@ -38,9 +38,10 @@
     .act { position: fixed; left: 14px; bottom: 44px; display: flex; gap: 8px; flex-wrap: wrap; }
     .act button { font: 600 13px Mukta, sans-serif; color: var(--ink); background: rgba(10,16,32,.75); border: 1px solid rgba(236,228,207,.3); border-radius: 999px; padding: 0 12px; height: 40px; cursor: pointer; touch-action: manipulation; }
     @media (max-width: 700px) { #help { display: none; } #map { width: 120px; height: 120px; } .act { bottom: 70px; } }
+    .vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(30,15,0,.28) 100%); }
     #loading { position: fixed; inset: 0; display: grid; place-items: center; font-size: 18px; background: #0a1020; }
   </style>
-  <script type="module" crossorigin src="./assets/index-D0Kmk-54.js"></script>
+  <script type="module" crossorigin src="./assets/index-BvB8DfcR.js"></script>
 </head>
 <body>
   <div id="app"></div>
@@ -55,9 +56,10 @@
   <div class="hud" id="say"></div>
   <div class="hud" id="perf"></div>
   <canvas id="map" title="Map of Panjim (tap to open)"></canvas>
-  <div class="hud" id="help">WASD: walk · Shift: run · Q/E, Z/X or right-drag: turn · wheel/±: zoom · T: talk · F: lift · Space: banish · R: call Rakhondar · L: lamp · M: map · N: skip to night/day</div>
+  <div class="hud" id="help">WASD: walk · Shift: run · Q/E, Z/X or right-drag: turn · wheel/±: zoom · T: talk · F: lift · Space: banish · R: call Rakhondar · L: lamp · [ ]: tilt · M: map · N: skip to night/day</div>
   <div class="act"><button id="bTalk">Talk</button><button id="bLift">Lift</button><button id="bBan">Banish</button><button id="bCall">Rakhondar</button></div>
   <div class="act"><button id="bTalk">Talk</button><button id="bLift">Lift</button><button id="bBan">Banish</button><button id="bCall">Rakhondar</button></div>
-  <div class="btns"><button id="bL" aria-label="Turn left">⟲</button><button id="bR" aria-label="Turn right">⟳</button><button id="bOut" aria-label="Zoom out">−</button><button id="bIn" aria-label="Zoom in">+</button></div>
+  <div class="vignette"></div>
+  <div class="btns"><button id="bTiltD" aria-label="Tilt down">⤓</button><button id="bTiltU" aria-label="Tilt up">⤒</button><button id="bL" aria-label="Turn left">⟲</button><button id="bR" aria-label="Turn right">⟳</button><button id="bOut" aria-label="Zoom out">−</button><button id="bIn" aria-label="Zoom in">+</button></div>
 </body>
 </html>
