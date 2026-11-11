@@ -24,6 +24,8 @@ import { Boats } from './entities/boats';
 import { Pumps } from './entities/pumps';
 import { Bikes } from './entities/bikes';
 import { toonify } from './world/toon';
+import { infill } from './world/infill';
+import { Places } from './ui/places';
 import { buildPromenade } from './world/promenade';
 
 async function start() {
@@ -57,10 +59,12 @@ async function start() {
     let cx = 0, cy = 0; for (let i = 0; i < f.length; i += 2) { cx += f[i]; cy += f[i + 1]; } cx /= f.length / 2; cy /= f.length / 2;
     return !lmBox.some(([x0, x1, y0, y1]) => cx > x0 && cx < x1 && cy > y0 && cy < y1);
   }) };
+  const extra = infill(d, g, si); plain.b = plain.b.concat(extra);
   const blds = buildBuildings(plain, g); scene.add(blds.group);
   // the landmarks' own outlines stay solid, though their plain blocks are not drawn
+  const kept = new Set(plain.b.map(b => b[0]));
   for (const [f] of d.b) {
-    if (plain.b.some(b => b[0] === f)) continue;
+    if (kept.has(f)) continue;
     const p: [number, number][] = []; for (let i = 0; i < f.length; i += 2) p.push([f[i] * T, f[i + 1] * T]);
     const xs = p.map(q => q[0]), zs = p.map(q => q[1]);
     blds.list.push({ p, bb: [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)], base: 0, top: 30 });
@@ -88,6 +92,7 @@ async function start() {
   const map = new Minimap(d);
   scene.add(buildPromenade(d, g, bi));
   const bikes = new Bikes(net, g, (x, z) => move.free(x, z) && !si.at(x, z)); scene.add(bikes.group);
+  const places2 = new Places(d, g, scene, p => hud.whisper(`Okay, ${p.name}. Follow the green light, baba. ${p.note}`, 6));
   const boats = new Boats(g); scene.add(boats.group);
   const pumps = new Pumps(net, g, (x, z) => !bi.solid(x, z, 9) && !g.isWet(x, z) && !si.at(x, z)); scene.add(pumps.group);
   const home: [number, number] = [px, pz];
@@ -126,6 +131,7 @@ async function start() {
     if (k === ' ') banish();
     if (k === 'r') call();
     if (k === 'l') st.lamp = !st.lamp;
+    if (k === 'p') places2.toggle();
     if (k === 'm') document.getElementById('map')!.click();
   };
   addEventListener('pointerdown', unlockAudio);
@@ -218,10 +224,12 @@ async function start() {
     for (const p of places) { const dd = Math.hypot(p.X - px, p.Z - pz); if (dd < nd) { nd = dd; near = p.n; } }
     map.reveal(px, pz, 6);
     mapT -= dt;
-    if (mapT <= 0) { mapT = 0.1; map.draw(px, pz, rig.yaw, quests.cur?.spots.filter(s => !s.done) ?? [], night); }
+    if (mapT <= 0) { mapT = 0.1; map.draw(px, pz, rig.yaw, [...(quests.cur?.spots.filter(s => !s.done) ?? []), ...(places2.target ? [{ x: places2.target.x, z: places2.target.z, name: places2.target.name, done: false }] : [])], night); }
     // vehicles, people, demons and quest markers come and go: give the new ones the cartoon look too
     inkT -= dt;
     if (inkT <= 0) { inkT = 0.5; for (const gr of [traffic.group, people.group, monsters.group, quests.group]) toonify(gr, [gr], () => false); }
+    const seen = places2.update(px, pz, rig.camera, performance.now() / 1000);
+    if (seen) { st.points += 5; hud.whisper(`${seen.name}! ${seen.note}`, 6); }
     renderer.render(scene, rig.camera);
     const t = quests.target;
     const hint = t && !quests.cur?.litter ? `${Math.round(Math.hypot(t.x - px, t.z - pz) / 10) * 10} m` : '';

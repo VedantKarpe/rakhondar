@@ -28,6 +28,13 @@ export class Input {
       if (this.touch && e.pointerId === this.touch.id) { this.touch.dx = e.clientX - this.touch.x; this.touch.dy = e.clientY - this.touch.y; }
     });
     const up = (e: PointerEvent) => { if (this.drag && e.pointerType === 'mouse') this.drag = null; if (this.touch && e.pointerId === this.touch.id) this.touch = null; };
+    // click the city to hand the mouse to the camera: moving it then turns and tilts the view, as in a third-person
+    // game; Esc gives the mouse back
+    el.addEventListener('click', e => { if ((e as PointerEvent).pointerType !== 'touch' && document.pointerLockElement !== el) el.requestPointerLock?.(); });
+    addEventListener('mousemove', e => {
+      if (document.pointerLockElement !== el) return;
+      this.turnDelta += e.movementX * 0.004; this.tiltDelta += e.movementY * 0.003;
+    });
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
     el.addEventListener('wheel', e => { e.preventDefault(); this.zoomDelta += e.deltaY < 0 ? 1 : -1; }, { passive: false });
   }
