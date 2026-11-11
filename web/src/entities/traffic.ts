@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import type { Network } from '../world/network';
 import type { Ground } from '../world/data';
+import { model } from '../world/models';
 
 type Kind = 'car' | 'pilot' | 'bus';
 interface Vehicle { kind: Kind; obj: THREE.Group; e: number; s: number; v: number; vmax: number; len: number; x: number; z: number; hx: number; hz: number; honk: number }
@@ -14,6 +15,9 @@ const box = (w: number, h: number, l: number, c: number, y: number, x = 0) => {
 };
 
 function makeVehicle(kind: Kind, rnd: () => number): THREE.Group {
+  // the Blender models where there is one (drawn 1.6 x life size, as the people are)
+  const m = kind === 'pilot' ? model('pilot', { length: 2.0 * 1.6 }) : kind === 'bus' ? model('bus', { length: 10.5 * 1.6 }) : null;
+  if (m) return m;
   const g = new THREE.Group();
   if (kind === 'car') {
     const c = CAR_COLS[Math.floor(rnd() * CAR_COLS.length)];

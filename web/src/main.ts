@@ -19,9 +19,10 @@ import { Clock } from './systems/clock';
 import { Quests } from './systems/quests';
 import { Minimap } from './ui/minimap';
 import { sfx, unlockAudio } from './systems/sfx';
+import { loadModels } from './world/models';
 
 async function start() {
-  const d = await loadPanjim();
+  const [d] = await Promise.all([loadPanjim(), loadModels()]);
   const g = new Ground(d);
 
   const app = document.getElementById('app')!;

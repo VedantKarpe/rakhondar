@@ -2,22 +2,31 @@
   "hash": "2d8c76b6",
   "configHash": "51693363",
   "lockfileHash": "ec5e9044",
-  "browserHash": "d95173d9",
+  "browserHash": "a34365ae",
   "optimized": {
     "three": {
       "src": "../../node_modules/three/build/three.module.js",
       "file": "three.js",
-      "fileHash": "f70c1c3b",
+      "fileHash": "926ffa75",
       "needsInterop": false
     },
     "three/examples/jsm/utils/BufferGeometryUtils.js": {
       "src": "../../node_modules/three/examples/jsm/utils/BufferGeometryUtils.js",
       "file": "three_examples_jsm_utils_BufferGeometryUtils__js.js",
-      "fileHash": "c293e702",
+      "fileHash": "bd3f640e",
+      "needsInterop": false
+    },
+    "three/examples/jsm/loaders/GLTFLoader.js": {
+      "src": "../../node_modules/three/examples/jsm/loaders/GLTFLoader.js",
+      "file": "three_examples_jsm_loaders_GLTFLoader__js.js",
+      "fileHash": "b857f718",
       "needsInterop": false
     }
   },
   "chunks": {
+    "chunk-M7NAJMVS": {
+      "file": "chunk-M7NAJMVS.js"
+    },
     "chunk-7ZCAHXB5": {
       "file": "chunk-7ZCAHXB5.js"
     }

@@ -1,6 +1,7 @@
 // The child: the same look as the canvas game (yellow shirt, blue shorts, big round head, the clay lamp held out),
 // built from simple shapes. Drawn larger than life, as the game's people are, so they read at city scale.
 import * as THREE from 'three';
+import { model } from '../world/models';
 
 export const CHILD_SCALE = 3.4;   // how much larger than life
 
@@ -9,7 +10,8 @@ export class Child {
   private legL: THREE.Object3D; private legR: THREE.Object3D; private armL: THREE.Object3D;
   private lamp: THREE.PointLight;
   private t = 0;
-  heading = 0;                      // radians, 0 = facing +X (east)
+  heading = 0;
+  private model: THREE.Object3D | null = null;                      // radians, 0 = facing +X (east)
 
   constructor() {
     const mat = (c: number, e = 0) => new THREE.MeshLambertMaterial({ color: c, emissive: e ? c : 0, emissiveIntensity: e });
@@ -30,6 +32,9 @@ export class Child {
     add(body, new THREE.SphereGeometry(0.265, 16, 12), SKIN, 0.01, 0.93, 0);
     add(body, new THREE.SphereGeometry(0.27, 16, 12).scale(1, 0.8, 1.02), HAIR, -0.045, 1.0, 0);
     for (const z of [-0.105, 0.105]) { add(body, new THREE.SphereGeometry(0.07, 10, 8), WHITE, 0.235, 0.94, z); add(body, new THREE.SphereGeometry(0.032, 8, 6), DARK, 0.29, 0.935, z); }
+    // the Blender model of the child, when it has loaded, in place of the simple shapes
+    const m = model('child', { height: 1.15 * CHILD_SCALE });
+    if (m) { body.visible = false; this.obj.add(m); this.model = m; }
     this.lamp = new THREE.PointLight(0xffc870, 0, 40, 1.6); this.lamp.position.set(0.3 * CHILD_SCALE, 0.8 * CHILD_SCALE, -0.21 * CHILD_SCALE); this.obj.add(this.lamp);
   }
 
@@ -39,6 +44,7 @@ export class Child {
     const s = speed > 0.1 ? Math.sin(this.t) * 0.55 : 0;
     this.legL.rotation.z = s; this.legR.rotation.z = -s; this.armL.rotation.z = -s * 0.8;
     this.obj.rotation.y = -this.heading;
+    if (this.model) { this.model.position.y = Math.abs(Math.sin(this.t)) * (speed > 0.1 ? 0.35 : 0); this.model.rotation.z = s * 0.08; }
     this.lamp.intensity = night ? 450 : 0;
   }
 }
