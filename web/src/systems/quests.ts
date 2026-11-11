@@ -27,7 +27,7 @@ export class Quests {
     const near = net.edges.map((_, e) => e).filter(e => { const p = net.at(e, 0); return Math.hypot(p.x - sx, p.z - sz) < 160 && net.edges[e].deck === null; });
     for (let k = 0; k < 6 && near.length; k++) { const e = near[Math.floor(rnd() * near.length)], p = net.at(e, rnd() * net.edges[e].len); litter.push({ x: p.x, z: p.z, name: 'litter', done: false }); }
     this.list = [
-      { title: 'Clean the street', intro: 'Aiyo, see all this garbage near the church! Pick it up, baba. Panjim must stay clean, no?', outro: 'Dev borem korum! The street is clean. Now go get the poee, Aunty is waiting.', spots: litter, pts: 10, litter: true },
+      { title: 'Clean the street', intro: 'Deva, see all this garbage near the church! Pick it up, baba. Panjim must stay clean, no?', outro: 'Dev borem korum! The street is clean. Now go get the poee, Aunty is waiting.', spots: litter, pts: 10, litter: true },
       { title: 'Bring the poee', intro: 'Go to the Panjim Bazaar and bring fresh poee for Aunty. Run, before it is all sold!', outro: 'Hot poee! Aunty is happy. Now these letters, deliver them, men.', spots: [place(/bazaar|market/i, 500)], pts: 40 },
       { title: 'Deliver the letters', intro: 'Three letters to deliver. Ask people the way if you are lost.', outro: 'All delivered! You know Panjim like a postman now.', spots: [place(/church square/i, 400), place(/campal/i, 700), place(/patto/i, 900)], pts: 30 },
       { title: 'Find the lost hen', intro: 'Mrs. Fernandes\' hen ran off towards Fontainhas. Find it before dark!', outro: 'There she is! Mrs. Fernandes will make you sorpotel for this. Well done, baba.', spots: [place(/fontainhas/i, 800)], pts: 60 },

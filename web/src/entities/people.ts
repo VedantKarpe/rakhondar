@@ -7,7 +7,7 @@ import type { Ground } from '../world/data';
 interface Person { obj: THREE.Group; legs: THREE.Object3D[]; e: number; s: number; side: number; v: number; x: number; z: number; t: number; pause: number }
 
 const SHIRTS = [0xfdfbf5, 0xc0392b, 0x2e86c1, 0xe67e22, 0x8e44ad, 0x16a085, 0xf2c230, 0x7f8c8d];
-const GREET = ['Hello baba! Kitem? Lost or what?', 'Arre, so late you are out? Go home, men.', 'Dev borem korum. Careful of the cars, no?', 'Boso, boso, sit a little. Too hot today.', 'Aiyo, this pothole they will never fix, I tell you.'];
+const GREET = ['Kitem re, bhurgea? Lost or what?', 'Itlo uxir? So late you are out? Ghara voch, go home, men.', 'Dev borem korum. Careful of the cars, no?', 'Boso, boso, sit a little. Too hot today.', 'Deva re, this pothole they will never fix, I tell you.'];
 
 export class People {
   readonly group = new THREE.Group();

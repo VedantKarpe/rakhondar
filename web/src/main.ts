@@ -203,7 +203,7 @@ async function start() {
     if (!night) st.oil = Math.min(100, st.oil + dt * 2);
     if (day.litAt(px, pz) && hurt === 0) st.courage = Math.min(100, st.courage + dt * (night ? 3 : 1));
     if (st.courage <= 0) {
-      hud.whisper('Too scared! You run home to Aunty. "Aiyo baba, rest a little, then go."', 6);
+      hud.whisper('Too scared! You run home to Aunty. "Mhaka bhirant dili tuvem! Rest a little, then go."', 6);
       if (traffic.riding) traffic.hopOff();
       st.courage = 70; [px, pz] = home;
     }

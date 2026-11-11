@@ -102,7 +102,7 @@ export class Traffic {
         // the child walks into a moving vehicle: an accident
         if (Math.hypot(dx, dz) < v.len * 0.5 + 1 && side < 2.4 && v.v > 3 && !hit) {
           hit = { kx: v.hx * v.v * 1.2 + (dx * v.hz - dz * v.hx > 0 ? v.hz : -v.hz) * 4, kz: v.hz * v.v * 1.2 };
-          this.onEvent('crash', v.kind === 'pilot' ? 'Aiyo baba! Look where you are going, men!' : v.kind === 'bus' ? 'Arre! The Kadamba driver slams on his brakes.' : 'Screech! Dev borem korum, you are not hurt badly, no?');
+          this.onEvent('crash', v.kind === 'pilot' ? 'Deva re, bhurgea! Look where you are going, men!' : v.kind === 'bus' ? 'Ho kitem re! The Kadamba driver slams on his brakes.' : 'Screech! Dev borem korum, you are not hurt badly, no?');
           v.v = 0;
         }
       }
