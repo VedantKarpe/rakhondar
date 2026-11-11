@@ -82,7 +82,8 @@ export class Traffic {
 
   /** Move everything; returns a knock (direction and strength) if a vehicle hit the child at (cx, cz). */
   update(dt: number, cx: number, cz: number, night: boolean): { kx: number; kz: number } | null {
-    while (this.list.length < this.count) this.spawn(cx, cz, this.list.length > this.count / 2 && this.list.length > 0);
+    // top up a few at a time; out past the streets there may be nowhere to put one, so never insist
+    for (let k = 0; k < 4 && this.list.length < this.count; k++) this.spawn(cx, cz, this.list.length > this.count / 2 && this.list.length > 0);
     let hit: { kx: number; kz: number } | null = null;
     for (const v of [...this.list]) {
       if (v !== this.riding && Math.hypot(v.x - cx, v.z - cz) > 420 && v.x !== 0) { this.remove(v); continue; }

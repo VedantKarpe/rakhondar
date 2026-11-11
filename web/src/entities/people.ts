@@ -32,7 +32,7 @@ export class People {
 
   update(dt: number, cx: number, cz: number, night: boolean) {
     const want = night ? Math.floor(this.count / 3) : this.count;
-    while (this.list.length < want) {
+    for (let k = 0; k < 3 && this.list.length < want; k++) {
       const p = this.make(), cand = this.net.edges.map((_, i) => i).filter(i => { const m = this.net.at(i, 0); return Math.hypot(m.x - cx, m.z - cz) < 280; });
       if (!cand.length) { this.group.remove(p.obj); break; }
       p.e = cand[Math.floor(this.rnd() * cand.length)]; p.s = this.rnd() * this.net.edge(p.e).len; p.x = cx + 1e4;
