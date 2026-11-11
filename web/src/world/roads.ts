@@ -61,7 +61,7 @@ export function buildRoads(d: PanjimData, g: Ground): { group: THREE.Group; segs
     ribbon(line, 2.2, g, 0.16, (flags & 2) ? Math.max(4, g.heightAt(...line[0]) + 0.3) : null, path, pathI);
     for (let i = 1; i < line.length; i++) segs.push({ ax: line[i - 1][0], az: line[i - 1][1], bx: line[i][0], bz: line[i][1], half: 1.6, deck: null });
   }
-  group.add(meshOf(pave, paveI, 0xbdb6a6, 1), meshOf(path, pathI, 0xcdb98e, 1), meshOf(asph, asphI, 0x3a3c44, 2), meshOf(dash, dashI, 0xf2efe6, 3));
+  group.add(meshOf(pave, paveI, 0xa65a46, 1), meshOf(path, pathI, 0xcdb98e, 1), meshOf(asph, asphI, 0x5c5e62, 2), meshOf(dash, dashI, 0xf2efe6, 3));
   return { group, segs };
 }
 

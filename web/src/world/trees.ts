@@ -44,6 +44,15 @@ function bushGeo(): THREE.BufferGeometry {
   return mergeGeometries([g1, g2])!;
 }
 
+/** A rain tree, as on Panjim's avenues: a thick dark trunk forking into a broad, spreading, flat-topped canopy. */
+function rainTreeGeo(crown: number, bloom: number): THREE.BufferGeometry {
+  const parts = [tinted(new THREE.CylinderGeometry(0.7, 1.1, 7, 7).translate(0, 3.5, 0), 0x4a3a2c).toNonIndexed()];
+  for (const a of [0.6, 2.7, 4.6]) parts.push(tinted(new THREE.CylinderGeometry(0.35, 0.55, 5, 6).rotateZ(0.7).rotateY(a).translate(Math.cos(a) * 1.4, 8, -Math.sin(a) * 1.4), 0x4a3a2c).toNonIndexed());
+  const blobs: [number, number, number, number][] = [[0, 11, 0, 5.5], [4, 10.2, 1, 4.2], [-3.5, 10.4, -1.8, 4.4], [1, 10, -4, 4], [-1.5, 10.2, 3.8, 4.2]];
+  blobs.forEach(([x, y, z, r], i) => parts.push(tinted(new THREE.IcosahedronGeometry(r, 1).scale(1.25, 0.6, 1.25).translate(x, y, z), i === 0 && bloom !== crown ? bloom : i % 2 ? crown : bloom).toNonIndexed()));
+  return mergeGeometries(parts)!;
+}
+
 export function buildTrees(d: PanjimData, g: Ground, bi: BuildingIndex, si: StreetIndex): THREE.Group {
   const group = new THREE.Group(); group.name = 'trees';
   let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -74,5 +83,23 @@ export function buildTrees(d: PanjimData, g: Ground, bi: BuildingIndex, si: Stre
   // coconut palms over the open ground and along the sand, flowering bushes in the gardens
   place(palmGeo(), [...spots('G', 0.35), ...spots('S', 1), ...spots('B', 1)], [0.9, 1.25]);
   place(bushGeo(), spots('G', 0.5), [0.8, 1.2]);
+  // avenues: rain trees lining both sides of the main streets (every fourth one a gulmohar in flame-red bloom)
+  const ave: [number, number][] = [], ave2: [number, number][] = [];
+  for (const [f, w, flags] of d.r) {
+    if (w < 9 || (flags & 1)) continue;
+    const L = f.length / 2;
+    for (let i = 1; i < L; i++) {
+      const ax = f[i * 2 - 2] * T, az = f[i * 2 - 1] * T, bx = f[i * 2] * T, bz = f[i * 2 + 1] * T, len = Math.hypot(bx - ax, bz - az);
+      if (len < 1) continue;
+      const nx = -(bz - az) / len, nz = (bx - ax) / len, off = w * 0.75 + 5;
+      for (let s = 10; s < len; s += 24) for (const sd of [-1, 1]) {
+        const X = ax + (bx - ax) * s / len + nx * off * sd, Z = az + (bz - az) * s / len + nz * off * sd;
+        if (bi.solid(X, Z, 3) || si.at(X, Z) || g.isWet(X, Z)) continue;
+        (rnd() < 0.22 ? ave2 : ave).push([X, Z]);
+      }
+    }
+  }
+  place(rainTreeGeo(0x3c6a2e, 0x4c7a34), ave, [0.75, 1.05]);
+  place(rainTreeGeo(0x3c6a2e, 0xe0482a), ave2, [0.7, 0.95]);
   return group;
 }

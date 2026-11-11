@@ -3,7 +3,7 @@
 // transparent the wall's own colour shows, so one texture serves every colour of house. Windows glow at night.
 import * as THREE from 'three';
 
-export const BAY = 3.4;      // metres across one bay, and one storey high
+export const BAY = 4.2;      // metres across one bay, and one storey high
 
 export function facadeTexture(): THREE.CanvasTexture {
   const S = 128, c = document.createElement('canvas'); c.width = S; c.height = S;
@@ -12,19 +12,20 @@ export function facadeTexture(): THREE.CanvasTexture {
   // a little weathering: faint darker streaks on the plaster (alpha only, so it tints any colour)
   for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(60,40,20,${0.03 + Math.random() * 0.04})`; g.fillRect(Math.random() * S, 0, 1 + Math.random() * 3, S * (0.3 + Math.random() * 0.7)); }
   g.clearRect(0, 0, 5, S);   // a clean strip for roofs to sample
-  // the white band at the top of the storey (the floor line / cornice) and a thin one under it
-  g.fillStyle = '#f6f2e8'; g.fillRect(0, 0, S, 9); g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, 9, S, 2);
-  // window: white moulded surround, dark glass, green louvred shutters folded open either side
-  const wx = 44, ww = 40, wy = 26, wh = 74;
-  g.fillStyle = '#f6f2e8'; g.fillRect(wx - 7, wy - 9, ww + 14, wh + 16);
-  g.beginPath(); g.moveTo(wx - 10, wy - 9); g.lineTo(wx + ww / 2, wy - 20); g.lineTo(wx + ww + 10, wy - 9); g.fill();   // a little pediment
-  g.fillStyle = '#1f2a2e'; g.fillRect(wx, wy, ww, wh);
-  g.fillStyle = '#c9d6d8'; g.fillRect(wx + ww / 2 - 1, wy, 2, wh); g.fillRect(wx, wy + wh * 0.45, ww, 2);     // the frame's bars
-  for (const sx of [wx - 7 - 16, wx + ww + 7]) {
-    g.fillStyle = '#2f7a55'; g.fillRect(sx, wy - 2, 16, wh + 4);
-    g.fillStyle = 'rgba(0,0,0,.25)'; for (let y = wy; y < wy + wh; y += 5) g.fillRect(sx + 2, y, 12, 1.5);
-  }
-  g.fillStyle = '#f6f2e8'; g.fillRect(wx - 9, wy + wh + 4, ww + 18, 5);   // the sill
+  // as in Fontainhas: a white cornice band at the top, white pilasters at the bay edges, and a tall door-window in a
+  // thick white frame with a slightly arched head, its dark wooden shutters (some open, showing the dim room)
+  g.fillStyle = '#f7f4ec'; g.fillRect(0, 0, S, 8); g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(0, 8, S, 2);
+  g.fillStyle = '#f7f4ec'; g.fillRect(S - 9, 0, 9, S); g.fillStyle = 'rgba(0,0,0,.12)'; g.fillRect(S - 10, 0, 1.5, S);
+  const wx = 40, ww = 40, wy = 24, wh = 92;
+  g.fillStyle = '#f7f4ec'; g.fillRect(wx - 8, wy - 8, ww + 16, wh + 8);
+  g.beginPath(); g.ellipse(wx + ww / 2, wy - 6, ww / 2 + 8, 8, 0, Math.PI, 0); g.fill();
+  g.fillStyle = '#1c1a1a'; g.fillRect(wx, wy, ww, wh);                                   // the dark opening (glass at night)
+  g.fillStyle = '#5a2a1e'; g.fillRect(wx, wy, ww / 2 - 1, wh);                            // one closed wooden shutter
+  g.fillStyle = 'rgba(0,0,0,.3)'; for (let y = wy + 4; y < wy + wh; y += 6) g.fillRect(wx + 2, y, ww / 2 - 5, 1.5);
+  g.fillStyle = '#6e3a28'; g.fillRect(wx + ww / 2 + 1, wy + wh * 0.55, ww / 2 - 1, wh * 0.45);   // a half door below
+  g.fillStyle = '#f7f4ec'; g.fillRect(wx - 10, wy + wh - 2, ww + 20, 4);                  // threshold / sill
+  // a grey plinth at the foot of the wall
+  g.fillStyle = 'rgba(70,70,70,.0)';
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return t;

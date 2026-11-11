@@ -20,7 +20,7 @@ function wallUV(geo: THREE.BufferGeometry, base: number) {
 }
 
 // Goan house colours: ochre, indigo blue, pink, sea green, Goan red, lime yellow, sky blue, cream (a touch weathered)
-const PALETTE = [0xe8b84a, 0x3d6fb8, 0xe48aa0, 0x3f9a7c, 0xb8463a, 0xd9cf5a, 0x6aa7d8, 0xede2c4, 0xe07a3a, 0x8a5fb0];
+const PALETTE = [0xc4302b, 0x8fd0e6, 0xf0c63e, 0xd94a3a, 0x6fb8d8, 0xe8b23a, 0x5fa77a, 0xe58a9a, 0xf3e9cf, 0xb83a32, 0x9bd6c8, 0xf2d35a];
 const STOREY = 3.4;           // metres a storey
 export interface Building { p: [number, number][]; bb: [number, number, number, number]; base: number; top: number }
 
@@ -64,7 +64,7 @@ function hipRoof(p: [number, number][], y: number, rise: number, color: THREE.Co
 
 export function buildBuildings(d: PanjimData, g: Ground): { group: THREE.Group; list: Building[] } {
   const geos: THREE.BufferGeometry[] = [], list: Building[] = [];
-  const roofFlat = new THREE.Color(0xc4beb0), roofTile = new THREE.Color(0xa8492b), white = new THREE.Color(0xfaf8f2), ochre = new THREE.Color(0xecd6a0);
+  const roofFlat = new THREE.Color(0xb8b2a4), roofTile = new THREE.Color(0x7c3a26), white = new THREE.Color(0xfaf8f2), ochre = new THREE.Color(0xecd6a0);
   d.b.forEach(([f, lv, kind, area], idx) => {
     const p = pts(f).map(([x, y]) => [x * T, y * T] as [number, number]);
     if (p.length < 3) return;

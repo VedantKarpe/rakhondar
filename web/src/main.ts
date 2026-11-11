@@ -30,7 +30,7 @@ async function start() {
   const app = document.getElementById('app')!;
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   app.appendChild(renderer.domElement);
 
@@ -42,6 +42,7 @@ async function start() {
   Object.assign(sun.shadow.camera, { left: -160, right: 160, top: 160, bottom: -160, near: 1, far: 900 });
   sun.shadow.bias = -0.0008; sun.shadow.normalBias = 0.6;
   scene.add(hemi, sun, sun.target);
+  scene.fog = new THREE.Fog(0xdcdcd4, 300, 1500);   // the humid haze that greys the far shore and Altinho
 
   scene.add(buildTerrain(d, g), buildWater(d));
   const roads = buildRoads(d, g); scene.add(roads.group);
@@ -192,7 +193,10 @@ async function start() {
     if (input.zoomDelta) { rig.zoom(input.zoomDelta); input.zoomDelta = 0; }
     rig.update(dt, child.obj.position, app.clientWidth / Math.max(1, app.clientHeight));
     // the sun follows the child so its shadows are always sharp where you are
-    sun.position.set(px - 120, py + 260, pz - 60); sun.target.position.set(px, py, pz);
+    // the sun crosses from east (morning) to west (evening), low early and late
+    const sa = Math.max(0.2, Math.min(Math.PI - 0.2, (day.min - 360) / 720 * Math.PI)), sh = Math.max(0.25, Math.sin(sa));
+    sun.position.set(px + Math.cos(sa) * 260, py + sh * 260, pz + 80); sun.target.position.set(px, py, pz);
+    const camD = rig.camera.position.distanceTo(child.obj.position); const fog = scene.fog as THREE.Fog; fog.near = camD * 1.1; fog.far = camD * 3.2;
     let near = '', nd = 1e9;
     for (const p of places) { const dd = Math.hypot(p.X - px, p.Z - pz); if (dd < nd) { nd = dd; near = p.n; } }
     map.reveal(px, pz, 6);
