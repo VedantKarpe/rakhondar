@@ -70,10 +70,17 @@ async function start() {
     blds.list.push({ p, bb: [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)], base: 0, top: 30 });
   }
   const bi = new BuildingIndex(blds.list);
+  const atalGlow = new THREE.MeshBasicMaterial({ color: 0xd8d6d0 });
   for (const l of d.lm) for (const [x, y] of l.at) {
     const m = rawModel(l.name); if (!m) continue;
     const X = x * T, Z = y * T, deck = si.at(X, Z)?.deck;
     m.position.set(X, deck ?? g.heightAt(X, Z), Z); m.traverse(o => { o.receiveShadow = true; }); scene.add(m);
+    if (l.name === 'atalsetu') {
+      // the Atal Setu pylons stand out on the skyline: drawn taller, with a strip of light up each mast that glows at night
+      m.scale.set(1, 1.8, 1);
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(1.5, 30, 1.5).translate(0, 17, 0), atalGlow);
+      m.add(strip);
+    }
   }
   scene.add(buildTrees(d, g, bi, si));
 
@@ -195,6 +202,7 @@ async function start() {
 
     day.update(dt, scene, hemi, sun, px, pz);
     windowsLit.value = Math.max(0, day.dark * 1.6 - 0.6);
+    atalGlow.color.setHSL(0.78 + Math.sin(performance.now() / 4000) * 0.05, day.dark > 0.5 ? 0.8 : 0, day.dark > 0.5 ? 0.7 : 0.85);
     const hit = traffic.update(dt, px, pz, night);
     if (hit && !traffic.riding) { knockX = hit.kx; knockZ = hit.kz; st.courage = Math.max(0, st.courage - 15); hurtT = 0.6; }
     people.update(dt, px, pz, night);
