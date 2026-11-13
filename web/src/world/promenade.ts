@@ -6,7 +6,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { Ground, T, pts, type PanjimData } from './data';
 import type { BuildingIndex } from './buildings';
 
-export function buildPromenade(d: PanjimData, g: Ground, bi: BuildingIndex): THREE.Group {
+export function buildPromenade(d: PanjimData, g: Ground, bi: BuildingIndex, onStreet: (x: number, z: number) => boolean = () => false): THREE.Group {
   const group = new THREE.Group(); group.name = 'promenade';
   const walk: number[] = [], walkI: number[] = [];
   const posts: THREE.Matrix4[] = [], balus: THREE.Matrix4[] = [], copes: THREE.Matrix4[] = [], benches: THREE.Matrix4[] = [], flags: THREE.Matrix4[] = [];
@@ -45,7 +45,7 @@ export function buildPromenade(d: PanjimData, g: Ground, bi: BuildingIndex): THR
         }
         if (dist.filter(x => x !== null).length < n * 0.6) continue;
         // smooth the distances a little so the railing runs in an even line
-        const sm = dist.map((v, k) => { if (v === null) return null; let t = 0, c = 0; for (let q = k - 1; q <= k + 1; q++) { const w = dist[q]; if (w !== undefined && w !== null) { t += w; c++; } } return t / c - 1.2; });
+        const sm = dist.map((v, k) => { if (v === null) return null; let t = 0, c = 0; for (let q = k - 2; q <= k + 2; q++) { const w = dist[q]; if (w !== undefined && w !== null) { t += w; c++; } } return t / c - 1.2; });
         const P = (k: number, off: number): [number, number] => { const s0 = Math.min(len, k * 3); return [ax + tx * s0 + nx * sd * (half + off), az + tz * s0 + nz * sd * (half + off)]; };
         for (let k = 0; k < n; k++) {
           const e = sm[k]; if (e === null) continue;
@@ -58,7 +58,8 @@ export function buildPromenade(d: PanjimData, g: Ground, bi: BuildingIndex): THR
             walk.push(wx, y, wz, wx2, y, wz2, ex2, y, ez2, ex, y, ez);
             walkI.push(b, b + 1, b + 2, b, b + 2, b + 3);
             const ang = -Math.atan2(ez2 - ez, ex2 - ex), L = Math.hypot(ex2 - ex, ez2 - ez), mx2 = (ex + ex2) / 2, mz2 = (ez + ez2) / 2;
-            if (bi.solid((wx + ex) / 2, (wz + ez) / 2, 1) || !claim(mx2, mz2)) continue;
+            const turn = Math.abs(((ang + Math.atan2(tz, tx)) + Math.PI * 3) % (Math.PI * 2) - Math.PI);   // railing vs street direction
+            if (bi.solid((wx + ex) / 2, (wz + ez) / 2, 1) || onStreet(mx2, mz2) || onStreet(ex, ez) || turn > 0.35 || !claim(mx2, mz2)) continue;
             copes.push(mat(mx2, y + 1.05, mz2, ang, new THREE.Vector3(L / 3, 1, 1)));
             for (const o of [-1, 0, 1]) balus.push(mat(mx2 + (ex2 - ex) / L * o * 0.9, y + 0.55, mz2 + (ez2 - ez) / L * o * 0.9, ang));
             if (k % 3 === 0) posts.push(mat(ex, y + 0.6, ez, ang));

@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Network } from '../world/network';
 import type { Ground } from '../world/data';
 
-const SKY: [number, number][] = [[0, 0x0b1222], [300, 0x0b1222], [360, 0xe6b89a], [450, 0xd8dcd8], [1000, 0xdcdcd4], [1080, 0xead2b0], [1130, 0xc88a78], [1180, 0x2a2848], [1440, 0x0b1222]];
+const SKY: [number, number][] = [[0, 0x1c2c52], [300, 0x1c2c52], [360, 0xe6b89a], [450, 0xd8dcd8], [1000, 0xdcdcd4], [1080, 0xead2b0], [1130, 0xc88a78], [1180, 0x2e3a66], [1440, 0x1c2c52]];
 
 function lerpCol(t: number): THREE.Color {
   for (let i = 1; i < SKY.length; i++) if (t <= SKY[i][0]) {
@@ -61,7 +61,7 @@ export class Clock {
     this.tubes = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.1, 0.1, 1.3, 6).rotateX(Math.PI / 2).translate(2.5, 9.3, 0), new THREE.MeshBasicMaterial({ color: 0xd8d8d8 }), tube.length);
     tube.forEach((m, i) => this.tubes.setMatrixAt(i, m));
     this.lamps.add(this.heads, this.tubes);
-    for (let i = 0; i < 6; i++) { const l = new THREE.PointLight(0xf0f4ff, 0, 30, 1.4); this.pool.push(l); this.lamps.add(l); }
+    for (let i = 0; i < 12; i++) { const l = new THREE.PointLight(0xf0f4ff, 0, 34, 1.3); this.pool.push(l); this.lamps.add(l); }
   }
 
   get night(): boolean { return this.min < 6 * 60 || this.min > 18 * 60 + 40; }
@@ -73,10 +73,10 @@ export class Clock {
     this.min = (this.min + dt * this.rate) % 1440;
     const k = this.dark;
     scene.background = lerpCol(this.min);
-    hemi.intensity = 1.25 - 1.0 * k; hemi.color.set(0xf1eee4).lerp(new THREE.Color(0x5a6aa0), k); hemi.groundColor.set(0x8a7456).lerp(new THREE.Color(0x1a1a28), k);
+    hemi.intensity = 1.25 - 0.6 * k; hemi.color.set(0xf1eee4).lerp(new THREE.Color(0x8a9ad0), k); hemi.groundColor.set(0x8a7456).lerp(new THREE.Color(0x3a3a50), k);   // Goan nights are bright: moonlight, sodium glow, lit windows
     // a hazy tropical sun: soft by day, low and golden in the evening
     const eve = Math.max(0, Math.min(1, (this.min - 960) / 150));
-    sun.intensity = (1.7 + eve * 0.5) * (1 - k) + 0.12 * k;
+    sun.intensity = (1.7 + eve * 0.5) * (1 - k) + 0.45 * k;
     sun.color.set(0xfff0d8).lerp(new THREE.Color(0xffb870), eve).lerp(new THREE.Color(0x8fa6d8), k);
     if (scene.fog) (scene.fog as THREE.Fog).color.copy(scene.background as THREE.Color);
     const on = k > 0.55;
@@ -85,7 +85,7 @@ export class Clock {
     // the nearest few lamps cast real light
     if (on) {
       const near = this.spots.map(p => ({ p, d: Math.hypot(p.x - cx, p.z - cz) })).filter(a => a.d < 120).sort((a, b) => a.d - b.d);
-      this.pool.forEach((l, i) => { const a = near[i]; if (a) { l.position.set(a.p.x, a.p.y - 0.4, a.p.z); l.intensity = 90; } else l.intensity = 0; });
+      this.pool.forEach((l, i) => { const a = near[i]; if (a) { l.position.set(a.p.x, a.p.y - 0.4, a.p.z); l.intensity = 140; } else l.intensity = 0; });
     } else this.pool.forEach(l => (l.intensity = 0));
   }
 

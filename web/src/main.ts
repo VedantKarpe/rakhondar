@@ -101,7 +101,7 @@ async function start() {
   const day = new Clock(net, g); scene.add(day.lamps);
   const quests = new Quests(d, net, g, px, pz); scene.add(quests.group);
   const map = new Minimap(d);
-  scene.add(buildPromenade(d, g, bi));
+  scene.add(buildPromenade(d, g, bi, (x, z) => { const s = si.at(x, z); return !!s && s.half > 2; }));   // no railing across a street
   const bikes = new Bikes(net, g, (x, z) => move.free(x, z) && !si.at(x, z)); scene.add(bikes.group);
   const places2 = new Places(d, g, scene, p => hud.whisper(`Okay, ${p.name}. Follow the green light, baba. ${p.note}`, 6));
   const boats = new Boats(g, d.casinos ?? []); scene.add(boats.group);
