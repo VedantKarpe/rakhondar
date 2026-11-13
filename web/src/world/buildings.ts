@@ -62,24 +62,104 @@ function hipRoof(p: [number, number][], y: number, rise: number, color: THREE.Co
   return geo;
 }
 
+/** Is the outline convex? (a hip roof only suits a convex one) */
+function convex(p: [number, number][]): boolean {
+  let sign = 0;
+  for (let i = 0; i < p.length; i++) {
+    const a = p[i], b = p[(i + 1) % p.length], c = p[(i + 2) % p.length], cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+    if (Math.abs(cr) < 1e-6) continue; const s2 = Math.sign(cr); if (sign && s2 !== sign) return false; sign = s2;
+  }
+  return true;
+}
+
+/** A tiled roof for any outline (L, U and courtyard shapes too): a band of tiles sloping up from the eaves all round,
+ *  `depth` metres deep, over the flat roof inside. */
+function skirtRoof(p: [number, number][], y: number, depth: number, rise: number, color: THREE.Color): THREE.BufferGeometry {
+  let area = 0; for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; area += a[0] * b[1] - b[0] * a[1]; }
+  const inw = area > 0 ? 1 : -1, P: number[] = [];
+  for (let i = 0; i < p.length; i++) {
+    const a = p[i], b = p[(i + 1) % p.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const nx = -(b[1] - a[1]) / L * inw, nz = (b[0] - a[0]) / L * inw;   // pointing into the building
+    const d0 = -0.8, d1 = Math.min(depth, L * 0.5);
+    const A0 = [a[0] + nx * d0, y, a[1] + nz * d0], B0 = [b[0] + nx * d0, y, b[1] + nz * d0], A1 = [a[0] + nx * d1, y + rise, a[1] + nz * d1], B1 = [b[0] + nx * d1, y + rise, b[1] + nz * d1];
+    P.push(...A0, ...B0, ...B1, ...A0, ...B1, ...A1);
+  }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); geo.computeVertexNormals();
+  const n = P.length / 3, c = new Float32Array(n * 3), uv = new Float32Array(n * 2), dark = color.clone().multiplyScalar(0.85), nr = geo.attributes.normal;
+  for (let i = 0; i < n; i++) { const cc = nr.getX(i) + nr.getZ(i) > 0 ? dark : color; c[i * 3] = cc.r; c[i * 3 + 1] = cc.g; c[i * 3 + 2] = cc.b; uv[i * 2] = 0.01; uv[i * 2 + 1] = 0.6; }
+  geo.setAttribute('color', new THREE.BufferAttribute(c, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return geo;
+}
+
+/** A plain shape painted one colour, with texture coordinates on a blank spot so no facade shows on it. */
+function solid(geo: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
+  const g = geo.index ? geo.toNonIndexed() : geo, n = g.attributes.position.count, c = new THREE.Color(hex), col = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; uv[i * 2] = 0.01; uv[i * 2 + 1] = 0.6; }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  if (!g.attributes.normal) g.computeVertexNormals();
+  return g;
+}
+
+// the named buildings' styles (from tools/export_named.py): Portuguese-era public buildings, churches, temples, modern blocks
+const PUB_COLS = [0xe8b84a, 0xf3ead2, 0xc4302b, 0x7cc8ee, 0xe6c86a, 0xd8d0b8];
+const MODERN_COLS = [0xdcdcd6, 0xc8ccd0, 0xe8e2d2, 0xb8c4cc, 0xd6d0c4];
+
 export function buildBuildings(d: PanjimData, g: Ground): { group: THREE.Group; list: Building[] } {
+  const named = d.named ?? [];
   const geos: THREE.BufferGeometry[] = [], list: Building[] = [];
   const roofFlat = new THREE.Color(0xb8b2a4), roofTile = new THREE.Color(0xa8432a), white = new THREE.Color(0xfaf8f2), ochre = new THREE.Color(0xecd6a0);
   d.b.forEach(([f, lv, kind, area], idx) => {
     const p = pts(f).map(([x, y]) => [x * T, y * T] as [number, number]);
     if (p.length < 3) return;
-    const small = !kind && area < 260, storeys = !kind && area < 150 ? 1 : lv;
-    const h = storeys * STOREY * (kind === 1 ? 1.6 : kind === 2 ? 1.2 : small ? 0.9 : 1);
+    // is this one of the named buildings? (its recorded middle falls inside this outline)
+    const mx = p.reduce((a, q) => a + q[0], 0) / p.length, mz = p.reduce((a, q) => a + q[1], 0) / p.length;
+    const nm = named.find(n => inPoly(p, n[2] * T, n[3] * T) || Math.hypot(n[2] * T - mx, n[3] * T - mz) < 6);
+    const style = nm?.[0] ?? '';
+    const small = !kind && !style && area < 260;
+    let storeys = !kind && area < 150 && !style ? 1 : lv;
+    if (style === 'pub') storeys = Math.max(2, nm![4] || lv);
+    if (style === 'modern') storeys = Math.max(3, nm![4] || lv);
+    if (style === 'temple') storeys = Math.max(1, Math.min(2, lv));
+    const h = storeys * STOREY * (kind === 1 || style === 'church' ? 1.6 : kind === 2 ? 1.2 : small ? 0.9 : 1);
     const base = Math.min(...p.map(([x, z]) => g.heightAt(x, z)));
     const shape = new THREE.Shape(p.map(([x, z]) => new THREE.Vector2(x, -z)));
     const geo = new THREE.ExtrudeGeometry(shape, { depth: h + 1.5, bevelEnabled: false });   // 1.5 m below the plot so slopes never show a gap
     geo.rotateX(-Math.PI / 2); geo.translate(0, base - 1.5, 0);
     wallUV(geo, base);
-    const wall = kind === 1 ? white : kind === 2 ? ochre : new THREE.Color(PALETTE[(idx * 7 + p.length) % PALETTE.length]);
-    const tiled = !kind && area < 1400 && p.length <= 8;
-    colorGeo(geo, wall, kind === 1 ? white : tiled ? roofTile : roofFlat);
+    const wall = style === 'pub' ? new THREE.Color(PUB_COLS[idx % PUB_COLS.length]) : style === 'modern' ? new THREE.Color(MODERN_COLS[idx % MODERN_COLS.length])
+      : kind === 1 || style === 'church' ? white : kind === 2 || style === 'temple' ? ochre : new THREE.Color(PALETTE[(idx * 7 + p.length) % PALETTE.length]);
+    // tiled hip roofs on houses, the old public buildings and the churches; flat on modern blocks and temples
+    const tiled = style === 'pub' || style === 'church' || (!kind && !style && area < 1400);
+    colorGeo(geo, wall, tiled ? roofTile : style === 'modern' ? new THREE.Color(0x9a9c9e) : kind === 1 ? white : roofFlat);
     geos.push(geo);
-    if (tiled) { const r = hipRoof(p, base + h, Math.min(3.2, Math.sqrt(area) * 0.22), roofTile); wallUV(r, 0); geos.push(r); }
+    if (tiled) {
+      // a hip roof over simple shapes; a band of tiles all round the eaves over L, U and courtyard shapes
+      const rise = style === 'church' ? Math.max(4, Math.sqrt(area) * 0.3) : Math.min(style === 'pub' ? 6 : 3.2, Math.sqrt(area) * 0.22);
+      const r = convex(p) && p.length <= 8 ? hipRoof(p, base + h, rise, roofTile) : skirtRoof(p, base + h, 7, Math.min(rise, 3.5), roofTile);
+      wallUV(r, 0); if (!convex(p) || p.length > 8) { const uv = r.attributes.uv as THREE.BufferAttribute; for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.01, 0.6); }
+      geos.push(r);
+    }
+    const cx = p.reduce((a, q) => a + q[0], 0) / p.length, cz = p.reduce((a, q) => a + q[1], 0) / p.length;
+    if (style === 'church') {
+      // a bell tower at the front end (the outline corner farthest from the middle), with a pyramid cap and a cross
+      const far = p.reduce((a, q) => (Math.hypot(q[0] - cx, q[1] - cz) > Math.hypot(a[0] - cx, a[1] - cz) ? q : a));
+      const tx = far[0] + (cx - far[0]) * 0.18, tz = far[1] + (cz - far[1]) * 0.18, th = h + 9;
+      geos.push(solid(new THREE.BoxGeometry(5, th, 5).translate(tx, base + th / 2, tz), 0xfaf8f2));
+      geos.push(solid(new THREE.BoxGeometry(5.6, 0.6, 5.6).translate(tx, base + th, tz), 0xe8e2d4));
+      geos.push(solid(new THREE.ConeGeometry(3.6, 4.5, 4).rotateY(Math.PI / 4).translate(tx, base + th + 2.5, tz), 0xa8432a));
+      geos.push(solid(new THREE.BoxGeometry(0.35, 2.6, 0.35).translate(tx, base + th + 6, tz), 0xf2efe6), solid(new THREE.BoxGeometry(1.4, 0.35, 0.35).translate(tx, base + th + 6.4, tz), 0xf2efe6));
+    }
+    if (style === 'temple') {
+      // the shikhara over the sanctum: stepped tiers, a dome, a golden kalash
+      let y = base + h, w = Math.min(10, Math.sqrt(area) * 0.45);
+      for (let k = 0; k < 3; k++) { const th = 2.4; geos.push(solid(new THREE.BoxGeometry(w, th, w).translate(cx, y + th / 2, cz), k % 2 ? 0xf2efe6 : 0xe8a03a)); y += th; w *= 0.75; }
+      geos.push(solid(new THREE.SphereGeometry(w * 0.7, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).translate(cx, y, cz), 0xe8a03a));
+      geos.push(solid(new THREE.ConeGeometry(0.6, 2.4, 8).translate(cx, y + w * 0.7 + 1.2, cz), 0xf2c230));
+    }
+    if (style === 'modern') {
+      // a parapet and a water tank / lift room on the flat roof
+      geos.push(solid(new THREE.BoxGeometry(5, 3, 4).translate(cx, base + h + 1.5, cz), 0xb8b8b4));
+    }
     let x0 = 1e9, z0 = 1e9, x1 = -1e9, z1 = -1e9;
     for (const [x, z] of p) { x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z); }
     list.push({ p, bb: [x0, z0, x1, z1], base, top: base + h });

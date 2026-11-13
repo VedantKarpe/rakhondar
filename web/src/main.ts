@@ -102,7 +102,7 @@ async function start() {
   scene.add(buildPromenade(d, g, bi));
   const bikes = new Bikes(net, g, (x, z) => move.free(x, z) && !si.at(x, z)); scene.add(bikes.group);
   const places2 = new Places(d, g, scene, p => hud.whisper(`Okay, ${p.name}. Follow the green light, baba. ${p.note}`, 6));
-  const boats = new Boats(g); scene.add(boats.group);
+  const boats = new Boats(g, d.casinos ?? []); scene.add(boats.group);
   const pumps = new Pumps(net, g, (x, z) => !bi.solid(x, z, 9) && !g.isWet(x, z) && !si.at(x, z)); scene.add(pumps.group);
   const home: [number, number] = [px, pz];
 

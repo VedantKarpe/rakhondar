@@ -15,6 +15,8 @@ export interface PanjimData {
   water: Flat[]; mang: Flat[]; marsh: Flat[];
   eg: number; ew: number; eh: number; elev: number[];  // heights in metres on a grid every eg tiles
   names: string[]; places: [string, number, number][]; lm: Landmark[];
+  named?: [string, string, number, number, number][];   // style, name, x, y (tiles), storeys (0 = unknown)
+  casinos?: [string, number, number, number, number][]; // name, x, y (tiles), heading (rad), length (m)
 }
 
 export async function loadPanjim(): Promise<PanjimData> {

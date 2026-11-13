@@ -57,10 +57,16 @@ export class Boats {
   private seed = 2024;
   private rnd = () => (this.seed = (this.seed * 16807) % 2147483647) / 2147483647;
 
-  constructor(private g: Ground) {
+  constructor(private g: Ground, moorings: [string, number, number, number, number][] = []) {
     this.group.name = 'boats';
     const open = (x: number, z: number, r: number) => { for (let a = 0; a < 6.28; a += 0.8) if (!g.isWet(x + Math.cos(a) * r, z + Math.sin(a) * r)) return false; return g.isWet(x, z); };
-    const want: [Kind, number, number][] = [['canoe', 14, 12], ['ferry', 3, 30], ['cruise', 3, 40], ['barge', 6, 45], ['casino', 5, 60]];
+    // the casinos ride at their real moorings off the Panjim waterfront (from the map), turned along the river
+    for (const [, x, y, head, len] of moorings) {
+      const { obj, lights } = make('casino'); obj.scale.setScalar(Math.max(0.6, Math.min(1.4, len / 70))); this.group.add(obj);
+      this.list.push({ kind: 'casino', obj, x: x * 20, z: y * 20, h: head, v: 0, turn: 0, t: this.rnd() * 9, lights });
+      obj.rotation.y = -head;
+    }
+    const want: [Kind, number, number][] = [['canoe', 14, 12], ['ferry', 3, 30], ['cruise', 3, 40], ['barge', 6, 45], ['casino', moorings.length ? 0 : 5, 60]];
     for (const [kind, n, clear] of want) {
       for (let i = 0, tries = 0; i < n && tries < 20000; tries++) {
         const x = this.rnd() * g.W * 20, z = this.rnd() * g.H * 20;
