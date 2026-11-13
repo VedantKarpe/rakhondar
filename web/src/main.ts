@@ -103,7 +103,7 @@ async function start() {
   const people = new People(net, g, 44); scene.add(people.group);
   const monsters = new Monsters(g, move); scene.add(monsters.group);
   const day = new Clock(net, g); scene.add(day.lamps);
-  const quests = new Quests(d, net, g, px, pz); scene.add(quests.group);
+  const quests = new Quests(d, net, g, blds.list, px, pz, (x, z) => move.free(x, z)); scene.add(quests.group);
   const map = new Minimap(d);
   scene.add(buildPromenade(d, g, bi, (x, z) => { const s = si.at(x, z); return !!s && s.half > 2; }, drawnLand));   // no railing across a street
   const bikes = new Bikes(net, g, (x, z) => move.free(x, z) && !si.at(x, z)); scene.add(bikes.group);
@@ -171,7 +171,7 @@ async function start() {
   const flat = new Set(['roads', 'buildings', 'grass', 'street life']);
   const outlined = scene.children.filter(o => !flat.has(o.name) && o.type === 'Group');
   toonify(scene, outlined, o => { let p: THREE.Object3D | null = o; while (p) { if (flat.has(p.name)) return true; p = p.parent; } return false; });
-  let inkT = 0, edgeT = 0;
+  let inkT = 0, edgeT = 0, chargeTold = false, wasNight = false;
   const clock = new THREE.Clock();
   let mapT = 0;
   (window as unknown as { rk: unknown }).rk = { THREE, d, signals, scene, renderer, rig, child, day, traffic, people, monsters, quests, st, get pos() { return [px, pz]; }, set pos(v: number[]) { px = v[0]; pz = v[1]; } };
@@ -224,6 +224,10 @@ async function start() {
     if (hurt > 0) { st.courage = Math.max(0, st.courage - hurt); if (hurtT <= 0) { sfx.hurt(); hurtT = 0.4; } }
     // the torch drains its battery at night and recharges by day; standing in light restores courage
     if (night && lampLit) st.oil = Math.max(0, st.oil - dt * 0.35);
+    // recharging at night: stand under a street light (the torch's charger in your pocket fills from it)
+    if (night && day.litAt(px, pz) && st.oil < 100) { st.oil = Math.min(100, st.oil + dt * 5); if (!chargeTold) { chargeTold = true; hud.whisper('Under the tubelight, the torch charges up. Stay a little, baba.', 3); } }
+    // night falls: the Rakhondar sends you after the stranded; morning calls the search off
+    if (night !== wasNight) { if (night) { const m = quests.startNight(px, pz); if (m) hud.whisper(m, 8); } else quests.endNight(); wasNight = night; }
     if (!night) st.oil = Math.min(100, st.oil + dt * 2);
     if (day.litAt(px, pz) && hurt === 0) st.courage = Math.min(100, st.courage + dt * (night ? 3 : 1));
     if (st.courage <= 0) {
@@ -248,7 +252,7 @@ async function start() {
     for (const p of places) { const dd = Math.hypot(p.X - px, p.Z - pz); if (dd < nd) { nd = dd; near = p.n; } }
     map.reveal(px, pz, 6);
     mapT -= dt;
-    if (mapT <= 0) { mapT = 0.1; map.draw(px, pz, rig.yaw, [...(quests.cur?.spots.filter(s => !s.done) ?? []), ...(places2.target ? [{ x: places2.target.x, z: places2.target.z, name: places2.target.name, done: false }] : [])], night); }
+    if (mapT <= 0) { mapT = 0.1; map.draw(px, pz, rig.yaw, [...quests.pins, ...(places2.target ? [{ x: places2.target.x, z: places2.target.z, name: places2.target.name, done: false }] : [])], night); }
     // vehicles, people, demons and quest markers come and go: give the new ones the cartoon look too
     inkT -= dt;
     if (inkT <= 0) { inkT = 0.5; for (const gr of [traffic.group, people.group, monsters.group, quests.group]) toonify(gr, [gr], () => false); }
@@ -256,7 +260,7 @@ async function start() {
     if (seen) { st.points += 5; hud.whisper(`${seen.name}! ${seen.note}`, 6); }
     renderer.render(scene, rig.camera);
     const t = quests.target;
-    const hint = t && !quests.cur?.litter ? `${Math.round(Math.hypot(t.x - px, t.z - pz) / 10) * 10} m` : '';
+    const hint = t && quests.cur?.kind !== 'collect' ? `${Math.round(Math.hypot(t.x - px, t.z - pz) / 10) * 10} m` : '';
     hud.update(dt, renderer, { courage: st.courage, oil: st.oil, points: st.points, time: day.label + (night ? ' · night' : ''), placeName: nd < 400 ? near : '', objective: quests.objective, riding: !!traffic.riding, hint });
   };
   (window as unknown as { rkFrame: (dt: number) => void }).rkFrame = frame;   // for tests: run one frame by hand

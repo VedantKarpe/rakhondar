@@ -39,13 +39,13 @@ export class Bikes {
   constructor(net: Network, private g: Ground, free: (x: number, z: number) => boolean) {
     this.group.name = 'bikes';
     let seed = 515; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    for (let n = 0, tries = 0; n < 90 && tries < 3000; tries++) {
+    for (let n = 0, tries = 0; n < 220 && tries < 8000; tries++) {
       const e = Math.floor(rnd() * net.edges.length), E = net.edges[e];
       if (E.deck !== null || E.len < 20) continue;
       const p = net.at(e, rnd() * E.len), sd = rnd() < 0.5 ? 1 : -1, off = (E.width / 2 + 2.6) * sd;
       const x = p.x + p.dz * off, z = p.z - p.dx * off;
-      if (!free(x, z) || this.list.some(b => Math.hypot(b.x - x, b.z - z) < 25)) continue;
-      const kind = rnd() < 0.65 ? 'scooter' : 'cycle', obj = makeBike(kind, COLS[Math.floor(rnd() * COLS.length)]);
+      if (!free(x, z) || this.list.some(b => Math.hypot(b.x - x, b.z - z) < 14)) continue;
+      const kind = rnd() < 0.4 ? 'scooter' : 'cycle', obj = makeBike(kind, COLS[Math.floor(rnd() * COLS.length)]);
       obj.position.set(x, g.heightAt(x, z) + 0.15, z); obj.rotation.y = -Math.atan2(p.dz, p.dx) + Math.PI / 2 + (rnd() - 0.5) * 0.4;   // parked across the kerb
       this.group.add(obj); this.list.push({ obj, kind, x, z }); n++;
     }

@@ -37,7 +37,7 @@ export class Monsters {
 
   private make(cx: number, cz: number): Demon | null {
     for (let k = 0; k < 10; k++) {
-      const a = this.rnd() * Math.PI * 2, r = 70 + this.rnd() * 60, x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+      const a = this.rnd() * Math.PI * 2, r = 45 + this.rnd() * 55, x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
       if (!this.move.free(x, z)) continue;
       // a demon: a column of curling dark smoke with a hunched shape, ember eyes that glow, sparks drifting up
       const obj = new THREE.Group();
@@ -59,8 +59,8 @@ export class Monsters {
   /** Move the demons; returns how much courage they took this frame. */
   update(dt: number, cx: number, cz: number, night: boolean, lampLit: boolean, litAt: (x: number, z: number) => boolean): number {
     let hurt = 0;
-    const want = night ? 5 : 0;
-    if (this.list.length < want && this.rnd() < dt * 0.4) { const d = this.make(cx, cz); if (d) this.list.push(d); }
+    const want = night ? 12 : 0;   // a dozen at a time: the night is dangerous
+    if (this.list.length < want && this.rnd() < dt * 1.5) { const d = this.make(cx, cz); if (d) this.list.push(d); }
     for (const d of [...this.list]) {
       d.t += dt;
       const dx = cx - d.x, dz = cz - d.z, dist = Math.hypot(dx, dz) || 1;
@@ -68,8 +68,8 @@ export class Monsters {
       d.fade = Math.max(0, Math.min(1, d.fade + (leaving ? -dt : dt * 0.6)));
       if (leaving && d.fade <= 0) { this.group.remove(d.obj); this.list.splice(this.list.indexOf(d), 1); continue; }
       // creep toward the child; held off by the torch beam and by street light
-      let sp = leaving ? -6 : 4.5;
-      if (!leaving && lampLit && dist < 16) sp = -2;
+      let sp = leaving ? -6 : dist < 25 ? 10 : 6;   // they close in, and lunge when near
+      if (!leaving && lampLit && dist < 8) sp = -1.5;   // the torch only just holds them off
       const nx = d.x + (dx / dist) * sp * dt, nz = d.z + (dz / dist) * sp * dt;
       if (litAt(nx, nz) && sp > 0) { /* stays at the light's edge */ } else { d.x = nx; d.z = nz; }
       d.obj.position.set(d.x + Math.sin(d.t * 2) * 0.4, this.g.heightAt(d.x, d.z) + 0.3 + Math.sin(d.t * 3) * 0.3, d.z);
@@ -80,7 +80,7 @@ export class Monsters {
         else if (c.userData.eye) (c as THREE.Sprite).material.opacity = d.fade * (0.75 + Math.sin(d.t * 9) * 0.25);
       }
       d.obj.scale.setScalar(0.4 + d.fade * 0.8);
-      if (!leaving && dist < 3.5) { hurt += 12 * dt; }
+      if (!leaving && dist < 4) { hurt += 22 * dt; }
     }
     // the spirit: rises beside the child, then fades
     if (this.spiritT > 0) {

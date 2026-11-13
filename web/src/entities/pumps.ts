@@ -14,9 +14,9 @@ export class Pumps {
     const mat = (c: number, e = 0) => new THREE.MeshLambertMaterial({ color: c, emissive: e ? c : 0, emissiveIntensity: e });
     const order = net.edges.map((E, i) => ({ E, i })).filter(a => a.E.width >= 12 && a.E.deck === null && a.E.len > 60).sort((a, b) => (a.i * 7919) % 97 - (b.i * 7919) % 97);
     for (const { E, i } of order) {
-      if (this.spots.length >= 6) break;
+      if (this.spots.length >= 16) break;
       const p = net.at(i, E.len / 2), off = E.width / 2 + 9, x = p.x + p.dz * off, z = p.z - p.dx * off;
-      if (!canFit(x, z) || this.spots.some(s => Math.hypot(s.x - x, s.z - z) < 500)) continue;
+      if (!canFit(x, z) || this.spots.some(s => Math.hypot(s.x - x, s.z - z) < 260)) continue;
       this.spots.push({ x, z });
       const o = new THREE.Group(), y = g.heightAt(x, z);
       const add = (geo: THREE.BufferGeometry, m: THREE.Material, px: number, py: number, pz: number) => { const k = new THREE.Mesh(geo, m); k.position.set(px, py, pz); k.castShadow = true; o.add(k); };
