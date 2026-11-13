@@ -28,7 +28,7 @@ export function infill(d: PanjimData, g: Ground, si: StreetIndex): PanjimData['b
     if (cx < 0 || cz < 0 || cx >= W || cz >= H || taken[cz * W + cx]) return false;
     const tx = Math.floor(x / T), ty = Math.floor(z / T), row = d.rows[ty]?.[tx];
     if (!row || row === 'W' || row === 'F' || row === 'M' || g.isWet(x, z) || si.at(x, z)) return false;
-    return dense[ty * d.W + tx] >= 4;
+    return dense[ty * d.W + tx] >= 2;
   };
   const out: PanjimData['b'] = [];
   let seed = 31; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -38,8 +38,9 @@ export function infill(d: PanjimData, g: Ground, si: StreetIndex): PanjimData['b
     for (let i = 1; i < line.length; i++) {
       const [ax, az] = line[i - 1], [bx, bz] = line[i], len = Math.hypot(bx - ax, bz - az);
       if (len < 12) continue;
-      const tx = (bx - ax) / len, tz = (bz - az) / len, nx = -tz, nz = tx, back = w * 0.75 + 3.5;
-      for (const sd of [-1, 1]) {
+      const tx = (bx - ax) / len, tz = (bz - az) / len, nx = -tz, nz = tx;
+      // a front row on the street, then a second row behind it, as the town fills in back from the road
+      for (const back of [w * 0.75 + 3.5, w * 0.75 + 23]) for (const sd of [-1, 1]) {
         for (let s = 4; s + 6 < len;) {
           const wide = 7 + Math.floor(rnd() * 5), deep = 10 + Math.floor(rnd() * 7);
           // the house's four corners: front on the street, back away from it

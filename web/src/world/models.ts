@@ -24,14 +24,19 @@ async function loadOne(name: ModelName): Promise<THREE.Group> {
       const mt = mats[gr.materialIndex ?? 0], a = byMat.get(mt) ?? []; a.push(sub); byMat.set(mt, a);
     }
   });
-  const out = new THREE.Group();
+  // every part painted with its material's colour and merged into ONE mesh: a model costs one draw call, not twenty
+  const out = new THREE.Group(), painted: THREE.BufferGeometry[] = [], glowing: THREE.BufferGeometry[] = [];
   for (const [mat, geos] of byMat) {
     const merged = mergeGeometries(geos); if (!merged) continue;
-    const src = mat as THREE.MeshStandardMaterial;
-    // Lambert is cheaper and matches the rest of the city; keep the glow of lamps
-    const m = new THREE.MeshLambertMaterial({ color: src.color, emissive: src.emissive ?? 0, emissiveIntensity: src.emissiveIntensity ?? 0 });
-    const mesh = new THREE.Mesh(merged, m); mesh.castShadow = true; out.add(mesh);
+    const src = mat as THREE.MeshStandardMaterial, glow = (src.emissiveIntensity ?? 0) > 0.5 && src.emissive && src.emissive.getHex() !== 0;
+    const c = glow ? src.emissive : src.color, n = merged.attributes.position.count, a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+    merged.setAttribute('color', new THREE.BufferAttribute(a, 3));
+    for (const k of Object.keys(merged.attributes)) if (!['position', 'normal', 'color'].includes(k)) merged.deleteAttribute(k);
+    (glow ? glowing : painted).push(merged);
   }
+  if (painted.length) { const m = new THREE.Mesh(mergeGeometries(painted)!, new THREE.MeshLambertMaterial({ vertexColors: true })); m.castShadow = true; out.add(m); }
+  if (glowing.length) out.add(new THREE.Mesh(mergeGeometries(glowing)!, new THREE.MeshBasicMaterial({ vertexColors: true })));
   return out;
 }
 

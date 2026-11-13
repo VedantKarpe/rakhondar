@@ -40,10 +40,10 @@ export class Clock {
       }
     }
     const ironGeo = mergeGeometries([
-      new THREE.CylinderGeometry(0.45, 0.6, 1.2, 8).translate(0, 0.6, 0),
-      new THREE.CylinderGeometry(0.14, 0.22, 7, 8).translate(0, 4.6, 0),
-      new THREE.CylinderGeometry(0.3, 0.3, 0.3, 8).translate(0, 8.2, 0),
-      new THREE.ConeGeometry(0.75, 0.6, 8).translate(0, 9.8, 0),
+      new THREE.CylinderGeometry(0.45, 0.6, 1.2, 6).translate(0, 0.6, 0),
+      new THREE.CylinderGeometry(0.14, 0.22, 7, 5).translate(0, 4.6, 0),
+      new THREE.CylinderGeometry(0.3, 0.3, 0.3, 5).translate(0, 8.2, 0),
+      new THREE.ConeGeometry(0.75, 0.6, 6).translate(0, 9.8, 0),
     ])!;
     const tubeGeo = mergeGeometries([
       new THREE.CylinderGeometry(0.16, 0.26, 9, 6).translate(0, 4.5, 0),                      // the concrete pole
@@ -53,7 +53,7 @@ export class Clock {
     const add = (geo: THREE.BufferGeometry, color: number, list: THREE.Matrix4[]) => { const im = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color }), list.length); list.forEach((m, i) => im.setMatrixAt(i, m)); im.castShadow = true; this.lamps.add(im); };
     add(ironGeo, 0x1d1e21, iron); add(tubeGeo, 0x9a9a96, tube);
     // the lit parts: globes on the iron lamps, long white tubes under the fixtures
-    this.heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.62, 12, 8).translate(0, 9.0, 0), new THREE.MeshBasicMaterial({ color: 0xd8d6d0 }), iron.length);
+    this.heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.62, 8, 5).translate(0, 9.0, 0), new THREE.MeshBasicMaterial({ color: 0xd8d6d0 }), iron.length);
     iron.forEach((m, i) => this.heads.setMatrixAt(i, m));
     this.tubes = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.1, 0.1, 1.3, 6).rotateX(Math.PI / 2).translate(2.5, 9.3, 0), new THREE.MeshBasicMaterial({ color: 0xd8d8d8 }), tube.length);
     tube.forEach((m, i) => this.tubes.setMatrixAt(i, m));

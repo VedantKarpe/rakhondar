@@ -2,6 +2,7 @@
 // behind each other, slow for potholes and for the child. Walk into a moving one and there is an accident; stand
 // beside one and press F to take a lift, F again to get down.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Network } from '../world/network';
 import type { Ground } from '../world/data';
 import { model } from '../world/models';
@@ -33,7 +34,13 @@ function makeVehicle(kind: Kind, rnd: () => number): THREE.Group {
     for (const x of [0.75, -0.75]) g.add(box(0.15, 0.6, 0.6, 0x111111, 0.3, x));
   }
   g.scale.setScalar(1.6);   // vehicles drawn larger than life, as the people are
-  return g;
+  // merge the boxes into one painted mesh: one draw call a vehicle
+  g.updateMatrixWorld(true);
+  const parts: THREE.BufferGeometry[] = [];
+  g.traverse(o => { const m = o as THREE.Mesh; if (!m.isMesh) return; const geo = m.geometry.clone().applyMatrix4(m.matrix).toNonIndexed(), c = (m.material as THREE.MeshLambertMaterial).color, a = new Float32Array(geo.attributes.position.count * 3); for (let i = 0; i < a.length; i += 3) { a[i] = c.r; a[i + 1] = c.g; a[i + 2] = c.b; } geo.setAttribute('color', new THREE.BufferAttribute(a, 3)); geo.deleteAttribute('uv'); parts.push(geo); });
+  const one = new THREE.Group(), mesh = new THREE.Mesh(mergeGeometries(parts)!, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  mesh.castShadow = true; mesh.scale.setScalar(1.6); one.add(mesh);
+  return one;
 }
 
 export class Traffic {

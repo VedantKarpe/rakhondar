@@ -26,6 +26,7 @@ import { Bikes } from './entities/bikes';
 import { toonify } from './world/toon';
 import { infill } from './world/infill';
 import { Places } from './ui/places';
+import { buildStreetLife } from './world/streetlife';
 import { buildPromenade } from './world/promenade';
 
 async function start() {
@@ -91,8 +92,9 @@ async function start() {
   if (!move.free(px, pz)) for (let r = 2; r < 200 && !move.free(px, pz); r += 2) { px = 92 * T + r; }
 
   const net = new Network(d, g);
-  const traffic = new Traffic(net, g); scene.add(traffic.group);
-  const people = new People(net, g); scene.add(people.group);
+  scene.add(buildStreetLife(net, g, (x, z) => move.free(x, z)));
+  const traffic = new Traffic(net, g, 48); scene.add(traffic.group);
+  const people = new People(net, g, 44); scene.add(people.group);
   const monsters = new Monsters(g, move); scene.add(monsters.group);
   const day = new Clock(net, g); scene.add(day.lamps);
   const quests = new Quests(d, net, g, px, pz); scene.add(quests.group);
@@ -139,6 +141,7 @@ async function start() {
     if (k === 'r') call();
     if (k === 'l') st.lamp = !st.lamp;
     if (k === 'p') places2.toggle();
+    if (k === '0' || k === 'home') rig.reset();
     if (k === 'm') document.getElementById('map')!.click();
   };
   addEventListener('pointerdown', unlockAudio);
@@ -149,7 +152,7 @@ async function start() {
   };
   const btn = (id: string, f: () => void) => document.getElementById(id)!.addEventListener('click', e => { (e.currentTarget as HTMLElement).blur(); unlockAudio(); f(); });
   btn('bL', () => rig.turn(-Math.PI / 2)); btn('bR', () => rig.turn(Math.PI / 2)); btn('bIn', () => rig.zoom(2)); btn('bOut', () => rig.zoom(-2));
-  btn('bTiltD', () => rig.tiltBy(-0.12)); btn('bTiltU', () => rig.tiltBy(0.12));
+  btn('bHome', () => rig.reset()); btn('bTiltD', () => rig.tiltBy(-0.12)); btn('bTiltU', () => rig.tiltBy(0.12));
   btn('bTalk', talk); btn('bLift', lift); btn('bBan', banish); btn('bCall', call);
 
   const places = d.places.map(([n, x, y]) => ({ n, X: x * T, Z: y * T }));
@@ -159,7 +162,7 @@ async function start() {
   hud.whisper(quests.cur!.intro, 8);
 
   // the cartoon look: cel shading everywhere, ink outlines on everything solid but the ground, streets and buildings
-  const flat = new Set(['roads', 'buildings', 'trees-none']);
+  const flat = new Set(['roads', 'buildings', 'grass', 'street life']);
   const outlined = scene.children.filter(o => !flat.has(o.name) && o.type === 'Group');
   toonify(scene, outlined, o => { let p: THREE.Object3D | null = o; while (p) { if (flat.has(p.name)) return true; p = p.parent; } return false; });
   let inkT = 0, edgeT = 0;
@@ -232,7 +235,7 @@ async function start() {
     // the sun crosses from east (morning) to west (evening), low early and late
     const sa = Math.max(0.2, Math.min(Math.PI - 0.2, (day.min - 360) / 720 * Math.PI)), sh = Math.max(0.25, Math.sin(sa));
     sun.position.set(px + Math.cos(sa) * 260, py + sh * 260, pz + 80); sun.target.position.set(px, py, pz);
-    const camD = rig.camera.position.distanceTo(child.obj.position); const fog = scene.fog as THREE.Fog; fog.near = camD * 1.1; fog.far = camD * 6;
+    const camD = rig.camera.position.distanceTo(child.obj.position); const fog = scene.fog as THREE.Fog; fog.near = camD * 1.5; fog.far = camD * 4.5;
     let near = '', nd = 1e9;
     for (const p of places) { const dd = Math.hypot(p.X - px, p.Z - pz); if (dd < nd) { nd = dd; near = p.n; } }
     map.reveal(px, pz, 6);
@@ -249,7 +252,16 @@ async function start() {
     hud.update(dt, renderer, { courage: st.courage, oil: st.oil, points: st.points, time: day.label + (night ? ' · night' : ''), placeName: nd < 400 ? near : '', objective: quests.objective, riding: !!traffic.riding, hint });
   };
   (window as unknown as { rkFrame: (dt: number) => void }).rkFrame = frame;   // for tests: run one frame by hand
-  renderer.setAnimationLoop(() => frame(Math.min(0.05, clock.getDelta())));
+  // adaptive resolution: draw fewer pixels when frames run slow, more when there is room, so it stays smooth
+  let pr = renderer.getPixelRatio(), slow = 0, fast = 0;
+  const maxPR = Math.min(2, Math.max(1.5, devicePixelRatio)), minPR = Math.min(1, devicePixelRatio);
+  renderer.setAnimationLoop(() => {
+    const dt = clock.getDelta();
+    frame(Math.min(0.05, dt));
+    if (dt > 1 / 40) { slow++; fast = 0; } else if (dt < 1 / 57) { fast++; slow = 0; }
+    if (slow > 20 && pr > minPR) { pr = Math.max(minPR, pr - 0.25); renderer.setPixelRatio(pr); resize(); slow = 0; }
+    if (fast > 180 && pr < maxPR) { pr = Math.min(maxPR, pr + 0.25); renderer.setPixelRatio(pr); resize(); fast = 0; }
+  });
 }
 
 start().catch(e => { const l = document.getElementById('loading'); if (l) l.textContent = 'Could not start: ' + e.message; console.error(e); });
