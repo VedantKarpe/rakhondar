@@ -8,7 +8,15 @@ const TILE_COL: Record<string, [number, number, number]> = {
   F: [0.25, 0.42, 0.22], M: [0.22, 0.33, 0.21], S: [0.78, 0.68, 0.46], B: [0.78, 0.68, 0.46], W: [0.30, 0.40, 0.32],
 };
 
-const SUB = 4;   // ground vertices per tile edge: 5 m apart, so the shore can curve
+const SUB = 4;
+
+/** Soft, irregular patches of red laterite earth: smooth value noise (no repeating bands). */
+function hash(x: number, y: number) { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return h - Math.floor(h); }
+function vnoise(x: number, y: number) {
+  const i = Math.floor(x), j = Math.floor(y), u = x - i, v = y - j, su = u * u * (3 - 2 * u), sv = v * v * (3 - 2 * v);
+  return (hash(i, j) * (1 - su) + hash(i + 1, j) * su) * (1 - sv) + (hash(i, j + 1) * (1 - su) + hash(i + 1, j + 1) * su) * sv;
+}
+function blotch(tx: number, ty: number) { const n = vnoise(tx / 6, ty / 6) * 0.65 + vnoise(tx / 2.2, ty / 2.2) * 0.35; return Math.max(0, n - 0.62) * 1.6; }   // ground vertices per tile edge: 5 m apart, so the shore can curve
 
 /** How much land there is around each tile, blurred, so the shoreline comes out as smooth curves, not tile steps. */
 function landField(g: Ground): Float32Array {
@@ -48,7 +56,7 @@ export function buildTerrain(d: PanjimData, g: Ground, solidAt: (X: number, Z: n
     const c = TILE_COL[d.rows[j][i]] || TILE_COL.G;
     const hk = 1 + Math.min(0.12, g.rawHeight(tx, ty) / 400);
     const jit = 0.94 + ((i * 73 + j * 37) % 11) / 90;
-    const lat = c === TILE_COL.G || c === TILE_COL.L || c === TILE_COL.R ? Math.max(0, Math.sin(tx * 0.31 + Math.sin(ty * 0.17) * 2) * Math.sin(ty * 0.23 + tx * 0.05) - 0.35) * 0.9 : 0;
+    const lat = c === TILE_COL.G || c === TILE_COL.L || c === TILE_COL.R ? blotch(tx, ty) : 0;
     let r0 = c[0] + (0.55 - c[0]) * lat, g0 = c[1] + (0.36 - c[1]) * lat, b0 = c[2] + (0.22 - c[2]) * lat;
     // a band of sand or mud along the water's edge
     const beach = (1 - smooth(0.58, 0.85, land)) * 0.85;

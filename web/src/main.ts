@@ -47,7 +47,7 @@ async function start() {
   const sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -160, right: 160, top: 160, bottom: -160, near: 1, far: 900 });
-  sun.shadow.bias = -0.0008; sun.shadow.normalBias = 0.6;
+  sun.shadow.bias = -0.0015; sun.shadow.normalBias = 1.4;   // no striping on the ground when the sun is low
   scene.add(hemi, sun, sun.target);
   scene.fog = new THREE.Fog(0xdcdcd4, 300, 1500);   // the humid haze that greys the far shore and Altinho
 
@@ -233,7 +233,7 @@ async function start() {
     rig.update(dt, child.obj.position, app.clientWidth / Math.max(1, app.clientHeight));
     // the sun follows the child so its shadows are always sharp where you are
     // the sun crosses from east (morning) to west (evening), low early and late
-    const sa = Math.max(0.2, Math.min(Math.PI - 0.2, (day.min - 360) / 720 * Math.PI)), sh = Math.max(0.25, Math.sin(sa));
+    const sa = Math.max(0.2, Math.min(Math.PI - 0.2, (day.min - 360) / 720 * Math.PI)), sh = Math.max(0.6, Math.sin(sa))   // never so low that poles and palms cast long stripes across the town;
     sun.position.set(px + Math.cos(sa) * 260, py + sh * 260, pz + 80); sun.target.position.set(px, py, pz);
     const camD = rig.camera.position.distanceTo(child.obj.position); const fog = scene.fog as THREE.Fog; fog.near = camD * 1.5; fog.far = camD * 4.5;
     let near = '', nd = 1e9;

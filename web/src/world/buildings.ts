@@ -113,11 +113,40 @@ const OVERRIDE: Record<string, { style?: string; storeys?: number; color?: numbe
 };
 const MODERN_COLS = [0xdcdcd6, 0xc8ccd0, 0xe8e2d2, 0xb8c4cc, 0xd6d0c4];
 
+/** Panjim's old streets are terraces of narrow houses, each its own colour and height. A long plain box (most of them
+ *  guessed, since the map lacks small houses) is split into such a terrace: units 6-10 m wide along its length,
+ *  one to three storeys each. */
+function terraces(b: PanjimData['b'], named: [string, string, number, number, number][]): PanjimData['b'] {
+  let seed = 4321; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const out: PanjimData['b'] = [];
+  for (const e of b) {
+    const [f, lv, kind, area] = e;
+    if (kind || f.length !== 8 || area < 110 || area > 2500) { out.push(e); continue; }
+    const q = pts(f), cx = (q[0][0] + q[2][0]) / 2, cy = (q[0][1] + q[2][1]) / 2;
+    if (named.some(n => Math.hypot(n[2] - cx, n[3] - cy) < 1.5)) { out.push(e); continue; }
+    // the long side (a-b) and the short side (b-c), in tiles
+    const L01 = Math.hypot(q[1][0] - q[0][0], q[1][1] - q[0][1]), L12 = Math.hypot(q[2][0] - q[1][0], q[2][1] - q[1][1]);
+    const [a, bb, c, dd] = L01 >= L12 ? q : [q[1], q[2], q[3], q[0]], long = Math.max(L01, L12) * T;
+    if (long < 14) { out.push(e); continue; }
+    let s0 = 0;
+    while (s0 < long - 3) {
+      const w = Math.min(long - s0, 6 + rnd() * 4), t0 = s0 / long, t1 = (s0 + w) / long;
+      const P = (u: number, from: [number, number], to: [number, number]) => [from[0] + (to[0] - from[0]) * u, from[1] + (to[1] - from[1]) * u];
+      const p0 = P(t0, a, bb), p1 = P(t1, a, bb), p2 = P(t1, dd, c), p3 = P(t0, dd, c);
+      const r = rnd(), st = r < 0.35 ? 1 : r < 0.85 ? 2 : 3;
+      out.push([[...p0, ...p1, ...p2, ...p3], Math.max(st, Math.min(lv, 3)), 0, Math.max(150, area * w / long)]);
+      s0 += w + 0.15;
+    }
+  }
+  return out;
+}
+
 export function buildBuildings(d: PanjimData, g: Ground): { group: THREE.Group; list: Building[] } {
   const named = d.named ?? [];
   const geos: THREE.BufferGeometry[] = [], list: Building[] = [];
   const roofFlat = new THREE.Color(0xb8b2a4), roofTile = new THREE.Color(0xa8432a), white = new THREE.Color(0xfaf8f2), ochre = new THREE.Color(0xecd6a0);
-  d.b.forEach(([f, lv, kind, area], idx) => {
+  (location.search.includes('plain') ? d.b : terraces(d.b, d.named ?? [])).forEach(   // ?plain: the old boxes, for comparisons
+    ([f, lv, kind, area], idx) => {
     const p = pts(f).map(([x, y]) => [x * T, y * T] as [number, number]);
     if (p.length < 3) return;
     // is this one of the named buildings? (its recorded middle falls inside this outline)
