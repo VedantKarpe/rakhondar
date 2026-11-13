@@ -6,7 +6,7 @@ export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
   yaw = Math.PI / 4; private yawTarget = Math.PI / 4;
   // the default view: low over the street, looking down it to the skyline (press 0 or the ⌂ button to come back to it)
-  static readonly SPAN = 105; static readonly TILT = 0.36;
+  static readonly SPAN = 100; static readonly TILT = 0.28;
   span = CameraRig.SPAN; private spanTarget = CameraRig.SPAN;   // metres of the world across the screen at the child
   tilt = CameraRig.TILT; private tiltTarget = CameraRig.TILT;   // radians above the ground
   private target = new THREE.Vector3();
@@ -32,7 +32,7 @@ export class CameraRig {
     c.aspect = aspect;
     // distance so `span` metres fit across the screen at the child
     const d = (this.span / 2) / (Math.tan(THREE.MathUtils.degToRad(this.FOV) / 2) * aspect);
-    c.far = d * 4.6 + 300;   // beyond the haze nothing is drawn c.updateProjectionMatrix();
+    c.far = Math.max(1000, d * 4.6 + 300);   // beyond the haze nothing is drawn c.updateProjectionMatrix();
     const ce = Math.cos(this.tilt);
     c.position.set(this.target.x + Math.cos(this.yaw) * ce * d, this.target.y + Math.sin(this.tilt) * d, this.target.z + Math.sin(this.yaw) * ce * d);
     c.lookAt(this.target.x, this.target.y + 2, this.target.z);

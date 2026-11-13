@@ -238,7 +238,7 @@ async function start() {
     // the sun crosses from east (morning) to west (evening), low early and late
     const sa = Math.max(0.2, Math.min(Math.PI - 0.2, (day.min - 360) / 720 * Math.PI)), sh = Math.max(0.6, Math.sin(sa))   // never so low that poles and palms cast long stripes across the town;
     sun.position.set(px + Math.cos(sa) * 260, py + sh * 260, pz + 80); sun.target.position.set(px, py, pz);
-    const camD = rig.camera.position.distanceTo(child.obj.position); const fog = scene.fog as THREE.Fog; fog.near = camD * 1.5; fog.far = camD * 4.5;
+    const camD = rig.camera.position.distanceTo(child.obj.position); const fog = scene.fog as THREE.Fog; fog.near = Math.max(260, camD * 1.5); fog.far = Math.max(900, camD * 4.5);   // zoomed in close, the haze still starts far off
     let near = '', nd = 1e9;
     for (const p of places) { const dd = Math.hypot(p.X - px, p.Z - pz); if (dd < nd) { nd = dd; near = p.n; } }
     map.reveal(px, pz, 6);
