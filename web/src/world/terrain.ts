@@ -72,11 +72,33 @@ export function buildTerrain(d: PanjimData, g: Ground, solidAt: (X: number, Z: n
   return mesh;
 }
 
+/** The water's clock (seconds), advanced by the game each frame. */
+export const waterTime = { value: 0 };
+
 export function buildWater(d: PanjimData): THREE.Mesh {
   const pad = 2000;
   const geo = new THREE.PlaneGeometry(d.W * T + pad * 2, d.H * T + pad * 2);
   geo.rotateX(-Math.PI / 2); geo.translate((d.W * T) / 2, WATER_Y, (d.H * T) / 2);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0x2f7a9a }));
+  // moving waves: bands of lighter and darker water drifting with the current, and small sparkling crests
+  const mat = new THREE.MeshLambertMaterial({ color: 0x2f7a9a });
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uTime = waterTime;
+    sh.vertexShader = 'varying vec3 vW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vW = (modelMatrix * vec4(position, 1.0)).xyz;');
+    // smooth value noise drifting with the current: irregular ripples and thin, broken crest lines (no repeating pattern)
+    sh.fragmentShader = `uniform float uTime;
+varying vec3 vW;
+float wh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float wn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(wh(i), wh(i + vec2(1, 0)), f.x), mix(wh(i + vec2(0, 1)), wh(i + vec2(1, 1)), f.x), f.y); }
+` + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      vec2 q = vW.xz * vec2(0.025, 0.06) + vec2(uTime * 0.06, uTime * 0.015);
+      float n = wn(q) * 0.6 + wn(q * 2.7 + vec2(-uTime * 0.09, uTime * 0.04)) * 0.4;
+      float line = 1.0 - abs(n - 0.62) * 22.0;
+      diffuseColor.rgb *= 0.9 + 0.18 * (n - 0.5);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.7, 0.86, 0.92), clamp(line, 0.0, 1.0) * 0.35);`);
+  };
+  mat.customProgramCacheKey = () => 'water-waves';
+  const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'water';
   return mesh;

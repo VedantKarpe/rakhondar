@@ -2,7 +2,7 @@
 // townspeople, the day and its street lights, the night's demons, tasks, the minimap with fog of war.
 import * as THREE from 'three';
 import { loadPanjim, Ground, T } from './world/data';
-import { buildTerrain, buildWater } from './world/terrain';
+import { buildTerrain, buildWater, waterTime } from './world/terrain';
 import { buildRoads, StreetIndex } from './world/roads';
 import { buildBuildings, BuildingIndex, windowsLit } from './world/buildings';
 import { buildTrees } from './world/trees';
@@ -54,7 +54,6 @@ async function start() {
 
   const roads = buildRoads(d, g); scene.add(roads.group);
   const si = new StreetIndex(roads.segs);
-  scene.add(buildTerrain(d, g, (X, Z) => { const s = si.at(X, Z); return !!s && s.deck === null; }), buildWater(d));
   // the landmarks: their Blender models stand on their map points, in place of the plain blocks there
   const lmBox = d.lm.flatMap(l => l.at.map(([x, y]) => [x + l.cov[0], x + l.cov[1], y + l.cov[2], y + l.cov[3]]));
   const plain = { ...d, b: d.b.filter(([f]) => {
@@ -72,6 +71,11 @@ async function start() {
     blds.list.push({ p, bb: [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)], base: 0, top: 30 });
   }
   const bi = new BuildingIndex(blds.list);
+  // the ground: built up wherever a street or a building stands, so nothing stands in the water; the promenade follows
+  // the same drawn shoreline
+  const solidGround = (X: number, Z: number) => { const s = si.at(X, Z); return (!!s && s.deck === null) || bi.solid(X, Z, 9); };   // a bank 9 m round every building, so none stands in the water
+  const drawnLand = (X: number, Z: number) => (solidGround(X, Z) ? 1 : g.landAt(X, Z));
+  scene.add(buildTerrain(d, g, solidGround), buildWater(d));
   const atalGlow = new THREE.MeshBasicMaterial({ color: 0xd8d6d0 });
   for (const l of d.lm) for (const [x, y] of l.at) {
     const m = rawModel(l.name); if (!m) continue;
@@ -101,7 +105,7 @@ async function start() {
   const day = new Clock(net, g); scene.add(day.lamps);
   const quests = new Quests(d, net, g, px, pz); scene.add(quests.group);
   const map = new Minimap(d);
-  scene.add(buildPromenade(d, g, bi, (x, z) => { const s = si.at(x, z); return !!s && s.half > 2; }));   // no railing across a street
+  scene.add(buildPromenade(d, g, bi, (x, z) => { const s = si.at(x, z); return !!s && s.half > 2; }, drawnLand));   // no railing across a street
   const bikes = new Bikes(net, g, (x, z) => move.free(x, z) && !si.at(x, z)); scene.add(bikes.group);
   const places2 = new Places(d, g, scene, p => hud.whisper(`Okay, ${p.name}. Follow the green light, baba. ${p.note}`, 6));
   const boats = new Boats(g, d.casinos ?? []); scene.add(boats.group);
@@ -209,6 +213,7 @@ async function start() {
     windowsLit.value = Math.max(0, day.dark * 1.6 - 0.6);
     atalGlow.color.setHSL(0.78 + Math.sin(performance.now() / 4000) * 0.05, day.dark > 0.5 ? 0.8 : 0, day.dark > 0.5 ? 0.7 : 0.85);
     signals.update(dt);
+    waterTime.value += dt;
     const hit = traffic.update(dt, px, pz, night);
     if (hit && !traffic.riding) { knockX = hit.kx; knockZ = hit.kz; st.courage = Math.max(0, st.courage - 15); hurtT = 0.6; }
     people.update(dt, px, pz, night);

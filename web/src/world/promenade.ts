@@ -6,68 +6,79 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { Ground, T, pts, type PanjimData } from './data';
 import type { BuildingIndex } from './buildings';
 
-export function buildPromenade(d: PanjimData, g: Ground, bi: BuildingIndex, onStreet: (x: number, z: number) => boolean = () => false): THREE.Group {
+export function buildPromenade(d: PanjimData, g: Ground, bi: BuildingIndex, onStreet: (x: number, z: number) => boolean = () => false,
+  land: (x: number, z: number) => number = (x, z) => g.landAt(x, z)): THREE.Group {
+  void d; void pts;
   const group = new THREE.Group(); group.name = 'promenade';
   const walk: number[] = [], walkI: number[] = [];
   const posts: THREE.Matrix4[] = [], balus: THREE.Matrix4[] = [], copes: THREE.Matrix4[] = [], benches: THREE.Matrix4[] = [], flags: THREE.Matrix4[] = [];
   const q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1);
   const mat = (x: number, y: number, z: number, ang: number, s = one) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q.setFromAxisAngle(up, ang).clone(), s);
-  let flagN = 0;
-  // where two carriageways run side by side both would build a railing: keep only the first one in each 4 m spot
-  const used = new Map<number, number>(), key = (x: number, z: number) => Math.floor(x / 4) * 100000 + Math.floor(z / 4);
-  let owner = 0;
-  const claim = (x: number, z: number) => {
-    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const o = used.get(key(x + a * 4, z + b * 4)); if (o !== undefined && o !== owner) return false; }
-    used.set(key(x, z), owner); return true;
-  };
-  let streetN = 0;
-  for (const [f, w, flags0] of d.r) {
-    streetN++;
-    if (flags0 & 1) continue;
-    const line = pts(f).map(([x, y]) => [x * T, y * T]);
-    for (let i = 1; i < line.length; i++) {
-      const [ax, az] = line[i - 1], [bx, bz] = line[i], len = Math.hypot(bx - ax, bz - az);
-      if (len < 2) continue;
-      const tx = (bx - ax) / len, tz = (bz - az) / len, nx = -tz, nz = tx, half = w * 0.75 + 1.5;
-      // only the Mandovi waterfront: city stretch, river to the north of the street (the map's open water, not creeks)
-      const mx = (ax + bx) / 2 / T, mz = (az + bz) / 2 / T;
-      if (mx < 55 || mx > 135 || mz > 32) continue;
-      const river = (X: number, Z: number) => { const tx = Math.floor(X / T), ty = Math.floor(Z / T); return ty < 0 || (d.rows[ty]?.[tx] === 'W'); };
-      for (const sd of [-1, 1]) {
-        owner = streetN * 2 + (sd > 0 ? 1 : 0);   // one railing per street and side, across all its pieces
-        // how far the drawn shore is from the road's edge, every 3 m (the same smooth shoreline the ground is drawn with)
-        const n = Math.max(2, Math.ceil(len / 3) + 1), dist: (number | null)[] = [];
-        for (let k = 0; k < n; k++) {
-          const s0 = Math.min(len, k * 3), cx = ax + tx * s0, cz = az + tz * s0;
-          let hit: number | null = null;
-          for (let e = 1; e <= 32; e += 0.5) if (g.landAt(cx + nx * sd * (half + e), cz + nz * sd * (half + e)) < 0.5 && river(cx + nx * sd * (half + e), cz + nz * sd * (half + e))) { hit = e; break; }
-          dist.push(hit !== null && hit >= 4 ? hit : null);
-        }
-        if (dist.filter(x => x !== null).length < n * 0.6) continue;
-        // smooth the distances a little so the railing runs in an even line
-        const sm = dist.map((v, k) => { if (v === null) return null; let t = 0, c = 0; for (let q = k - 2; q <= k + 2; q++) { const w = dist[q]; if (w !== undefined && w !== null) { t += w; c++; } } return t / c - 1.2; });
-        const P = (k: number, off: number): [number, number] => { const s0 = Math.min(len, k * 3); return [ax + tx * s0 + nx * sd * (half + off), az + tz * s0 + nz * sd * (half + off)]; };
-        for (let k = 0; k < n; k++) {
-          const e = sm[k]; if (e === null) continue;
-          const [ex, ez] = P(k, e), [wx, wz] = P(k, 0);
-          const y = Math.max(0.6, g.heightAt(wx, wz)) + 0.1;
-          // the brick strip to the next sample (kept under the road surface, so streets always draw on top)
-          const e2 = sm[k + 1];
-          if (e2 !== null && e2 !== undefined && Math.abs(e2 - e) < 4) {
-            const [ex2, ez2] = P(k + 1, e2), [wx2, wz2] = P(k + 1, 0), b = walk.length / 3;
-            walk.push(wx, y, wz, wx2, y, wz2, ex2, y, ez2, ex, y, ez);
-            walkI.push(b, b + 1, b + 2, b, b + 2, b + 3);
-            const ang = -Math.atan2(ez2 - ez, ex2 - ex), L = Math.hypot(ex2 - ex, ez2 - ez), mx2 = (ex + ex2) / 2, mz2 = (ez + ez2) / 2;
-            const turn = Math.abs(((ang + Math.atan2(tz, tx)) + Math.PI * 3) % (Math.PI * 2) - Math.PI);   // railing vs street direction
-            if (bi.solid((wx + ex) / 2, (wz + ez) / 2, 1) || onStreet(mx2, mz2) || onStreet(ex, ez) || turn > 0.35 || !claim(mx2, mz2)) continue;
-            copes.push(mat(mx2, y + 1.05, mz2, ang, new THREE.Vector3(L / 3, 1, 1)));
-            for (const o of [-1, 0, 1]) balus.push(mat(mx2 + (ex2 - ex) / L * o * 0.9, y + 0.55, mz2 + (ez2 - ez) / L * o * 0.9, ang));
-            if (k % 3 === 0) posts.push(mat(ex, y + 0.6, ez, ang));
-            if (k % 9 === 4) benches.push(mat(mx2 - nx * sd * 2.2, y + 0.25, mz2 - nz * sd * 2.2, ang));
-            if (k % 8 === 0 && flagN++ < 300) flags.push(mat(ex - nx * sd * 1.2, y, ez - nz * sd * 1.2, ang));
-          }
-        }
+
+  // 1. trace the drawn shoreline (where the land fraction is one half) along the city's Mandovi front, marching squares
+  const X0 = 55 * T, X1 = 136 * T, Z0 = 0, Z1 = 32 * T, S = 4, nx = Math.ceil((X1 - X0) / S), nz = Math.ceil((Z1 - Z0) / S);
+  const v = new Float32Array((nx + 1) * (nz + 1));
+  for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) v[j * (nx + 1) + i] = land(X0 + i * S, Z0 + j * S) - 0.5;
+  const segs: [number, number, number, number][] = [];
+  const at = (i: number, j: number) => v[j * (nx + 1) + i];
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const c = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)], P = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]], cut: [number, number][] = [];
+    for (let e = 0; e < 4; e++) {
+      const a0 = c[e], a1 = c[(e + 1) % 4]; if ((a0 < 0) === (a1 < 0)) continue;
+      const t = a0 / (a0 - a1), p0 = P[e], p1 = P[(e + 1) % 4];
+      cut.push([X0 + (p0[0] + (p1[0] - p0[0]) * t) * S, Z0 + (p0[1] + (p1[1] - p0[1]) * t) * S]);
+    }
+    if (cut.length === 2) segs.push([cut[0][0], cut[0][1], cut[1][0], cut[1][1]]);
+    if (cut.length === 4) { segs.push([cut[0][0], cut[0][1], cut[1][0], cut[1][1]]); segs.push([cut[2][0], cut[2][1], cut[3][0], cut[3][1]]); }
+  }
+  // 2. chain the pieces into lines
+  const key = (x: number, z: number) => `${Math.round(x * 10)},${Math.round(z * 10)}`, ends = new Map<string, number[]>();
+  segs.forEach((sg, i) => { for (const k of [key(sg[0], sg[1]), key(sg[2], sg[3])]) { const a2 = ends.get(k) ?? []; a2.push(i); ends.set(k, a2); } });
+  const used = new Uint8Array(segs.length), lines: [number, number][][] = [];
+  for (let i = 0; i < segs.length; i++) {
+    if (used[i]) continue; used[i] = 1;
+    const line: [number, number][] = [[segs[i][0], segs[i][1]], [segs[i][2], segs[i][3]]];
+    for (const dir of [1, 0]) {
+      for (;;) {
+        const tip = dir ? line[line.length - 1] : line[0], nb = (ends.get(key(tip[0], tip[1])) ?? []).find(k => !used[k]);
+        if (nb === undefined) break; used[nb] = 1;
+        const sg = segs[nb], far: [number, number] = key(sg[0], sg[1]) === key(tip[0], tip[1]) ? [sg[2], sg[3]] : [sg[0], sg[1]];
+        if (dir) line.push(far); else line.unshift(far);
       }
+    }
+    let L = 0; for (let k = 1; k < line.length; k++) L += Math.hypot(line[k][0] - line[k - 1][0], line[k][1] - line[k - 1][1]);
+    if (L > 80) lines.push(line);
+  }
+  // 3. along each shoreline: smooth it, then lay the railing 1 m in from the water and the brick walk behind it
+  let k = 0;
+  for (const raw of lines) {
+    let line = raw;
+    for (let it = 0; it < 6; it++) line = line.map((p, i) => { const a2 = line[Math.max(0, i - 1)], b2 = line[Math.min(line.length - 1, i + 1)]; return [(a2[0] + p[0] * 2 + b2[0]) / 4, (a2[1] + p[1] * 2 + b2[1]) / 4] as [number, number]; });
+    // resample every 3 m
+    const rs: [number, number][] = [line[0]];
+    for (let i = 1; i < line.length; i++) {
+      let [ax, az] = rs[rs.length - 1]; const [bx, bz] = line[i];
+      let dd = Math.hypot(bx - ax, bz - az);
+      while (dd >= 3) { ax += (bx - ax) * 3 / dd; az += (bz - az) * 3 / dd; rs.push([ax, az]); dd = Math.hypot(bx - ax, bz - az); }
+    }
+    for (let i = 0; i + 1 < rs.length; i++, k++) {
+      const [ax, az] = rs[i], [bx, bz] = rs[i + 1], L = Math.hypot(bx - ax, bz - az) || 1;
+      let ix = -(bz - az) / L, iz = (bx - ax) / L;                                  // a side direction...
+      if (land(ax + ix * 6, az + iz * 6) < land(ax - ix * 6, az - iz * 6)) { ix = -ix; iz = -iz; }   // ...pointing inland
+      const rx = ax + ix * 1, rz = az + iz * 1, sx = bx + ix * 1, sz = bz + iz * 1;   // the railing, 1 m in from the edge
+      const mx = (rx + sx) / 2, mz = (rz + sz) / 2;
+      if (iz < 0.2) continue;                                                          // the city's bank only (land to the south)
+      if (onStreet(mx, mz) || bi.solid(mx, mz, 0.5)) continue;                         // a street or a building reaches the water here
+      const y = Math.max(0.6, g.heightAt(mx + ix * 4, mz + iz * 4)) + 0.1, ang = -Math.atan2(bz - az, bx - ax);
+      // the brick walk: from the railing 9 m inland (under the streets, which draw over it)
+      const b0 = walk.length / 3, W = 9;
+      walk.push(rx, y, rz, sx, y, sz, sx + ix * W, y, sz + iz * W, rx + ix * W, y, rz + iz * W);
+      walkI.push(b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3);
+      copes.push(mat(mx, y + 1.05, mz, ang, new THREE.Vector3(L / 3, 1, 1)));
+      for (const o of [-1, 0, 1]) balus.push(mat(mx + (bx - ax) / L * o * 0.9, y + 0.55, mz + (bz - az) / L * o * 0.9, ang));
+      if (k % 3 === 0) posts.push(mat(rx, y + 0.6, rz, ang));
+      if (k % 9 === 4 && !onStreet(mx + ix * 2.5, mz + iz * 2.5)) benches.push(mat(mx + ix * 2.2, y + 0.25, mz + iz * 2.2, ang));
+      if (k % 8 === 0 && !onStreet(mx + ix * 1.4, mz + iz * 1.4)) flags.push(mat(mx + ix * 1.4, y, mz + iz * 1.4, ang));
     }
   }
   const brick = new THREE.BufferGeometry(); brick.setAttribute('position', new THREE.Float32BufferAttribute(walk, 3)); brick.setIndex(walkI); brick.computeVertexNormals();
