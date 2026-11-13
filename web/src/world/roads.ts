@@ -31,10 +31,21 @@ function ribbon(line: [number, number][], width: number, g: Ground, lift: number
 }
 
 function meshOf(P: number[], I: number[], color: number, offset: number): THREE.Mesh {
+  // the layers are drawn in a fixed order, pavement, then path, asphalt, markings, each over the one before, and do not
+  // fight each other for depth: so one street's pavement can never show through another street's road surface
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); geo.setIndex(I); geo.computeVertexNormals();
   const mat = new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -offset, polygonOffsetUnits: -offset * 2 });
-  const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; return m;
+  mat.depthWrite = offset >= 3; const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; m.renderOrder = offset; return m;
+}
+
+/** The line `d` metres to the left of `line` (negative: to the right), following its bends. */
+function offsetLine(line: [number, number][], d: number): [number, number][] {
+  const pl = resample(line, 4);
+  return pl.map((q, i) => {
+    const a = pl[Math.max(0, i - 1)], b = pl[Math.min(pl.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    return [q[0] - (b[1] - a[1]) / L * d, q[1] + (b[0] - a[0]) / L * d] as [number, number];
+  });
 }
 
 export function buildRoads(d: PanjimData, g: Ground): { group: THREE.Group; segs: Seg[] } {
@@ -49,10 +60,13 @@ export function buildRoads(d: PanjimData, g: Ground): { group: THREE.Group; segs
     const deck = bridge ? Math.max(5, g.heightAt(...line[0]) + 0.3, g.heightAt(...line[line.length - 1]) + 0.3) + ((flags & 8) ? 14 : 0) : null;
     ribbon(line, width + (width >= 12 ? 5 : 3), g, 0.12, deck === null ? null : deck - 0.05, pave, paveI);
     ribbon(line, width, g, 0.2, deck, asph, asphI);
-    if (width >= 12 && !(flags & 6)) {   // a dashed centre line on the two-way main streets
+    // road markings: a dashed white centre line on every street wide enough for two lanes (a lane divider on the
+    // one-ways), and solid white edge lines on the main roads
+    if (width >= 9 && !(flags & 2)) {
       const pl = resample(line, 3);
-      for (let i = 0; i + 1 < pl.length; i += 3) ribbon([pl[i], pl[i + 1]], 0.35, g, 0.28, deck === null ? null : deck + 0.05, dash, dashI);
+      for (let i = 0; i + 1 < pl.length; i += 3) ribbon([pl[i], pl[i + 1]], 0.3, g, 0.28, deck === null ? null : deck + 0.05, dash, dashI);
     }
+    if (width >= 13 && !(flags & 2)) for (const sd of [-1, 1]) ribbon(offsetLine(line, sd * (width / 2 - 0.7)), 0.22, g, 0.28, deck === null ? null : deck + 0.05, dash, dashI);
     for (let i = 1; i < line.length; i++) segs.push({ ax: line[i - 1][0], az: line[i - 1][1], bx: line[i][0], bz: line[i][1], half: width / 2 + 1, deck });
   }
   for (const [f, flags] of d.p) {

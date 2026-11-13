@@ -1,6 +1,6 @@
 // The night's demons: dark shapes with ember eyes that creep toward the child out of the dark. They will not enter
-// the light of a street lamp, and they shy from the clay lamp while it has oil. Hold Space to banish one close by
-// (it costs lamp oil); press R to call Rakhondar, the guardian spirit, who drives every demon near you away.
+// the light of a street lamp, and they shy from the torch while its battery lasts. Hold Space to banish one close by
+// (it costs torch battery); press R to call Rakhondar, the guardian spirit, who drives every demon near you away.
 import * as THREE from 'three';
 import type { Ground } from '../world/data';
 import type { Movement } from '../systems/movement';
@@ -67,7 +67,7 @@ export class Monsters {
       const leaving = !night || d.banish > 0 || dist > 220;
       d.fade = Math.max(0, Math.min(1, d.fade + (leaving ? -dt : dt * 0.6)));
       if (leaving && d.fade <= 0) { this.group.remove(d.obj); this.list.splice(this.list.indexOf(d), 1); continue; }
-      // creep toward the child; held off by the lamp's ring and by street light
+      // creep toward the child; held off by the torch beam and by street light
       let sp = leaving ? -6 : 4.5;
       if (!leaving && lampLit && dist < 16) sp = -2;
       const nx = d.x + (dx / dist) * sp * dt, nz = d.z + (dz / dist) * sp * dt;

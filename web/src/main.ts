@@ -27,6 +27,7 @@ import { toonify } from './world/toon';
 import { infill } from './world/infill';
 import { Places } from './ui/places';
 import { buildStreetLife } from './world/streetlife';
+import { Signals } from './systems/signals';
 import { buildPromenade } from './world/promenade';
 
 async function start() {
@@ -94,6 +95,7 @@ async function start() {
   const net = new Network(d, g);
   scene.add(buildStreetLife(net, g, (x, z) => move.free(x, z)));
   const traffic = new Traffic(net, g, 48); scene.add(traffic.group);
+  const signals = new Signals(net, g); scene.add(signals.group); traffic.signals = signals;
   const people = new People(net, g, 44); scene.add(people.group);
   const monsters = new Monsters(g, move); scene.add(monsters.group);
   const day = new Clock(net, g); scene.add(day.lamps);
@@ -122,7 +124,7 @@ async function start() {
   };
   const banish = () => {
     if (!day.night) { hud.whisper('No demons in the daytime, men. Relax.', 2); return; }
-    if (st.oil < 8) { hud.whisper('Your lamp has no oil left! Find a street light, quick.', 3); return; }
+    if (st.oil < 8) { hud.whisper('Your torch battery is dead! Find a street light, quick.', 3); return; }
     if (monsters.banishNear(px, pz)) { st.oil -= 8; st.points += 15; sfx.banish(); hud.whisper('Begone! The demon melts into the dark.', 2); }
     else hud.whisper('No demon close enough.', 2);
   };
@@ -168,7 +170,7 @@ async function start() {
   let inkT = 0, edgeT = 0;
   const clock = new THREE.Clock();
   let mapT = 0;
-  (window as unknown as { rk: unknown }).rk = { scene, renderer, rig, child, day, traffic, people, monsters, quests, st, get pos() { return [px, pz]; }, set pos(v: number[]) { px = v[0]; pz = v[1]; } };
+  (window as unknown as { rk: unknown }).rk = { THREE, d, signals, scene, renderer, rig, child, day, traffic, people, monsters, quests, st, get pos() { return [px, pz]; }, set pos(v: number[]) { px = v[0]; pz = v[1]; } };
   const frame = (dt: number) => {
     const night = day.night;
     let speed = 0;
@@ -206,6 +208,7 @@ async function start() {
     day.update(dt, scene, hemi, sun, px, pz);
     windowsLit.value = Math.max(0, day.dark * 1.6 - 0.6);
     atalGlow.color.setHSL(0.78 + Math.sin(performance.now() / 4000) * 0.05, day.dark > 0.5 ? 0.8 : 0, day.dark > 0.5 ? 0.7 : 0.85);
+    signals.update(dt);
     const hit = traffic.update(dt, px, pz, night);
     if (hit && !traffic.riding) { knockX = hit.kx; knockZ = hit.kz; st.courage = Math.max(0, st.courage - 15); hurtT = 0.6; }
     people.update(dt, px, pz, night);
@@ -214,7 +217,7 @@ async function start() {
     if (pumpLine) { st.oil = 100; sfx.pick(); hud.whisper(pumpLine, 4); }
     const hurt = monsters.update(dt, px, pz, night, lampLit, (x, z) => day.litAt(x, z));
     if (hurt > 0) { st.courage = Math.max(0, st.courage - hurt); if (hurtT <= 0) { sfx.hurt(); hurtT = 0.4; } }
-    // the lamp burns oil at night and refills by day; standing in light restores courage
+    // the torch drains its battery at night and recharges by day; standing in light restores courage
     if (night && lampLit) st.oil = Math.max(0, st.oil - dt * 0.35);
     if (!night) st.oil = Math.min(100, st.oil + dt * 2);
     if (day.litAt(px, pz) && hurt === 0) st.courage = Math.min(100, st.courage + dt * (night ? 3 : 1));

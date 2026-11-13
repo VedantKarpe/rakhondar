@@ -1,5 +1,5 @@
 // Petrol pumps beside the main streets: a red-and-white canopy on pillars over two dispensers. Walk in and the
-// attendant tops up the clay lamp's oil.
+// attendant gives fresh batteries for the torch.
 import * as THREE from 'three';
 import type { Network } from '../world/network';
 import type { Ground } from '../world/data';
@@ -38,6 +38,6 @@ export class Pumps {
     if (oil > 90 || this.cool > 0) return null;
     if (!this.spots.some(s => Math.hypot(s.x - cx, s.z - cz) < 10)) return null;
     this.cool = 6;
-    return 'Pump uncle: "Full tank for the lamp, baba? Here, kerosene I keep for you only. Go carefully, no?"';
+    return 'Pump uncle: "Torch is dim, baba? Take fresh batteries, I keep them for you only. Go carefully, no?"';
   }
 }

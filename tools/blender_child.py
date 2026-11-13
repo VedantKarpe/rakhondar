@@ -82,8 +82,15 @@ cyl((0, 0.205, 0.51), (0.02, 0.205, 0.40), 0.044, SKIN, shL)
 ell((0.02, 0.205, 0.38), (0.05, 0.045, 0.05), SKIN, shL)
 cyl((0, -0.19, 0.64), (0.07, -0.21, 0.54), 0.055, SHIRT)            # the lamp arm, bent forward
 cyl((0.07, -0.21, 0.54), (0.20, -0.21, 0.50), 0.044, SKIN)
-ell((0.25, -0.21, 0.52), (0.085, 0.085, 0.04), CLAY)                # the clay lamp
-ell((0.31, -0.21, 0.60), (0.034, 0.034, 0.068), FLAME)
+# a hand torch instead of the clay lamp (RK_LAMP=1 brings the lamp back): black body, steel head, glowing lens
+if os.environ.get('RK_LAMP'):
+    ell((0.25, -0.21, 0.52), (0.085, 0.085, 0.04), CLAY)            # the clay lamp
+    ell((0.31, -0.21, 0.60), (0.034, 0.034, 0.068), FLAME)
+else:
+    TORCH, STEEL, LENS = mat('#1d1d22', 0.5), mat('#c8ccd2', 0.25), mat('#fff6d8', 0.2, 3.0)
+    cyl((0.17, -0.21, 0.50), (0.33, -0.21, 0.53), 0.034, TORCH)
+    cyl((0.33, -0.21, 0.53), (0.38, -0.21, 0.54), 0.05, STEEL)
+    cyl((0.38, -0.21, 0.54), (0.39, -0.21, 0.542), 0.046, LENS)
 cyl((0, 0, 0.68), (0, 0, 0.74), 0.07, SKIN)                          # neck
 ell((0.01, 0, 0.93), (0.265, 0.265, 0.25), SKIN)                     # the big head
 ell((-0.045, 0, 0.995), (0.265, 0.27, 0.215), HAIR)

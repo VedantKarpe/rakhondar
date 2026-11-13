@@ -6,6 +6,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Network } from '../world/network';
 import type { Ground } from '../world/data';
 import { model } from '../world/models';
+import type { Signals } from '../systems/signals';
 
 type Kind = 'car' | 'pilot' | 'bus';
 interface Vehicle { kind: Kind; obj: THREE.Group; e: number; s: number; v: number; vmax: number; len: number; x: number; z: number; hx: number; hz: number; honk: number }
@@ -51,6 +52,7 @@ export class Traffic {
   private seed = 99;
   private rnd = () => (this.seed = (this.seed * 16807) % 2147483647) / 2147483647;
   private mids: { e: number; x: number; z: number }[];
+  signals: Signals | null = null;
   onEvent: (kind: 'crash' | 'honk' | 'hop' | 'drop', text: string) => void = () => {};
 
   constructor(private net: Network, private g: Ground, private count = 42) {
@@ -113,6 +115,12 @@ export class Traffic {
           this.onEvent('crash', v.kind === 'pilot' ? 'Aay deva, bhurgea! Look where you are going, men!' : v.kind === 'bus' ? 'Ho kitem re! The Kadamba driver slams on his brakes.' : 'Screech! Dev borem korum, you are not hurt badly, no?');
           v.v = 0;
         }
+      }
+      // the traffic lights: stop at the line on red or amber; slow down to look at junctions without lights
+      if (this.signals && v !== this.riding) {
+        const left = this.net.edge(v.e).len - v.s;
+        if (this.signals.mustStop(v.e, left, v.hx, v.hz)) want = Math.min(want, Math.max(0, (left - 7) * 0.7));
+        else if (left < 14 && this.signals.unsignalled(v.e)) want = Math.min(want, 4);
       }
       for (const p of this.potholes) {
         const dx = p.x - v.x, dz = p.z - v.z, ahead = dx * v.hx + dz * v.hz;

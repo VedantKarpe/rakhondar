@@ -70,7 +70,7 @@ export function buildPromenade(d: PanjimData, g: Ground, bi: BuildingIndex): THR
     }
   }
   const brick = new THREE.BufferGeometry(); brick.setAttribute('position', new THREE.Float32BufferAttribute(walk, 3)); brick.setIndex(walkI); brick.computeVertexNormals();
-  const bm = new THREE.Mesh(brick, new THREE.MeshLambertMaterial({ color: 0xa65a46, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: 1 })); bm.receiveShadow = true; group.add(bm);
+  const bm = new THREE.Mesh(brick, new THREE.MeshLambertMaterial({ color: 0xa65a46, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: 1 })); bm.receiveShadow = true; bm.renderOrder = 1; (bm.material as THREE.Material).depthWrite = false; group.add(bm);   // drawn before the streets' asphalt, never over it
   const white = new THREE.MeshLambertMaterial({ color: 0xf2efe6 }), stone = new THREE.MeshLambertMaterial({ color: 0xb8b2a2 });
   const inst = (geo: THREE.BufferGeometry, m: THREE.Material, list: THREE.Matrix4[]) => {
     if (!list.length) return;

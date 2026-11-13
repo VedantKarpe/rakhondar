@@ -1,4 +1,4 @@
-// The on-screen readouts: courage, lamp oil, points, the time, the current task, what people say (the whisper box),
+// The on-screen readouts: courage, torch battery, points, the time, the current task, what people say (the whisper box),
 // the nearest named place, and a small performance line.
 import type * as THREE from 'three';
 
@@ -23,7 +23,7 @@ export class Hud {
       this.frames = 0; this.acc = 0; this.worst = 0;
     }
     const bar = (v: number, col: string) => `<span class="bar"><i style="width:${Math.max(0, Math.min(100, v))}%;background:${col}"></i></span>`;
-    const html = `<div>Courage ${bar(s.courage, '#9fe8d6')}</div><div>Lamp oil ${bar(s.oil, '#f2b441')}</div><div><b>${s.points}</b> points · ${s.time}${s.riding ? ' · <em>riding</em>' : ''}</div>`;
+    const html = `<div>Courage ${bar(s.courage, '#9fe8d6')}</div><div>Torch battery ${bar(s.oil, '#f2b441')}</div><div><b>${s.points}</b> points · ${s.time}${s.riding ? ' · <em>riding</em>' : ''}</div>`;
     if (this.stats.innerHTML !== html) this.stats.innerHTML = html;
     if (this.place.textContent !== s.placeName) { this.place.textContent = s.placeName; this.place.style.display = s.placeName ? '' : 'none'; }
     const o = s.objective + (s.hint ? ` — ${s.hint}` : '');

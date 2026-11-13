@@ -51,7 +51,8 @@ export function buildTerrain(d: PanjimData, g: Ground, solidAt: (X: number, Z: n
     const X = pos.getX(v), Z = pos.getZ(v), tx = X / T, ty = Z / T;
     const land = solidAt(X, Z) ? 1 : landAt(tx, ty), k = smooth(0.42, 0.58, land);   // the bank is built up under riverside streets
     const hl = Math.max(0.6, g.heightAt(X, Z));
-    pos.setY(v, -2.2 + (hl + 2.2) * k);
+    // under a street the ground sits a little lower than the road surface, so grass never pokes through it
+    pos.setY(v, -2.2 + (hl + 2.2) * k - (solidAt(X, Z) ? 0.35 : 0));
     const i = Math.min(W - 1, Math.floor(tx)), j = Math.min(H - 1, Math.floor(ty));
     const c = TILE_COL[d.rows[j][i]] || TILE_COL.G;
     const hk = 1 + Math.min(0.12, g.rawHeight(tx, ty) / 400);

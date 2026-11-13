@@ -30,7 +30,10 @@ export class Clock {
     // the ordinary streets the grey concrete pole with a curved arm and a white tubelight hanging over the road
     const iron: THREE.Matrix4[] = [], tube: THREE.Matrix4[] = [];
     for (let e = 0; e < net.edges.length; e++) {
-      const E = net.edges[e], main = E.width >= 12;
+      // Panjim's streets are lit by tubelights; the old cast-iron lamps stand only along the Mandovi promenade
+      const E = net.edges[e], mid = net.at(e, E.len / 2), mx = mid.x / 20, mz = mid.z / 20;
+      let main = mx > 55 && mx < 135 && mz < 32;
+      if (main) { main = false; for (const sd of [-1, 1]) for (let k = 4; k <= 34 && !main; k += 3) if (g.landAt(mid.x + mid.dz * sd * (E.width * 0.75 + k), mid.z - mid.dx * sd * (E.width * 0.75 + k)) < 0.5) main = true; }
       for (let s = 10; s < E.len; s += 30) {
         const p = net.at(e, s), off = E.width / 2 + 1.5, x = p.x + p.dz * off, z = p.z - p.dx * off, y = E.deck ?? g.heightAt(x, z);
         const ang = Math.atan2(-p.dx, -p.dz);   // turns the arm (local +X) toward the road
