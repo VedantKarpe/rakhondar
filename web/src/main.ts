@@ -254,12 +254,12 @@ async function start() {
   (window as unknown as { rkFrame: (dt: number) => void }).rkFrame = frame;   // for tests: run one frame by hand
   // adaptive resolution: draw fewer pixels when frames run slow, more when there is room, so it stays smooth
   let pr = renderer.getPixelRatio(), slow = 0, fast = 0;
-  const maxPR = Math.min(2, Math.max(1.5, devicePixelRatio)), minPR = Math.min(1, devicePixelRatio);
+  const maxPR = Math.min(2, Math.max(1.5, devicePixelRatio)), minPR = Math.min(1.25, devicePixelRatio);   // never so low it looks blurry
   renderer.setAnimationLoop(() => {
     const dt = clock.getDelta();
     frame(Math.min(0.05, dt));
-    if (dt > 1 / 40) { slow++; fast = 0; } else if (dt < 1 / 57) { fast++; slow = 0; }
-    if (slow > 20 && pr > minPR) { pr = Math.max(minPR, pr - 0.25); renderer.setPixelRatio(pr); resize(); slow = 0; }
+    if (dt > 1 / 28) { slow++; fast = 0; } else if (dt < 1 / 57) { fast++; slow = 0; }
+    if (slow > 60 && pr > minPR) { pr = Math.max(minPR, pr - 0.25); renderer.setPixelRatio(pr); resize(); slow = 0; }
     if (fast > 180 && pr < maxPR) { pr = Math.min(maxPR, pr + 0.25); renderer.setPixelRatio(pr); resize(); fast = 0; }
   });
 }

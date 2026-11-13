@@ -49,7 +49,7 @@ function rainTreeGeo(crown: number, bloom: number): THREE.BufferGeometry {
   const parts = [tinted(new THREE.CylinderGeometry(0.7, 1.1, 7, 7).translate(0, 3.5, 0), 0x4a3a2c).toNonIndexed()];
   for (const a of [0.6, 2.7, 4.6]) parts.push(tinted(new THREE.CylinderGeometry(0.35, 0.55, 5, 6).rotateZ(0.7).rotateY(a).translate(Math.cos(a) * 1.4, 8, -Math.sin(a) * 1.4), 0x4a3a2c).toNonIndexed());
   const blobs: [number, number, number, number][] = [[0, 11, 0, 5.5], [4, 10.2, 1, 4.2], [-3.5, 10.4, -1.8, 4.4], [1, 10, -4, 4], [-1.5, 10.2, 3.8, 4.2]];
-  blobs.forEach(([x, y, z, r], i) => parts.push(tinted(new THREE.IcosahedronGeometry(r, 0).scale(1.25, 0.6, 1.25).translate(x, y, z), i === 0 && bloom !== crown ? bloom : i % 2 ? crown : bloom).toNonIndexed()));
+  blobs.forEach(([x, y, z, r], i) => parts.push(tinted(new THREE.IcosahedronGeometry(r, 1).scale(1.25, 0.6, 1.25).translate(x, y, z), i === 0 && bloom !== crown ? bloom : i % 2 ? crown : bloom).toNonIndexed()));
   return mergeGeometries(parts)!;
 }
 
@@ -88,7 +88,7 @@ export function buildTrees(d: PanjimData, g: Ground, bi: BuildingIndex, si: Stre
   const tuft = mergeGeometries([0, 1, 2].map(k => tinted(new THREE.ConeGeometry(0.35, 1.4, 4).rotateZ((k - 1) * 0.35).translate((k - 1) * 0.3, 0.6, 0), k === 1 ? 0x5f9a3e : 0x4a8434).toNonIndexed()))!;
   // grass: no outline and no shadow (there are tens of thousands), in its own group
   const grass = new THREE.Group(); grass.name = 'grass'; group.add(grass);
-  const gl = [...spots('G', 1.2), ...spots('P', 1)];
+  const gl: [number, number][] = [];   // grass tufts read as little pyramids: left out for now
   const gm = new THREE.InstancedMesh(tuft, new THREE.MeshLambertMaterial({ vertexColors: true }), gl.length);
   const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), S = new THREE.Vector3(), P = new THREE.Vector3();
   gl.forEach(([X, Z], i) => { const k = 0.8 + rnd() * 0.7; Q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * 6.28); M.compose(P.set(X, g.heightAt(X, Z), Z), Q, S.set(k, k, k)); gm.setMatrixAt(i, M); });

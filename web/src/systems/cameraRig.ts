@@ -6,7 +6,7 @@ export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
   yaw = Math.PI / 4; private yawTarget = Math.PI / 4;
   // the default view: low over the street, looking down it to the skyline (press 0 or the ⌂ button to come back to it)
-  static readonly SPAN = 140; static readonly TILT = 0.3;
+  static readonly SPAN = 105; static readonly TILT = 0.36;
   span = CameraRig.SPAN; private spanTarget = CameraRig.SPAN;   // metres of the world across the screen at the child
   tilt = CameraRig.TILT; private tiltTarget = CameraRig.TILT;   // radians above the ground
   private target = new THREE.Vector3();
