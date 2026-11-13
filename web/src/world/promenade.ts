@@ -68,8 +68,10 @@ export function buildPromenade(d: PanjimData, g: Ground, bi: BuildingIndex, onSt
       const rx = ax + ix * 1, rz = az + iz * 1, sx = bx + ix * 1, sz = bz + iz * 1;   // the railing, 1 m in from the edge
       const mx = (rx + sx) / 2, mz = (rz + sz) / 2;
       if (iz < 0.2) continue;                                                          // the city's bank only (land to the south)
-      if (onStreet(mx, mz) || bi.solid(mx, mz, 0.5)) continue;                         // a street or a building reaches the water here
-      const y = Math.max(0.6, g.heightAt(mx + ix * 4, mz + iz * 4)) + 0.1, ang = -Math.atan2(bz - az, bx - ax);
+      // keep clear of the street and its pavement (the road is drawn wider than its centre line), and of buildings
+      if (onStreet(mx, mz) || onStreet(mx + ix * 2.5, mz + iz * 2.5) || onStreet(mx - ix * 2, mz - iz * 2) || bi.solid(mx, mz, 0.5)) continue;
+      // level with the road surface (never under it), turned along the shore
+      const y = Math.max(0.6, g.heightAt(mx + ix * 4, mz + iz * 4)) + 0.25, ang = -Math.atan2(bz - az, bx - ax);
       // the brick walk: from the railing 9 m inland (under the streets, which draw over it)
       const b0 = walk.length / 3, W = 9;
       walk.push(rx, y, rz, sx, y, sz, sx + ix * W, y, sz + iz * W, rx + ix * W, y, rz + iz * W);

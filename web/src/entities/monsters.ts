@@ -35,9 +35,14 @@ export class Monsters {
     this.spirit.visible = false; this.group.add(this.spirit);
   }
 
-  private make(cx: number, cz: number): Demon | null {
+  /** A demon rising out of the dark at (x, z): an ambush. */
+  spawnAt(x: number, z: number) {
+    const d = this.make(x, z, 0); if (d) this.list.push(d);
+  }
+
+  private make(cx: number, cz: number, ring = 1): Demon | null {
     for (let k = 0; k < 10; k++) {
-      const a = this.rnd() * Math.PI * 2, r = 45 + this.rnd() * 55, x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+      const a = this.rnd() * Math.PI * 2, r = ring ? 45 + this.rnd() * 55 : 4 + this.rnd() * 10, x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
       if (!this.move.free(x, z)) continue;
       // a demon: a column of curling dark smoke with a hunched shape, ember eyes that glow, sparks drifting up
       const obj = new THREE.Group();

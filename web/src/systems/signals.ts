@@ -14,7 +14,7 @@ export class Signals {
   private lamps: { im: THREE.InstancedMesh; color: 'r' | 'a' | 'g'; who: { j: Junction; dir: number }[] }[] = [];
   private t = 0;
 
-  constructor(private net: Network, g: Ground) {
+  constructor(private net: Network, g: Ground, blocked: (x: number, z: number) => boolean = () => false) {
     this.group.name = 'signals';
     const stops: THREE.Matrix4[] = [];
     const pole: THREE.Matrix4[] = [], heads: { j: Junction; dir: number; m: THREE.Matrix4 }[] = [];
@@ -31,6 +31,7 @@ export class Signals {
         const E = net.edge(e); if (E.len < 20) continue;
         const p = net.at(e, 9), off = (E.width * 1.5) / 2 + 1.2;
         const x = p.x - p.dz * off, z = p.z + p.dx * off, y = Math.max(0.6, g.heightAt(x, z));
+        if (blocked(x, z)) continue;           // never inside a building
         const face = Math.atan2(p.dz, p.dx);   // lamps face away from the junction, toward the oncoming cars
         const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -face), new THREE.Vector3(1, 1, 1));
         pole.push(m);

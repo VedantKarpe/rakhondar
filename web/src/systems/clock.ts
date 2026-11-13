@@ -23,8 +23,13 @@ export class Clock {
   private heads: THREE.InstancedMesh;
   private tubes: THREE.InstancedMesh;
   private pool: THREE.PointLight[] = [];
+  private spotEdge: number[] = [];                   // which street each lamp stands on
+  private spotHead: [THREE.InstancedMesh | null, number][] = [];   // its glowing part: which mesh, which instance
+  /** During a blackout only the lamps on these streets stay on (null: all on). */
+  private allowed: Set<number> | null = null;
+  private shown = '';
 
-  constructor(net: Network, g: Ground) {
+  constructor(net: Network, g: Ground, blocked: (x: number, z: number) => boolean = () => false) {
     this.lamps.name = 'street lights';
     // a light every 30 m along each street, on its left side: the old cast-iron globe lamps on the main streets, and on
     // the ordinary streets the grey concrete pole with a curved arm and a white tubelight hanging over the road
@@ -36,10 +41,12 @@ export class Clock {
       if (main) { main = false; for (const sd of [-1, 1]) for (let k = 4; k <= 34 && !main; k += 3) if (g.landAt(mid.x + mid.dz * sd * (E.width * 0.75 + k), mid.z - mid.dx * sd * (E.width * 0.75 + k)) < 0.5) main = true; }
       for (let s = 10; s < E.len; s += 30) {
         const p = net.at(e, s), off = E.width / 2 + 1.5, x = p.x + p.dz * off, z = p.z - p.dx * off, y = E.deck ?? g.heightAt(x, z);
+        if (blocked(x, z)) continue;           // no lamp post inside a building
         const ang = Math.atan2(-p.dx, -p.dz);   // turns the arm (local +X) toward the road
         const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ang), new THREE.Vector3(1, 1, 1));
-        if (main) { iron.push(m); this.spots.push(new THREE.Vector3(x, y + 9, z)); }
-        else { tube.push(m); this.spots.push(new THREE.Vector3(x - p.dz * 2.4, y + 8.4, z + p.dx * 2.4)); }
+        if (main) { iron.push(m); this.spots.push(new THREE.Vector3(x, y + 9, z)); this.spotHead.push([null, iron.length - 1]); }
+        else { tube.push(m); this.spots.push(new THREE.Vector3(x - p.dz * 2.4, y + 8.4, z + p.dx * 2.4)); this.spotHead.push([null, -tube.length]); }
+        this.spotEdge.push(e);
       }
     }
     const ironGeo = mergeGeometries([
@@ -61,6 +68,8 @@ export class Clock {
     this.tubes = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.1, 0.1, 1.3, 6).rotateX(Math.PI / 2).translate(2.5, 9.3, 0), new THREE.MeshBasicMaterial({ color: 0xd8d8d8 }), tube.length);
     tube.forEach((m, i) => this.tubes.setMatrixAt(i, m));
     this.lamps.add(this.heads, this.tubes);
+    for (const h of this.spotHead) { if (h[1] < 0) { h[0] = this.tubes; h[1] = -h[1] - 1; } else h[0] = this.heads; }
+    (this.heads.material as THREE.MeshBasicMaterial).color.set(0xffffff); (this.tubes.material as THREE.MeshBasicMaterial).color.set(0xffffff);
     for (let i = 0; i < 12; i++) { const l = new THREE.PointLight(0xf0f4ff, 0, 34, 1.3); this.pool.push(l); this.lamps.add(l); }
   }
 
@@ -80,14 +89,25 @@ export class Clock {
     sun.color.set(0xfff0d8).lerp(new THREE.Color(0xffb870), eve).lerp(new THREE.Color(0x8fa6d8), k);
     if (scene.fog) (scene.fog as THREE.Fog).color.copy(scene.background as THREE.Color);
     const on = k > 0.55;
-    (this.heads.material as THREE.MeshBasicMaterial).color.set(on ? 0xfff2cc : 0xd8d6d0);
-    (this.tubes.material as THREE.MeshBasicMaterial).color.set(on ? 0xf2fbff : 0xd8d8d8);
+    // each lamp's glow: lit at night unless a blackout has switched its street off
+    const key = `${on}|${this.allowed ? this.allowed.size + ':' + [...this.allowed].slice(0, 3).join(',') : 'all'}`;
+    if (key !== this.shown) {
+      this.shown = key;
+      const c = new THREE.Color();
+      this.spotHead.forEach(([im, i], k) => { const lit = on && (!this.allowed || this.allowed.has(this.spotEdge[k])); c.set(lit ? (im === this.heads ? 0xfff2cc : 0xf2fbff) : 0x8a8a88); im!.setColorAt(i, c); });
+      for (const im of [this.heads, this.tubes]) if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    }
     // the nearest few lamps cast real light
     if (on) {
-      const near = this.spots.map(p => ({ p, d: Math.hypot(p.x - cx, p.z - cz) })).filter(a => a.d < 120).sort((a, b) => a.d - b.d);
+      const near = this.spots.map((p, k) => ({ p, k, d: Math.hypot(p.x - cx, p.z - cz) })).filter(a => a.d < 120 && (!this.allowed || this.allowed.has(this.spotEdge[a.k]))).sort((a, b) => a.d - b.d);
       this.pool.forEach((l, i) => { const a = near[i]; if (a) { l.position.set(a.p.x, a.p.y - 0.4, a.p.z); l.intensity = 140; } else l.intensity = 0; });
     } else this.pool.forEach(l => (l.intensity = 0));
   }
+
+  /** A blackout: every street light goes out except those on `edges` (the one lit way through). null ends it. */
+  setLitStreets(edges: Set<number> | null) { this.allowed = edges; }
+  /** The lamps still lit, for drawing the path on the map. */
+  litSpots(): THREE.Vector3[] { return this.allowed ? this.spots.filter((_, k) => this.allowed!.has(this.spotEdge[k])) : []; }
 
   /** Is (x, z) under a lit street light? */
   litAt(x: number, z: number): boolean {
