@@ -120,7 +120,7 @@ function terraces(b: PanjimData['b'], named: [string, string, number, number, nu
   let seed = 4321; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const out: PanjimData['b'] = [];
   for (const e of b) {
-    const [f, lv, kind, area] = e;
+    const [f, , kind, area] = e;
     if (kind || f.length !== 8 || area < 110 || area > 2500) { out.push(e); continue; }
     const q = pts(f), cx = (q[0][0] + q[2][0]) / 2, cy = (q[0][1] + q[2][1]) / 2;
     if (named.some(n => Math.hypot(n[2] - cx, n[3] - cy) < 1.5)) { out.push(e); continue; }
@@ -128,14 +128,19 @@ function terraces(b: PanjimData['b'], named: [string, string, number, number, nu
     const L01 = Math.hypot(q[1][0] - q[0][0], q[1][1] - q[0][1]), L12 = Math.hypot(q[2][0] - q[1][0], q[2][1] - q[1][1]);
     const [a, bb, c, dd] = L01 >= L12 ? q : [q[1], q[2], q[3], q[0]], long = Math.max(L01, L12) * T;
     if (long < 14) { out.push(e); continue; }
-    let s0 = 0;
-    while (s0 < long - 3) {
-      const w = Math.min(long - s0, 6 + rnd() * 4), t0 = s0 / long, t1 = (s0 + w) / long;
+    // separate houses with gaps between them (a Goan street is a line of detached houses and their compounds, not one
+    // long block): each 7-11 m wide, set back by a different amount, a different depth, 1 or 2 storeys (now and then 3)
+    let s0 = rnd() * 3;
+    while (s0 < long - 5) {
+      const w = Math.min(long - s0, 7 + rnd() * 4), t0 = s0 / long, t1 = (s0 + w) / long;
       const P = (u: number, from: [number, number], to: [number, number]) => [from[0] + (to[0] - from[0]) * u, from[1] + (to[1] - from[1]) * u];
-      const p0 = P(t0, a, bb), p1 = P(t1, a, bb), p2 = P(t1, dd, c), p3 = P(t0, dd, c);
-      const r = rnd(), st = r < 0.35 ? 1 : r < 0.85 ? 2 : 3;
-      out.push([[...p0, ...p1, ...p2, ...p3], Math.max(st, Math.min(lv, 3)), 0, Math.max(150, area * w / long)]);
-      s0 += w + 0.15;
+      const f0 = rnd() * 0.15, f1 = 0.6 + rnd() * 0.4;   // how far back the front and the back walls sit, across the plot
+      const a0 = P(t0, a, bb), a1 = P(t1, a, bb), d0 = P(t0, dd, c), d1 = P(t1, dd, c);
+      const L = (p: number[], q: number[], u: number) => [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u];
+      const p0 = L(a0, d0, f0), p1 = L(a1, d1, f0), p2 = L(a1, d1, f1), p3 = L(a0, d0, f1);
+      const r = rnd(), st = r < 0.45 ? 1 : r < 0.92 ? 2 : 3;
+      out.push([[...p0, ...p1, ...p2, ...p3], st, 0, Math.max(150, area * w / long * (f1 - f0))]);
+      s0 += w + 3 + rnd() * 4;
     }
   }
   return out;
