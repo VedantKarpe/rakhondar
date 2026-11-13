@@ -101,7 +101,16 @@ function solid(geo: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
 }
 
 // the named buildings' styles (from tools/export_named.py): Portuguese-era public buildings, churches, temples, modern blocks
-const PUB_COLS = [0xe8b84a, 0xf3ead2, 0xc4302b, 0x7cc8ee, 0xe6c86a, 0xd8d0b8];
+// from photographs: Panjim's old public buildings are mostly ochre-yellow with white pilasters (the Old GMC, Maquinez
+// Palace), a few cream, sky blue or Goan red
+const PUB_COLS = [0xe8b83a, 0xeec04a, 0xe8b83a, 0xf3ead2, 0x8fc8e8, 0xe8b83a, 0xc4302b];
+/** Buildings whose photographs show something particular. */
+const OVERRIDE: Record<string, { style?: string; storeys?: number; color?: number }> = {
+  'Junta House': { style: 'modern', storeys: 11, color: 0xd8b048 },                       // the ochre tower with the mural
+  'Corporation of the city of panaji': { style: 'modern', storeys: 4, color: 0x2f6fc8 },  // bright blue, white fins
+  'Maquinez Palace': { color: 0xe8b83a }, 'Old GMC Building': { color: 0xeec04a },
+  'Mahalakshimi Temple': { style: 'temple' },
+};
 const MODERN_COLS = [0xdcdcd6, 0xc8ccd0, 0xe8e2d2, 0xb8c4cc, 0xd6d0c4];
 
 export function buildBuildings(d: PanjimData, g: Ground): { group: THREE.Group; list: Building[] } {
@@ -114,11 +123,12 @@ export function buildBuildings(d: PanjimData, g: Ground): { group: THREE.Group; 
     // is this one of the named buildings? (its recorded middle falls inside this outline)
     const mx = p.reduce((a, q) => a + q[0], 0) / p.length, mz = p.reduce((a, q) => a + q[1], 0) / p.length;
     const nm = named.find(n => inPoly(p, n[2] * T, n[3] * T) || Math.hypot(n[2] * T - mx, n[3] * T - mz) < 6);
-    const style = nm?.[0] ?? '';
+    const ov = nm ? OVERRIDE[nm[1]] : undefined;
+    const style = ov?.style ?? nm?.[0] ?? '';
     const small = !kind && !style && area < 260;
     let storeys = !kind && area < 150 && !style ? 1 : lv;
     if (style === 'pub') storeys = Math.max(2, nm![4] || lv);
-    if (style === 'modern') storeys = Math.max(3, nm![4] || lv);
+    if (style === 'modern') storeys = ov?.storeys ?? Math.max(3, nm![4] || lv);
     if (style === 'temple') storeys = Math.max(1, Math.min(2, lv));
     const h = storeys * STOREY * (kind === 1 || style === 'church' ? 1.6 : kind === 2 ? 1.2 : small ? 0.9 : 1);
     const base = Math.min(...p.map(([x, z]) => g.heightAt(x, z)));
@@ -126,7 +136,7 @@ export function buildBuildings(d: PanjimData, g: Ground): { group: THREE.Group; 
     const geo = new THREE.ExtrudeGeometry(shape, { depth: h + 1.5, bevelEnabled: false });   // 1.5 m below the plot so slopes never show a gap
     geo.rotateX(-Math.PI / 2); geo.translate(0, base - 1.5, 0);
     wallUV(geo, base);
-    const wall = style === 'pub' ? new THREE.Color(PUB_COLS[idx % PUB_COLS.length]) : style === 'modern' ? new THREE.Color(MODERN_COLS[idx % MODERN_COLS.length])
+    const wall = ov?.color !== undefined ? new THREE.Color(ov.color) : style === 'pub' ? new THREE.Color(PUB_COLS[idx % PUB_COLS.length]) : style === 'modern' ? new THREE.Color(MODERN_COLS[idx % MODERN_COLS.length])
       : kind === 1 || style === 'church' ? white : kind === 2 || style === 'temple' ? ochre : new THREE.Color(PALETTE[(idx * 7 + p.length) % PALETTE.length]);
     // tiled hip roofs on houses, the old public buildings and the churches; flat on modern blocks and temples
     const tiled = style === 'pub' || style === 'church' || (!kind && !style && area < 1400);
@@ -141,24 +151,53 @@ export function buildBuildings(d: PanjimData, g: Ground): { group: THREE.Group; 
     }
     const cx = p.reduce((a, q) => a + q[0], 0) / p.length, cz = p.reduce((a, q) => a + q[1], 0) / p.length;
     if (style === 'church') {
-      // a bell tower at the front end (the outline corner farthest from the middle), with a pyramid cap and a cross
+      // as St. Inez and the Panjim chapels: a white baroque front at the end of the nave, a scrolled gable with a cross
+      // in the middle and a small bell tower either side
       const far = p.reduce((a, q) => (Math.hypot(q[0] - cx, q[1] - cz) > Math.hypot(a[0] - cx, a[1] - cz) ? q : a));
-      const tx = far[0] + (cx - far[0]) * 0.18, tz = far[1] + (cz - far[1]) * 0.18, th = h + 9;
-      geos.push(solid(new THREE.BoxGeometry(5, th, 5).translate(tx, base + th / 2, tz), 0xfaf8f2));
-      geos.push(solid(new THREE.BoxGeometry(5.6, 0.6, 5.6).translate(tx, base + th, tz), 0xe8e2d4));
-      geos.push(solid(new THREE.ConeGeometry(3.6, 4.5, 4).rotateY(Math.PI / 4).translate(tx, base + th + 2.5, tz), 0xa8432a));
-      geos.push(solid(new THREE.BoxGeometry(0.35, 2.6, 0.35).translate(tx, base + th + 6, tz), 0xf2efe6), solid(new THREE.BoxGeometry(1.4, 0.35, 0.35).translate(tx, base + th + 6.4, tz), 0xf2efe6));
+      const fx = far[0] + (cx - far[0]) * 0.15, fz = far[1] + (cz - far[1]) * 0.15;     // the front, a little in from the end
+      const ax = cx - fx, az = cz - fz, al = Math.hypot(ax, az) || 1, sx = -az / al, sz = ax / al;   // across the front
+      const half = Math.min(9, Math.sqrt(area) * 0.35), ang = Math.atan2(sx, sz);
+      const piece = (geo: THREE.BufferGeometry, x: number, y: number, z: number, col: number) => { geo.rotateY(ang); geo.translate(x, y, z); geos.push(solid(geo, col)); };
+      piece(new THREE.BoxGeometry(half * 1.2, 4.5, 1.2), fx, base + h + 2.25, fz, 0xfaf8f2);                       // the gable
+      piece(new THREE.CylinderGeometry(half * 0.55, half * 0.55, 1.2, 12, 1, false, 0, Math.PI).rotateX(Math.PI / 2).rotateZ(Math.PI / 2), fx, base + h + 4.5, fz, 0xfaf8f2);
+      piece(new THREE.BoxGeometry(0.4, 3, 0.4), fx, base + h + 6.5 + half * 0.4, fz, 0xf2efe6);                   // the cross
+      piece(new THREE.BoxGeometry(1.6, 0.4, 0.4), fx, base + h + 7 + half * 0.4, fz, 0xf2efe6);
+      for (const side of [-1, 1]) {
+        const tx = fx + sx * half * side, tz = fz + sz * half * side, th = Math.min(h + 5, 18);
+        piece(new THREE.BoxGeometry(3.2, th, 3.2), tx, base + th / 2, tz, 0xfaf8f2);
+        piece(new THREE.BoxGeometry(3.6, 0.5, 3.6), tx, base + th, tz, 0xe8e2d4);
+        piece(new THREE.SphereGeometry(1.5, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), tx, base + th + 0.2, tz, 0xfaf8f2);
+      }
     }
     if (style === 'temple') {
-      // the shikhara over the sanctum: stepped tiers, a dome, a golden kalash
-      let y = base + h, w = Math.min(10, Math.sqrt(area) * 0.45);
-      for (let k = 0; k < 3; k++) { const th = 2.4; geos.push(solid(new THREE.BoxGeometry(w, th, w).translate(cx, y + th / 2, cz), k % 2 ? 0xf2efe6 : 0xe8a03a)); y += th; w *= 0.75; }
-      geos.push(solid(new THREE.SphereGeometry(w * 0.7, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).translate(cx, y, cz), 0xe8a03a));
-      geos.push(solid(new THREE.ConeGeometry(0.6, 2.4, 8).translate(cx, y + w * 0.7 + 1.2, cz), 0xf2c230));
+      // as the Mahalaxmi and Maruti temples: a tower of saffron-and-white tiers, each ringed with small domes, a dome on top
+      // and a golden kalash; a smaller tower over the hall as well
+      const tower = (tx: number, tz: number, w0: number, tiers: number) => {
+        let y = base + h, w = w0;
+        for (let k = 0; k < tiers; k++) {
+          const th = 2.6;
+          geos.push(solid(new THREE.BoxGeometry(w, th, w).translate(tx, y + th / 2, tz), k % 2 ? 0xf2efe6 : 0xe8742a));
+          for (const [dx, dz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) geos.push(solid(new THREE.SphereGeometry(w * 0.13, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2).translate(tx + dx * w * 0.42, y + th, tz + dz * w * 0.42), 0xd8502a));
+          y += th; w *= 0.78;
+        }
+        geos.push(solid(new THREE.SphereGeometry(w * 0.62, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).translate(tx, y, tz), 0xd8502a));
+        geos.push(solid(new THREE.ConeGeometry(0.5, 2.4, 8).translate(tx, y + w * 0.62 + 1.2, tz), 0xf2c230));
+      };
+      const w0 = Math.min(11, Math.sqrt(area) * 0.45);
+      const far = p.reduce((a, q) => (Math.hypot(q[0] - cx, q[1] - cz) > Math.hypot(a[0] - cx, a[1] - cz) ? q : a));
+      tower(cx + (far[0] - cx) * 0.35, cz + (far[1] - cz) * 0.35, w0, 5);
+      tower(cx - (far[0] - cx) * 0.25, cz - (far[1] - cz) * 0.25, w0 * 0.6, 2);
     }
     if (style === 'modern') {
-      // a parapet and a water tank / lift room on the flat roof
+      // a water tank / lift room on the flat roof, and white vertical fins up the walls (as on the Municipal building)
       geos.push(solid(new THREE.BoxGeometry(5, 3, 4).translate(cx, base + h + 1.5, cz), 0xb8b8b4));
+      for (let i = 0; i < p.length; i++) {
+        const a = p[i], b2 = p[(i + 1) % p.length], L = Math.hypot(b2[0] - a[0], b2[1] - a[1]);
+        for (let s2 = 4; s2 < L - 2; s2 += 8) {
+          const fx = a[0] + (b2[0] - a[0]) * s2 / L, fz = a[1] + (b2[1] - a[1]) * s2 / L;
+          geos.push(solid(new THREE.BoxGeometry(0.8, h, 0.8).translate(fx, base + h / 2, fz), 0xf2efe6));
+        }
+      }
     }
     let x0 = 1e9, z0 = 1e9, x1 = -1e9, z1 = -1e9;
     for (const [x, z] of p) { x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z); }
