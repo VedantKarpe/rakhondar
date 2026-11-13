@@ -81,7 +81,7 @@ export class Quests {
     this.list = [
       { kind: 'collect', title: `Clean up ${streetName}`, giver: 'Shantabai', litter: true, spots: bags, pts: 15,
         intro: `Shantabai, sweeping her yard: "Aay deva, plastic everywhere after last night! Collect the bags along ${streetName}, baba."`,
-        outro: `Shantabai: "Look how clean ${streetName} is! Dev borem korum, baba. The Rakhondar likes a clean town."` },
+        outro: `Shantabai: "Look how clean ${streetName} is! Dev borem korum, baba. The spirits like a clean town."` },
       { kind: 'deliver', title: "Mai's poee", giver: 'Mai', spots: pick(3, 120, 450), pts: 40,
         intro: 'Mai the baker, with a basket of hot poee: "Take these to three houses before they go cold, no? I have marked the doors."',
         outro: 'Mai: "All delivered, and still warm! Borem zalem, baba. Here, one poee for you."' },
@@ -150,9 +150,9 @@ export class Quests {
       if (this.free(x, z) && !spots.some(s => Math.hypot(s.x - x, s.z - z) < 120)) spots.push({ x, z, name: 'a stranded villager', done: false });
     }
     const p = this.d.places.find(q => /church square/i.test(q[0])) ?? this.d.places[0];
-    this.night = { kind: 'rescue', title: 'The stranded', giver: 'Rakhondar', spots, pts: 80, home: { x: p[1] * T, z: p[2] * T, name: p[0], done: false },
-      intro: 'The Rakhondar whispers: "Three people are stranded out in the dark lanes. Find them, and walk them to Church Square before the shadows take them."',
-      outro: 'The Rakhondar: "All safe under the church lights. You did well tonight, little one."' };
+    this.night = { kind: 'rescue', title: 'The stranded', giver: 'the guardian', spots, pts: 80, home: { x: p[1] * T, z: p[2] * T, name: p[0], done: false },
+      intro: 'A voice in the dark whispers: "Three people are stranded out in the dark lanes. Find them, and walk them to Church Square before the shadows take them."',
+      outro: 'The voice: "All safe under the church lights. You did well tonight, little one."' };
     this.show();
     return this.night.intro;
   }

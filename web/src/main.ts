@@ -133,8 +133,8 @@ async function start() {
     else hud.whisper('No demon close enough.', 2);
   };
   const call = () => {
-    if (st.points < 50) { hud.whisper('You need 50 points of good deeds to call Rakhondar.', 3); return; }
-    st.points -= 50; monsters.call(); sfx.spirit(); hud.whisper('Rakhondar rises beside you, staff glowing. The demons flee!', 4);
+    if (st.points < 50) { hud.whisper('You need 50 points of good deeds before you can ask for help.', 3); return; }
+    st.points -= 50; monsters.call(); sfx.spirit(); hud.whisper('Help comes: a guardian spirit rises beside you, staff glowing. The demons flee!', 4);
   };
   input.onKey = k => {
     unlockAudio();
