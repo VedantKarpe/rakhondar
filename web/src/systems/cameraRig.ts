@@ -32,7 +32,8 @@ export class CameraRig {
     c.aspect = aspect;
     // distance so `span` metres fit across the screen at the child
     const d = (this.span / 2) / (Math.tan(THREE.MathUtils.degToRad(this.FOV) / 2) * aspect);
-    c.far = Math.max(1000, d * 4.6 + 300);   // beyond the haze nothing is drawn c.updateProjectionMatrix();
+    c.far = Math.max(1000, d * 4.6 + 300);   // beyond the haze nothing is drawn
+    c.updateProjectionMatrix();               // the screen's shape: without this the view is stretched to fit
     const ce = Math.cos(this.tilt);
     c.position.set(this.target.x + Math.cos(this.yaw) * ce * d, this.target.y + Math.sin(this.tilt) * d, this.target.z + Math.sin(this.yaw) * ce * d);
     c.lookAt(this.target.x, this.target.y + 2, this.target.z);
