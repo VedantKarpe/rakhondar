@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Rakhondar · Panjim (3D)</title>
+  <title>Goa · Panjim (3D)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Mukta:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
@@ -50,7 +50,7 @@
     #arrow i { display: block; font-style: normal; font-size: 28px; } #arrow span { font-size: 13px; background: rgba(10,16,32,.7); padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
     #loading { position: fixed; inset: 0; display: grid; place-items: center; font-size: 18px; background: #0a1020; }
   </style>
-  <script type="module" crossorigin src="./assets/index-7Hx5kpFB.js"></script>
+  <script type="module" crossorigin src="./assets/index-Cvfsn6qR.js"></script>
 </head>
 <body>
   <div id="app"></div>
@@ -65,9 +65,9 @@
   <div class="hud" id="say"></div>
   <div class="hud" id="perf"></div>
   <canvas id="map" title="Map of Panjim (tap to open)"></canvas>
-  <div class="hud" id="help">WASD: walk · Shift: run · click, then move the mouse: look around (Esc frees it) · Q/E, Z/X: turn · wheel/±: zoom · T: talk · F: lift · Space: banish · R: call Rakhondar · L: lamp · [ ]: tilt · 0: reset view · P: places · M: map · N: skip to night/day</div>
+  <div class="hud" id="help">WASD: walk · Shift: run · click, then move the mouse: look around (Esc frees it) · Q/E, Z/X: turn · wheel/±: zoom · T: talk · F: lift · Space: banish · R: ask for help · L: lamp · [ ]: tilt · 0: reset view · P: places · M: map · N: skip to night/day</div>
   <div id="places"></div><div id="arrow"></div>
-  <div class="act"><button id="bPlaces">Places</button><button id="bTalk">Talk</button><button id="bLift">Lift</button><button id="bBan">Banish</button><button id="bCall">Rakhondar</button></div>
+  <div class="act"><button id="bPlaces">Places</button><button id="bTalk">Talk</button><button id="bLift">Lift</button><button id="bBan">Banish</button><button id="bCall">Ask for help</button></div>
   <div class="vignette"></div>
   <div class="btns"><button id="bHome" aria-label="Reset the view" title="Reset the view (0)">⌂</button><button id="bTiltD" aria-label="Tilt down">⤓</button><button id="bTiltU" aria-label="Tilt up">⤒</button><button id="bL" aria-label="Turn left">⟲</button><button id="bR" aria-label="Turn right">⟳</button><button id="bOut" aria-label="Zoom out">−</button><button id="bIn" aria-label="Zoom in">+</button></div>
 </body>
